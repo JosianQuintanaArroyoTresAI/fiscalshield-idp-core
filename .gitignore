@@ -136,3 +136,18 @@ dmypy.json
 
 # Ruff
 .ruff_cache/
+
+# Virtual environments and Python installations
+idp-linux/
+lib64/
+
+# AWS CLI distribution
+awscli.zip
+
+# Build and distribution directories
+aws/dist/
+
+# Additional publish scripts (keeping local copies)
+scripts/publish-dev.sh
+scripts/publish-prod.sh
+scripts/publish-staging.sh
