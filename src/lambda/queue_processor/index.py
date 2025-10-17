@@ -135,9 +135,21 @@ def process_message(record: Dict[str, Any]) -> Tuple[bool, str]:
         # Handle both compressed and uncompressed documents
         working_bucket = os.environ.get('WORKING_BUCKET')
         message_data = json.loads(message)
+        
+        # Extract UserId from message body (added by queue_sender)
+        user_id = message_data.get('UserId')
+        
         document = Document.load_document(message_data, working_bucket, logger)
+        
+        # Set user_id on the Document object if present in message
+        if user_id:
+            document.user_id = user_id
+            logger.info(f"Set user_id on document: {user_id}")
+        else:
+            logger.warning(f"No UserId found in SQS message for document: {document.input_key}")
+        
         object_key = document.input_key
-        logger.info(f"Processing message {message_id} for object {object_key}")
+        logger.info(f"Processing message {message_id} for object {object_key}, user: {user_id}")
         
         # Try to increment counter
         if not update_counter(increment=True):
