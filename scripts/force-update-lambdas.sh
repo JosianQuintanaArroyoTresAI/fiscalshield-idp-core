@@ -1,11 +1,28 @@
 #!/bin/bash
 # Force update Lambda functions with latest code from local source
 # Use this when CloudFormation doesn't detect changes
+#
+# This script bypasses CloudFormation's caching by directly uploading
+# Lambda code via the AWS Lambda API. Use it for rapid iteration during
+# development when you've made Lambda code changes but CloudFormation
+# doesn't detect them.
+#
+# Usage:
+#   ./scripts/force-update-lambdas.sh                    # Update all functions
+#   ./scripts/force-update-lambdas.sh upload_resolver    # Update specific function(s)
 
 set -e
 
-STACK_NAME="fiscalshield-idp-dev"
-REGION="eu-central-1"
+# Configuration
+STACK_NAME="${STACK_NAME:-fiscalshield-idp-dev}"
+REGION="${REGION:-eu-central-1}"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
 
 echo "======================================================================"
 echo "Force Update Lambda Functions"
@@ -14,13 +31,50 @@ echo ""
 echo "This will package and deploy Lambda functions directly, bypassing"
 echo "CloudFormation's change detection."
 echo ""
+echo "Stack: $STACK_NAME"
+echo "Region: $REGION"
+echo ""
 
-# Functions to update (add more as needed)
-FUNCTIONS=(
+# Functions to update (source_dir:LogicalResourceId)
+# Add more Lambda functions here as needed
+ALL_FUNCTIONS=(
     "upload_resolver:UploadResolverFunction"
     "queue_sender:QueueSender"
     "create_document_resolver:CreateDocumentResolverFunction"
+    # Add more as your project grows:
+    # "discovery_upload_resolver:DiscoveryUploadResolverFunction"
+    # "update_configuration:UpdateConfigurationFunction"
 )
+
+# Filter functions if specific ones are requested
+if [ $# -gt 0 ]; then
+    echo -e "${YELLOW}Filtering to update only: $@${NC}"
+    FUNCTIONS=()
+    for func_def in "${ALL_FUNCTIONS[@]}"; do
+        source_dir=$(echo "$func_def" | cut -d: -f1)
+        for arg in "$@"; do
+            if [[ "$source_dir" == "$arg"* ]]; then
+                FUNCTIONS+=("$func_def")
+                break
+            fi
+        done
+    done
+    
+    if [ ${#FUNCTIONS[@]} -eq 0 ]; then
+        echo -e "${RED}ERROR: No matching functions found for: $@${NC}"
+        echo ""
+        echo "Available functions:"
+        for func_def in "${ALL_FUNCTIONS[@]}"; do
+            source_dir=$(echo "$func_def" | cut -d: -f1)
+            echo "  - $source_dir"
+        done
+        exit 1
+    fi
+else
+    FUNCTIONS=("${ALL_FUNCTIONS[@]}")
+fi
+
+echo -e "${BLUE}Updating ${#FUNCTIONS[@]} Lambda function(s)...${NC}"
 
 # Build temp directory
 TEMP_DIR="/tmp/lambda-updates-$$"
@@ -118,13 +172,24 @@ done
 rm -rf "$TEMP_DIR"
 
 echo ""
-echo "======================================================================"
+echo -e "${GREEN}======================================================================"
 echo "✅ Lambda update complete!"
-echo "======================================================================"
+echo "======================================================================${NC}"
+echo ""
+echo "Updated ${#FUNCTIONS[@]} function(s) successfully!"
 echo ""
 echo "Next steps:"
-echo "  1. Test document upload via Web UI"
-echo "  2. Check logs:"
-echo "     aws logs tail /aws/lambda/fiscalshield-idp-dev-UploadResolverFunction-* --follow"
-echo "  3. Verify S3 path contains Cognito UUID"
+echo "  1. Test your changes via Web UI or API"
+echo "  2. Monitor logs (example):"
+echo "     ${BLUE}aws logs tail /aws/lambda/${STACK_NAME}-UploadResolverFunction-* --follow${NC}"
+echo ""
+echo "  3. Quick test commands:"
+echo "     ${BLUE}# List functions in stack${NC}"
+echo "     aws cloudformation describe-stack-resources \\"
+echo "       --stack-name $STACK_NAME --region $REGION \\"
+echo "       --query 'StackResources[?ResourceType==\`AWS::Lambda::Function\`].[LogicalResourceId,PhysicalResourceId]' \\"
+echo "       --output table"
+echo ""
+echo -e "${YELLOW}💡 Tip: Run with specific functions for faster updates:${NC}"
+echo "   ./scripts/force-update-lambdas.sh upload_resolver queue_sender"
 echo ""
