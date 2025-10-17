@@ -40,18 +40,27 @@ class TestExtractUserId:
         
         assert user_id == valid_cognito_uuid
     
-    def test_prefers_username_over_sub(self):
-        """Should prefer 'username' over 'sub' when both are present."""
+    def test_prefers_sub_over_username(self, valid_cognito_uuid):
+        """Should prefer 'sub' (UUID) over 'username' (friendly name) when both are present.
+        
+        In Cognito AppSync context:
+        - 'sub' contains the actual Cognito UUID (e.g., f364c882-40b1-70c3-7277-bfbe122eebc5)
+        - 'username' contains the friendly username (e.g., 'josian')
+        
+        We must use 'sub' for proper user isolation.
+        """
         event = {
             'identity': {
-                'username': 'preferred-username-id',
-                'sub': 'fallback-sub-id'
+                'username': 'josian',  # Friendly name - should NOT be used
+                'sub': valid_cognito_uuid  # Actual Cognito UUID - should be used
             }
         }
         
         user_id = index.extract_user_id(event)
         
-        assert user_id == 'preferred-username-id'
+        # Should extract the UUID from 'sub', not the friendly name from 'username'
+        assert user_id == valid_cognito_uuid
+        assert user_id != 'josian'
     
     def test_raises_error_on_missing_user_id(self):
         """Should raise ValueError when no user ID is found."""
