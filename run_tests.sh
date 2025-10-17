@@ -118,9 +118,11 @@ case "$1" in
         ;;
     
     "parallel")
-        echo -e "${BLUE}Running tests in parallel...${NC}"
+        echo -e "${BLUE}Running tests in parallel with isolated workers...${NC}"
         shift
-        $VENV_PYTEST tests/unit/ -v -n auto "$@"
+        # Using -n auto runs tests in separate processes, avoiding module conflicts
+        # Each worker gets its own Python interpreter
+        $VENV_PYTEST tests/unit/ -v -n auto --tb=short "$@"
         ;;
     
     "verbose"|"-v")
@@ -131,7 +133,44 @@ case "$1" in
     
     "all"|"")
         echo -e "${BLUE}Running all unit tests...${NC}"
-        $VENV_PYTEST tests/unit/ -v
+        # Run each lambda test directory separately to avoid module caching issues
+        # This prevents Python from caching 'index' modules across different lambdas
+        echo -e "${YELLOW}Running tests in isolation to prevent module conflicts...${NC}"
+        
+        # Find all lambda test directories
+        lambda_test_dirs=$(find tests/unit/lambda -mindepth 1 -maxdepth 1 -type d -not -name "__pycache__" -not -name ".*" | sort)
+        
+        # Track overall pass/fail
+        overall_status=0
+        total_passed=0
+        total_failed=0
+        
+        for test_dir in $lambda_test_dirs; do
+            lambda_name=$(basename "$test_dir")
+            echo -e "${BLUE}Testing: ${lambda_name}${NC}"
+            
+            if $VENV_PYTEST "$test_dir" -v --tb=short; then
+                echo -e "${GREEN}✓ ${lambda_name} passed${NC}"
+            else
+                echo -e "${RED}✗ ${lambda_name} failed${NC}"
+                overall_status=1
+            fi
+            echo ""
+        done
+        
+        # Run other unit tests (non-lambda)
+        if [ -d "tests/unit/lib" ]; then
+            echo -e "${BLUE}Testing: lib (idp_common_pkg)${NC}"
+            if $VENV_PYTEST tests/unit/lib -v --tb=short; then
+                echo -e "${GREEN}✓ lib tests passed${NC}"
+            else
+                echo -e "${RED}✗ lib tests failed${NC}"
+                overall_status=1
+            fi
+        fi
+        
+        # Exit with overall status
+        exit $overall_status
         ;;
     
     "help"|"-h"|"--help")

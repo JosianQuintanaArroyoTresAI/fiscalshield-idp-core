@@ -77,6 +77,10 @@ class DocumentAppSyncService:
             "ObjectKey": document.input_key,
             "ObjectStatus": document.status.value,
         }
+        
+        # Add UserId for user-scoped operations
+        if document.user_id:
+            input_data["UserId"] = document.user_id
 
         # Add optional fields if they exist
         if document.queued_time:

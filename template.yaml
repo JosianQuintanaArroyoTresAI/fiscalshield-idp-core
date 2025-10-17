@@ -5070,18 +5070,29 @@ Resources:
       FieldName: updateDocument
       DataSourceName: !GetAtt TrackingTableDataSource.Name
       RequestMappingTemplate: |-
-        #set( $PK = "doc#${ctx.args.input.ObjectKey}" )
+        ## Construct user-scoped PK if UserId is provided
+        #if( !$util.isNullOrBlank($ctx.args.input.UserId) )
+          #set( $PK = "user#${ctx.args.input.UserId}#doc#${ctx.args.input.ObjectKey}" )
+        #else
+          #set( $PK = "doc#${ctx.args.input.ObjectKey}" )
+        #end
         #set( $expNames = {} )
         #set( $expValues = {} )
         #set( $expSet = {} )
         ## Iterate through each argument with values and update expression variables **
         #foreach( $entry in $ctx.args.input.entrySet() )
-            ## skip empty values **
-            #if( !$util.isNullOrBlank($entry.value)  )
+            ## skip empty values and skip UserId (not a DynamoDB attribute) **
+            #if( !$util.isNullOrBlank($entry.value) && $entry.key != "UserId" )
                 $util.qr( $expSet.put("#${entry.key}", ":${entry.key}") )
                 $util.qr( $expNames.put("#${entry.key}", "${entry.key}") )
                 $util.qr( $expValues.put(":${entry.key}", $util.dynamodb.toDynamoDB($entry.value)) )
             #end
+        #end
+        ## Add UserId as a separate attribute if provided
+        #if( !$util.isNullOrBlank($ctx.args.input.UserId) )
+            $util.qr( $expSet.put("#UserId", ":UserId") )
+            $util.qr( $expNames.put("#UserId", "UserId") )
+            $util.qr( $expValues.put(":UserId", $util.dynamodb.toDynamoDB($ctx.args.input.UserId)) )
         #end
         ## Start building the update expression, starting with attributes we're going to SET **
         #set( $expression = "" )
