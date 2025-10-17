@@ -102,14 +102,25 @@ class DocumentDynamoDBService:
         Returns:
             Dictionary compatible with DynamoDB item format
         """
+        # Use user-scoped PK if user_id is present
+        if document.user_id:
+            pk = f"user#{document.user_id}#doc#{document.input_key}"
+        else:
+            # Fallback to legacy format for backwards compatibility
+            pk = f"doc#{document.input_key}"
+            
         item = {
-            "PK": f"doc#{document.input_key}",
+            "PK": pk,
             "SK": "none",
             "ObjectKey": document.input_key,
             "ObjectStatus": document.status.value,
             "InitialEventTime": document.initial_event_time,
             "QueuedTime": document.queued_time,
         }
+        
+        # Add UserId to the item if present
+        if document.user_id:
+            item["UserId"] = document.user_id
 
         if expires_after:
             item["ExpiresAfter"] = expires_after
@@ -293,6 +304,7 @@ class DocumentDynamoDBService:
             workflow_execution_arn=item.get("WorkflowExecutionArn"),
             evaluation_report_uri=item.get("EvaluationReportUri"),
             summary_report_uri=item.get("SummaryReportUri"),
+            user_id=item.get("UserId"),  # Extract user_id from DynamoDB item
         )
 
         # Convert status
@@ -404,6 +416,10 @@ class DocumentDynamoDBService:
             "ObjectKey": document.input_key,
             "QueuedTime": document.queued_time,
         }
+        
+        # Add UserId to list item if present for filtering
+        if document.user_id:
+            list_item["UserId"] = document.user_id
 
         if expires_after:
             list_item["ExpiresAfter"] = expires_after
@@ -440,8 +456,15 @@ class DocumentDynamoDBService:
         Raises:
             DynamoDBError: If the DynamoDB operation fails
         """
+        # Use user-scoped PK if user_id is present
+        if document.user_id:
+            pk = f"user#{document.user_id}#doc#{document.input_key}"
+        else:
+            # Fallback to legacy format for backwards compatibility
+            pk = f"doc#{document.input_key}"
+            
         key = {
-            "PK": f"doc#{document.input_key}",
+            "PK": pk,
             "SK": "none",
         }
 
@@ -464,12 +487,13 @@ class DocumentDynamoDBService:
         logger.info(f"Successfully updated document: {document.input_key}")
         return updated_document
 
-    def get_document(self, object_key: str) -> Optional[Document]:
+    def get_document(self, object_key: str, user_id: Optional[str] = None) -> Optional[Document]:
         """
         Get a document from DynamoDB by its object key.
 
         Args:
             object_key: The object key of the document to retrieve
+            user_id: Optional user ID for user-scoped documents
 
         Returns:
             Document object if found, None otherwise
@@ -477,8 +501,15 @@ class DocumentDynamoDBService:
         Raises:
             DynamoDBError: If the DynamoDB operation fails
         """
+        # Use user-scoped PK if user_id is provided
+        if user_id:
+            pk = f"user#{user_id}#doc#{object_key}"
+        else:
+            # Fallback to legacy format for backwards compatibility
+            pk = f"doc#{object_key}"
+            
         key = {
-            "PK": f"doc#{object_key}",
+            "PK": pk,
             "SK": "none",
         }
 

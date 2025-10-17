@@ -12,6 +12,11 @@ from unittest.mock import Mock
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / 'src' / 'lambda'))
 
+# Add idp_common_pkg to path for tests that need it
+IDP_COMMON_PKG_PATH = PROJECT_ROOT / 'lib' / 'idp_common_pkg'
+if IDP_COMMON_PKG_PATH.exists():
+    sys.path.insert(0, str(IDP_COMMON_PKG_PATH))
+
 
 # ============================================================================
 # Lambda Context Fixtures

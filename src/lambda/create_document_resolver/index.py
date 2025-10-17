@@ -138,7 +138,7 @@ def handler(event, context):
                 }
             )
             
-            # Create the list item
+            # Create the list item with UserId for filtering
             logger.info(f"Creating list item: PK={list_pk}, SK={list_sk}")
             tracking_table.put_item(
                 Item={
@@ -146,6 +146,7 @@ def handler(event, context):
                     'SK': list_sk,
                     'ObjectKey': object_key,
                     'QueuedTime': queued_time,
+                    'UserId': user_id,  # Add UserId to enable filtering
                     'ExpiresAfter': input_data.get('ExpiresAfter')
                 }
             )

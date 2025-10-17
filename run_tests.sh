@@ -37,12 +37,14 @@ show_help() {
     echo "  watch                    - Watch mode (rerun on changes)"
     echo "  markers                  - List available test markers"
     echo "  parallel                 - Run tests in parallel"
+    echo "  user-scoping, scoping    - Run user-scoping tests only"
     echo "  verbose, -v              - Verbose output"
     echo "  help, -h                 - Show this help message"
     echo ""
     echo "Examples:"
     echo "  $0 unit                              # Run all unit tests"
     echo "  $0 lambda create_document_resolver   # Test specific lambda"
+    echo "  $0 user-scoping                      # Run user-scoping tests"
     echo "  $0 coverage                          # Run with coverage"
     echo "  $0 unit -v                           # Verbose unit tests"
     echo "  $0 parallel                          # Run tests in parallel"
@@ -59,7 +61,7 @@ case "$1" in
     "unit")
         echo -e "${BLUE}Running unit tests...${NC}"
         shift
-        $VENV_PYTEST tests/unit/ -v "$@"
+        $VENV_PYTEST tests/unit/ -v --tb=short "$@"
         ;;
     
     "integration")
@@ -169,8 +171,43 @@ case "$1" in
             fi
         fi
         
+        # Run idp_common_pkg tests
+        if [ -d "lib/idp_common_pkg/tests/unit/dynamodb" ]; then
+            echo -e "${BLUE}Testing: idp_common dynamodb${NC}"
+            if $VENV_PYTEST lib/idp_common_pkg/tests/unit/dynamodb/ -v --tb=short; then
+                echo -e "${GREEN}✓ idp_common dynamodb tests passed${NC}"
+            else
+                echo -e "${RED}✗ idp_common dynamodb tests failed${NC}"
+                overall_status=1
+            fi
+        fi
+        
+        # Run integration flow tests
+        if [ -f "tests/unit/test_user_scoped_document_flow.py" ]; then
+            echo -e "${BLUE}Testing: user-scoped document flow${NC}"
+            if $VENV_PYTEST tests/unit/test_user_scoped_document_flow.py -v --tb=short; then
+                echo -e "${GREEN}✓ user-scoped flow tests passed${NC}"
+            else
+                echo -e "${RED}✗ user-scoped flow tests failed${NC}"
+                overall_status=1
+            fi
+        fi
+        
         # Exit with overall status
         exit $overall_status
+        ;;
+    
+    "user-scoping"|"scoping")
+        echo -e "${BLUE}Running user-scoping tests...${NC}"
+        shift
+        echo -e "${YELLOW}Testing user-scoped document flow...${NC}"
+        $VENV_PYTEST tests/unit/test_user_scoped_document_flow.py -v --tb=short "$@"
+        echo ""
+        echo -e "${YELLOW}Testing DocumentDynamoDBService user scoping...${NC}"
+        $VENV_PYTEST lib/idp_common_pkg/tests/unit/dynamodb/test_service_user_scoping.py -v --tb=short "$@"
+        echo ""
+        echo -e "${YELLOW}Testing create_document_resolver with user scoping...${NC}"
+        $VENV_PYTEST tests/unit/lambda/create_document_resolver/test_handler.py -v --tb=short "$@"
         ;;
     
     "help"|"-h"|"--help")

@@ -45,9 +45,9 @@ class TestHandlerDocumentCreation:
     
     @patch('index.dynamodb')
     def test_creates_list_item_with_shard(
-        self, mock_dynamodb, valid_create_document_event, mock_lambda_context
+        self, mock_dynamodb, valid_create_document_event, mock_lambda_context, valid_cognito_uuid
     ):
-        """Should create list item with proper sharding."""
+        """Should create list item with proper sharding and UserId."""
         # Setup
         mock_table = Mock()
         mock_dynamodb.Table.return_value = mock_table
@@ -63,6 +63,7 @@ class TestHandlerDocumentCreation:
         assert 's#' in list_item['PK']  # Shard number
         assert list_item['SK'].startswith('ts#')
         assert 'ObjectKey' in list_item
+        assert list_item['UserId'] == valid_cognito_uuid  # CRITICAL: UserId must be in list item
     
     @patch('index.dynamodb')
     def test_uses_sub_when_username_missing(

@@ -5133,7 +5133,10 @@ Resources:
       FieldName: getDocument
       DataSourceName: !GetAtt TrackingTableDataSource.Name
       RequestMappingTemplate: |
-        #set( $PK = "doc#${context.arguments.ObjectKey}" )
+        ## Extract user ID from Cognito identity
+        #set( $userId = $ctx.identity.username )
+        ## Construct user-scoped PK
+        #set( $PK = "user#${userId}#doc#${context.arguments.ObjectKey}" )
         {
           "version": "2018-05-29",
           "operation": "GetItem",
@@ -5209,6 +5212,8 @@ Resources:
         #set( $hourPad = $date.format("%02d", $hour) )
         #set( $hourShard = $hour / $shardDivider )
         #set( $shardPad = $date.format("%02d", $hourShard) )
+        ## Extract user ID from Cognito identity
+        #set( $userId = $ctx.identity.username )
 
         #set( $PK = "list#${date}#s#${shardPad}" )
         #set( $skPrefix = "ts#${date}T${hourPad}" )
@@ -5223,6 +5228,12 @@ Resources:
               ":prefix": $util.dynamodb.toDynamoDBJson($skPrefix),
             },
           },
+          "filter": {
+            "expression": "UserId = :userId",
+            "expressionValues": {
+              ":userId": $util.dynamodb.toDynamoDBJson($userId)
+            }
+          }
         }
       ResponseMappingTemplate: |
         {
@@ -5251,6 +5262,8 @@ Resources:
         #end
         #set( $hourShard = $hour / $shardDivider )
         #set( $shardPad = $date.format("%02d", $shard) )
+        ## Extract user ID from Cognito identity
+        #set( $userId = $ctx.identity.username )
 
         #set( $PK = "list#${date}#s#${shardPad}" )
 
@@ -5258,9 +5271,10 @@ Resources:
           "version" : "2018-05-29",
           "operation" : "Query",
           "query" : {
-            "expression": "PK = :PK",
+            "expression": "PK = :PK AND UserId = :userId",
             "expressionValues": {
               ":PK": $util.dynamodb.toDynamoDBJson($PK),
+              ":userId": $util.dynamodb.toDynamoDBJson($userId)
             }
           }
         }
