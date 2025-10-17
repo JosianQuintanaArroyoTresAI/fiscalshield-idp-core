@@ -65,7 +65,7 @@ Parameters:
 
   AllowedSignUpEmailDomain:
     Type: String
-    Default: ""
+    Default: "gmail.com,outlook.com,yahoo.com,hotmail.com,icloud.com,protonmail.com,duck.com"
     Description: >-
       Email address domain (example.com) or comma separated list of email domains (example1.com,
       example2.com) allowed to signup using the web UI.
