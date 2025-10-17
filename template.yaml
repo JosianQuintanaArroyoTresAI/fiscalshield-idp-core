@@ -2509,6 +2509,7 @@ Resources:
           CONCURRENCY_TABLE: !Ref ConcurrencyTable
           MAX_CONCURRENT: !Ref MaxConcurrentWorkflows
           WORKING_BUCKET: !Ref WorkingBucket
+          TRACKING_TABLE: !Ref TrackingTable
       Policies:
         - SQSPollerPolicy:
             QueueName: !GetAtt DocumentQueue.QueueName

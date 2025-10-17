@@ -59,13 +59,19 @@ def handler(event, context):
     logger.info(f"Create document resolver invoked with event: {json.dumps(event)}")
     
     try:
-        # Extract and validate user ID from AppSync context
-        user_id = extract_user_id(event)
-        user_id = validate_user_id(user_id)
-        logger.info(f"Processing request for user: {user_id}")
-        
         # Extract input data from full AppSync context
         input_data = event['arguments']['input']
+        
+        # Get user ID: prefer input data (from Lambda), fallback to identity context (from UI)
+        if input_data.get('UserId'):
+            user_id = input_data.get('UserId')
+            logger.info(f"Using UserId from input: {user_id}")
+        else:
+            user_id = extract_user_id(event)
+            logger.info(f"Using UserId from identity context: {user_id}")
+            
+        user_id = validate_user_id(user_id)
+        logger.info(f"Processing request for user: {user_id}")
         
         # Validate required input fields
         if not input_data:

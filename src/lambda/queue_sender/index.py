@@ -6,8 +6,9 @@ import os
 import boto3
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from decimal import Decimal
+from idp_common.models import Document, Status
 
 logger = logging.getLogger()
 logger.setLevel(os.environ.get("LOG_LEVEL", "INFO"))
@@ -103,13 +104,33 @@ def handler(event, context):
             # This will go to DLQ for investigation
             raise
         
-        # Prepare SQS message with user context
-        message_body = {
-            'Bucket': bucket_name,
-            'ObjectKey': object_key,
-            'UserId': user_id,
-            'EventTime': detail.get('object', {}).get('last-modified') or datetime.now(timezone.utc).isoformat()
-        }
+        # Create a Document object (same pattern as reprocess_document_resolver)
+        current_time = datetime.now(timezone.utc).isoformat()
+        event_time = detail.get('object', {}).get('last-modified') or current_time
+        
+        document = Document(
+            id=object_key,
+            input_bucket=bucket_name,
+            input_key=object_key,
+            output_bucket=OUTPUT_BUCKET,
+            status=Status.QUEUED,
+            queued_time=event_time,
+            initial_event_time=event_time,
+            user_id=user_id,
+            pages={},
+            sections=[],
+        )
+        
+        logger.info(f"Created document object for user {user_id}: {object_key}")
+        
+        # Calculate expiry timestamp
+        expires_after = int((datetime.now(timezone.utc) + timedelta(days=DATA_RETENTION_IN_DAYS)).timestamp())
+        
+        # Serialize document to JSON
+        doc_json = document.to_json()
+        
+        # Prepare SQS message with document and metadata
+        message_body = doc_json
         
         logger.info(f"Sending message to SQS with UserId: {user_id}")
         
@@ -117,7 +138,7 @@ def handler(event, context):
         queue_url = os.environ.get('QUEUE_URL', QUEUE_URL)  # Use runtime env var if available
         response = sqs.send_message(
             QueueUrl=queue_url,
-            MessageBody=json.dumps(message_body),
+            MessageBody=message_body,
             MessageAttributes={
                 'UserId': {
                     'StringValue': user_id,
@@ -126,6 +147,10 @@ def handler(event, context):
                 'ObjectKey': {
                     'StringValue': object_key,
                     'DataType': 'String'
+                },
+                'ExpiresAfter': {
+                    'StringValue': str(expires_after),
+                    'DataType': 'Number'
                 }
             }
         )
