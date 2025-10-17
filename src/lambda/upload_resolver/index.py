@@ -24,28 +24,31 @@ s3_client = boto3.client('s3', config=s3_config)
 
 def extract_user_id(event):
     """
-    Extract Cognito user ID from AppSync event context.
-    Tries 'username' first, then 'sub' as fallback.
+    Extract Cognito user ID (UUID) from AppSync event context.
+    Prioritizes 'sub' field which contains the actual Cognito UUID.
+    Falls back to 'username' only if 'sub' is not available.
     
     Args:
         event: AppSync event with identity context
         
     Returns:
-        str: Cognito user ID
+        str: Cognito user ID (UUID format)
         
     Raises:
         ValueError: If no user ID found in identity context
     """
     identity = event.get('identity', {})
     
-    user_id = identity.get('username')
-    if user_id:
-        logger.info(f"Extracted user_id from username: {user_id}")
-        return user_id
-    
+    # PRIORITY 1: Extract from 'sub' field (this is the actual Cognito UUID)
     user_id = identity.get('sub')
     if user_id:
         logger.info(f"Extracted user_id from sub: {user_id}")
+        return user_id
+    
+    # PRIORITY 2: Fallback to 'username' if 'sub' is not available
+    user_id = identity.get('username')
+    if user_id:
+        logger.info(f"Extracted user_id from username: {user_id}")
         return user_id
     
     logger.error("No user ID found in identity context")
