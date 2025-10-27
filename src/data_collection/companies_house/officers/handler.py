@@ -61,7 +61,9 @@ def lambda_handler(event, context):
     query_params = event.get("queryStringParameters") or {}
     force_refresh = query_params.get("refresh", "false").lower() == "true"
 
-    print(f"Looking up officers for company: {company_number}, force_refresh: {force_refresh}")
+    print(
+        f"Looking up officers for company: {company_number}, force_refresh: {force_refresh}"
+    )
 
     try:
         # Check cache first (unless force refresh)
@@ -133,7 +135,8 @@ def lambda_handler(event, context):
 
         print(f"Full traceback: {traceback.format_exc()}")
         return create_response(
-            500, {"success": False, "error": "Internal server error during officer lookup"}
+            500,
+            {"success": False, "error": "Internal server error during officer lookup"},
         )
 
 
@@ -180,13 +183,15 @@ def lookup_officers(company_number, api_key):
     if check_rate_limit:
         try:
             rate_status = check_rate_limit("companies_house")
-            print(f"Rate limit status: {rate_status['current_count']}/{rate_status['limit']}")
+            print(
+                f"Rate limit status: {rate_status['current_count']}/{rate_status['limit']}"
+            )
         except RateLimitExceeded as e:
             print(f"Rate limit exceeded: {str(e)}")
             raise
         except Exception as e:
             print(f"Rate limit check failed: {e} - proceeding anyway")
-    
+
     base_url = "https://api.company-information.service.gov.uk"
 
     # Create authentication header
@@ -247,11 +252,11 @@ def format_officers_data(officers_data):
     Returns simplified dict with essential information
     """
     items = officers_data.get("items", [])
-    
+
     # Separate active and resigned officers
     active_officers = []
     resigned_officers = []
-    
+
     for officer in items:
         formatted_officer = {
             "name": officer.get("name", ""),
@@ -271,7 +276,7 @@ def format_officers_data(officers_data):
                 "country": officer.get("address", {}).get("country", ""),
             },
         }
-        
+
         if officer.get("resigned_on"):
             resigned_officers.append(formatted_officer)
         else:
@@ -300,7 +305,7 @@ def get_from_cache(company_number):
 
         # Query cache with event_type_timestamp = "OFFICERS#YYYY-MM-DD"
         today = datetime.utcnow().isoformat()[:10]
-        
+
         response = table.get_item(
             Key={
                 "company_number": company_number,

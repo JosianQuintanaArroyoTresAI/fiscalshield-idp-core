@@ -61,7 +61,9 @@ def lambda_handler(event, context):
     query_params = event.get("queryStringParameters") or {}
     force_refresh = query_params.get("refresh", "false").lower() == "true"
 
-    print(f"Looking up PSC for company: {company_number}, force_refresh: {force_refresh}")
+    print(
+        f"Looking up PSC for company: {company_number}, force_refresh: {force_refresh}"
+    )
 
     try:
         # Check cache first (unless force refresh)
@@ -178,13 +180,15 @@ def lookup_psc(company_number, api_key):
     if check_rate_limit:
         try:
             rate_status = check_rate_limit("companies_house")
-            print(f"Rate limit status: {rate_status['current_count']}/{rate_status['limit']}")
+            print(
+                f"Rate limit status: {rate_status['current_count']}/{rate_status['limit']}"
+            )
         except RateLimitExceeded as e:
             print(f"Rate limit exceeded: {str(e)}")
             raise
         except Exception as e:
             print(f"Rate limit check failed: {e} - proceeding anyway")
-    
+
     base_url = "https://api.company-information.service.gov.uk"
 
     # Create authentication header
@@ -193,7 +197,9 @@ def lookup_psc(company_number, api_key):
     auth_header = base64.b64encode(auth_bytes).decode("ascii")
 
     try:
-        psc_url = f"{base_url}/company/{company_number}/persons-with-significant-control"
+        psc_url = (
+            f"{base_url}/company/{company_number}/persons-with-significant-control"
+        )
         print(f"Request URL: {psc_url}")
 
         request = urllib.request.Request(
@@ -241,14 +247,14 @@ def format_psc_data(psc_data):
     Format PSC data for frontend display
     """
     items = psc_data.get("items", [])
-    
+
     active_pscs = []
     ceased_pscs = []
-    
+
     for psc in items:
         # Determine PSC type
         kind = psc.get("kind", "")
-        
+
         formatted_psc = {
             "name": psc.get("name", ""),
             "kind": kind,
@@ -267,7 +273,7 @@ def format_psc_data(psc_data):
                 "country": psc.get("address", {}).get("country", ""),
             },
         }
-        
+
         if psc.get("ceased_on"):
             ceased_pscs.append(formatted_psc)
         else:
@@ -294,7 +300,7 @@ def get_from_cache(company_number):
 
         # Query cache with event_type_timestamp = "PSC#YYYY-MM-DD"
         today = datetime.utcnow().isoformat()[:10]
-        
+
         response = table.get_item(
             Key={
                 "company_number": company_number,

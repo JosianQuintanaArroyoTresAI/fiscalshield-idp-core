@@ -68,7 +68,9 @@ def lambda_handler(event, context):
     force_refresh = query_params.get("refresh", "false").lower() == "true"
     summary_only = query_params.get("summary", "false").lower() == "true"
 
-    print(f"Looking up filing history for company: {company_number}, force_refresh: {force_refresh}, summary_only: {summary_only}")
+    print(
+        f"Looking up filing history for company: {company_number}, force_refresh: {force_refresh}, summary_only: {summary_only}"
+    )
 
     try:
         # Check cache first (unless force refresh)
@@ -76,7 +78,7 @@ def lambda_handler(event, context):
             cached_data = get_from_cache(company_number)
             if cached_data:
                 print(f"Cache HIT for filing history: {company_number}")
-                
+
                 # Return summary if requested
                 if summary_only:
                     summary_response = {
@@ -90,7 +92,7 @@ def lambda_handler(event, context):
                         "last_updated": cached_data.get("last_updated"),
                     }
                     return create_response(200, summary_response)
-                
+
                 # Return full data
                 return create_response(
                     200,
@@ -109,7 +111,9 @@ def lambda_handler(event, context):
 
         # Lookup filing history from Companies House API
         try:
-            filing_data = lookup_filing_history(company_number, api_credentials["api_key"])
+            filing_data = lookup_filing_history(
+                company_number, api_credentials["api_key"]
+            )
         except RateLimitExceeded as e:
             print(f"Rate limit exceeded: {str(e)}")
             return create_response(
@@ -138,7 +142,9 @@ def lambda_handler(event, context):
 
         # Store FULL data in cache FIRST (before returning response)
         store_in_cache(company_number, formatted_data)
-        print(f"Cached {formatted_data.get('total_count', 0)} filings for {company_number}")
+        print(
+            f"Cached {formatted_data.get('total_count', 0)} filings for {company_number}"
+        )
 
         # For Step Functions or summary requests, return summary only (to stay under 256KB limit)
         # Full data is always available in cache
@@ -149,13 +155,15 @@ def lambda_handler(event, context):
                 "cached": False,
                 "total_count": formatted_data.get("total_count", 0),
                 "filing_types": formatted_data.get("filing_types", {}),
-                "recent_filings": formatted_data.get("recent_filings", [])[:5],  # Just 5 most recent
+                "recent_filings": formatted_data.get("recent_filings", [])[
+                    :5
+                ],  # Just 5 most recent
                 "note": "Full filing history cached in DynamoDB - use ?summary=false to get all data",
                 "last_updated": formatted_data.get("last_updated"),
             }
             print(f"Returning summary: {len(json.dumps(summary_data))} bytes")
             return create_response(200, summary_data)
-        
+
         # For direct API calls without summary flag, return full data
         print(f"Successfully looked up filing history for company: {company_number}")
         return create_response(
@@ -174,7 +182,11 @@ def lambda_handler(event, context):
 
         print(f"Full traceback: {traceback.format_exc()}")
         return create_response(
-            500, {"success": False, "error": "Internal server error during filing history lookup"}
+            500,
+            {
+                "success": False,
+                "error": "Internal server error during filing history lookup",
+            },
         )
 
 
@@ -220,13 +232,15 @@ def lookup_filing_history(company_number, api_key):
     if check_rate_limit:
         try:
             rate_status = check_rate_limit("companies_house")
-            print(f"Rate limit status: {rate_status['current_count']}/{rate_status['limit']}")
+            print(
+                f"Rate limit status: {rate_status['current_count']}/{rate_status['limit']}"
+            )
         except RateLimitExceeded as e:
             print(f"Rate limit exceeded: {str(e)}")
             raise
         except Exception as e:
             print(f"Rate limit check failed: {e} - proceeding anyway")
-    
+
     base_url = "https://api.company-information.service.gov.uk"
 
     # Create authentication header
@@ -256,26 +270,23 @@ def lookup_filing_history(company_number, api_key):
                 if response.getcode() == 200:
                     response_data = response.read().decode("utf-8")
                     data = json.loads(response_data)
-                    
+
                     items = data.get("items", [])
                     all_filings.extend(items)
-                    
+
                     total_count = data.get("total_count", 0)
                     print(f"Fetched {len(all_filings)} of {total_count} filings")
-                    
+
                     # Check if we've fetched all filings
                     if len(all_filings) >= total_count:
                         break
-                    
+
                     start_index += items_per_page
                 else:
                     print(f"Companies House API error: {response.getcode()}")
                     return None
 
-        return {
-            "total_count": len(all_filings),
-            "items": all_filings
-        }
+        return {"total_count": len(all_filings), "items": all_filings}
 
     except urllib.error.HTTPError as e:
         print(f"HTTP error: code={e.code}, reason={e.reason}")
@@ -304,7 +315,7 @@ def format_filing_data(filing_data):
     Format filing history data for frontend display
     """
     items = filing_data.get("items", [])
-    
+
     # Group filings by type
     filing_types = {}
     for filing in items:
@@ -312,18 +323,20 @@ def format_filing_data(filing_data):
         if filing_type not in filing_types:
             filing_types[filing_type] = 0
         filing_types[filing_type] += 1
-    
+
     # Extract recent filings (last 10)
     recent_filings = []
     for filing in items[:10]:
-        recent_filings.append({
-            "type": filing.get("type", ""),
-            "description": filing.get("description", ""),
-            "date": filing.get("date", ""),
-            "category": filing.get("category", ""),
-            "action_date": filing.get("action_date"),
-            "made_up_date": filing.get("made_up_date"),
-        })
+        recent_filings.append(
+            {
+                "type": filing.get("type", ""),
+                "description": filing.get("description", ""),
+                "date": filing.get("date", ""),
+                "category": filing.get("category", ""),
+                "action_date": filing.get("action_date"),
+                "made_up_date": filing.get("made_up_date"),
+            }
+        )
 
     formatted = {
         "total_count": filing_data.get("total_count", 0),
@@ -345,7 +358,7 @@ def get_from_cache(company_number):
 
         # Query cache with event_type_timestamp = "FILING_HISTORY#YYYY-MM-DD"
         today = datetime.utcnow().isoformat()[:10]
-        
+
         response = table.get_item(
             Key={
                 "company_number": company_number,
@@ -397,19 +410,21 @@ def store_in_cache(company_number, data):
         now = datetime.utcnow()
         ttl = int(now.timestamp()) + CACHE_TTL_SECONDS
         date_key = now.isoformat()[:10]
-        
+
         # Create summary for DynamoDB (always)
         summary_data = {
             "total_count": data.get("total_count", 0),
             "filing_types": data.get("filing_types", {}),
-            "recent_filings": data.get("recent_filings", [])[:10],  # Keep 10 most recent
+            "recent_filings": data.get("recent_filings", [])[
+                :10
+            ],  # Keep 10 most recent
             "last_updated": data.get("last_updated"),
         }
-        
+
         # Check if full data exceeds DynamoDB limits
         full_data_json = json.dumps(data, default=str)
-        data_size = len(full_data_json.encode('utf-8'))
-        
+        data_size = len(full_data_json.encode("utf-8"))
+
         if data_size > DYNAMODB_MAX_SIZE:
             # Store full data in S3
             s3_key = f"filing-history/{company_number}/{date_key}.json"
@@ -418,28 +433,30 @@ def store_in_cache(company_number, data):
                     Bucket=DATA_ARCHIVE_BUCKET,
                     Key=s3_key,
                     Body=full_data_json,
-                    ContentType='application/json',
-                    ServerSideEncryption='AES256',
+                    ContentType="application/json",
+                    ServerSideEncryption="AES256",
                     Metadata={
-                        'company_number': company_number,
-                        'date': date_key,
-                        'data_type': 'filing_history',
-                        'size_bytes': str(data_size)
-                    }
+                        "company_number": company_number,
+                        "date": date_key,
+                        "data_type": "filing_history",
+                        "size_bytes": str(data_size),
+                    },
                 )
-                print(f"Stored full data in S3: s3://{DATA_ARCHIVE_BUCKET}/{s3_key} ({data_size} bytes)")
-                
+                print(
+                    f"Stored full data in S3: s3://{DATA_ARCHIVE_BUCKET}/{s3_key} ({data_size} bytes)"
+                )
+
                 # Add S3 reference to summary
                 summary_data["s3_archive"] = {
                     "bucket": DATA_ARCHIVE_BUCKET,
                     "key": s3_key,
                     "size_bytes": data_size,
-                    "archived_at": now.isoformat()
+                    "archived_at": now.isoformat(),
                 }
             except Exception as s3_error:
                 print(f"Error storing in S3: {s3_error}")
                 # Continue anyway - at least we have summary in DynamoDB
-        
+
         # Store summary in DynamoDB
         table = dynamodb.Table(CACHE_TABLE_NAME)
         item = {
@@ -450,13 +467,16 @@ def store_in_cache(company_number, data):
             "ttl": ttl,
             "data": summary_data,
         }
-        
+
         table.put_item(Item=item)
-        print(f"Stored summary in DynamoDB cache: {company_number} (summary: {len(json.dumps(summary_data))} bytes)")
+        print(
+            f"Stored summary in DynamoDB cache: {company_number} (summary: {len(json.dumps(summary_data))} bytes)"
+        )
 
     except Exception as e:
         print(f"Error storing in cache: {e}")
         import traceback
+
         print(f"Traceback: {traceback.format_exc()}")
 
 

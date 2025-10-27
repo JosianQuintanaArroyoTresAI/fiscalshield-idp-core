@@ -184,13 +184,15 @@ def lookup_company(company_number, api_key):
     if check_rate_limit:
         try:
             rate_status = check_rate_limit("companies_house")
-            print(f"Rate limit status: {rate_status['current_count']}/{rate_status['limit']}")
+            print(
+                f"Rate limit status: {rate_status['current_count']}/{rate_status['limit']}"
+            )
         except RateLimitExceeded as e:
             print(f"Rate limit exceeded: {str(e)}")
             raise
         except Exception as e:
             print(f"Rate limit check failed: {e} - proceeding anyway")
-    
+
     base_url = "https://api.company-information.service.gov.uk"
 
     # Create authentication header (Basic Auth with API key as username)

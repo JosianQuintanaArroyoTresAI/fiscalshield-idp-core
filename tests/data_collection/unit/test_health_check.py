@@ -32,9 +32,7 @@ class TestHealthCheckHandler:
         """Test health check with all services operational"""
         # Mock successful service checks
         mock_secrets_manager.describe_secret.return_value = {"Name": "test-secret"}
-        mock_dynamodb.describe_table.return_value = {
-            "Table": {"TableStatus": "ACTIVE"}
-        }
+        mock_dynamodb.describe_table.return_value = {"Table": {"TableStatus": "ACTIVE"}}
         mock_stepfunctions.describe_state_machine.return_value = {
             "stateMachineArn": "arn:aws:states:us-east-1:123456789012:stateMachine:test"
         }
@@ -73,9 +71,7 @@ class TestHealthCheckHandler:
         mock_secrets_manager.describe_secret.side_effect = ClientError(
             {"Error": {"Code": "ResourceNotFoundException"}}, "DescribeSecret"
         )
-        mock_dynamodb.describe_table.return_value = {
-            "Table": {"TableStatus": "ACTIVE"}
-        }
+        mock_dynamodb.describe_table.return_value = {"Table": {"TableStatus": "ACTIVE"}}
         mock_stepfunctions.describe_state_machine.side_effect = ClientError(
             {"Error": {"Code": "StateMachineDoesNotExist"}}, "DescribeStateMachine"
         )
@@ -167,9 +163,7 @@ class TestCheckDynamoDB:
     @patch("data_collection.health.handler.dynamodb")
     def test_check_dynamodb_operational(self, mock_dynamodb):
         """Test successful DynamoDB check"""
-        mock_dynamodb.describe_table.return_value = {
-            "Table": {"TableStatus": "ACTIVE"}
-        }
+        mock_dynamodb.describe_table.return_value = {"Table": {"TableStatus": "ACTIVE"}}
 
         result = handler.check_dynamodb()
         assert result == "operational"

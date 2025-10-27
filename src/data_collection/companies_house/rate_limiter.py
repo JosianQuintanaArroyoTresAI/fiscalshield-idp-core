@@ -19,6 +19,7 @@ WINDOW_SECONDS = 300  # 5 minutes
 
 class RateLimitExceeded(Exception):
     """Raised when rate limit is exceeded"""
+
     pass
 
 
@@ -41,19 +42,14 @@ def check_rate_limit(api_name="companies_house"):
 
     try:
         # Try to get existing rate limit record
-        response = table.get_item(
-            Key={"api_name": api_name}
-        )
+        response = table.get_item(Key={"api_name": api_name})
 
         if "Item" in response:
             item = response["Item"]
             requests = item.get("requests", [])
 
             # Filter out requests outside the current window
-            recent_requests = [
-                req for req in requests
-                if req > window_start
-            ]
+            recent_requests = [req for req in requests if req > window_start]
 
             # Check if we've hit the limit
             if len(recent_requests) >= COMPANIES_HOUSE_LIMIT:
@@ -74,7 +70,9 @@ def check_rate_limit(api_name="companies_house"):
                     "api_name": api_name,
                     "requests": recent_requests,
                     "last_request": current_time,
-                    "ttl": current_time + WINDOW_SECONDS + 60  # TTL 1 minute after window
+                    "ttl": current_time
+                    + WINDOW_SECONDS
+                    + 60,  # TTL 1 minute after window
                 }
             )
 
@@ -83,7 +81,9 @@ def check_rate_limit(api_name="companies_house"):
                 "current_count": len(recent_requests),
                 "limit": COMPANIES_HOUSE_LIMIT,
                 "window_seconds": WINDOW_SECONDS,
-                "reset_at": min(recent_requests) + WINDOW_SECONDS if recent_requests else current_time
+                "reset_at": min(recent_requests) + WINDOW_SECONDS
+                if recent_requests
+                else current_time,
             }
         else:
             # First request - create new record
@@ -92,7 +92,7 @@ def check_rate_limit(api_name="companies_house"):
                     "api_name": api_name,
                     "requests": [current_time],
                     "last_request": current_time,
-                    "ttl": current_time + WINDOW_SECONDS + 60
+                    "ttl": current_time + WINDOW_SECONDS + 60,
                 }
             )
 
@@ -101,7 +101,7 @@ def check_rate_limit(api_name="companies_house"):
                 "current_count": 1,
                 "limit": COMPANIES_HOUSE_LIMIT,
                 "window_seconds": WINDOW_SECONDS,
-                "reset_at": current_time + WINDOW_SECONDS
+                "reset_at": current_time + WINDOW_SECONDS,
             }
 
     except ClientError as e:
@@ -113,7 +113,7 @@ def check_rate_limit(api_name="companies_house"):
             "current_count": 0,
             "limit": COMPANIES_HOUSE_LIMIT,
             "window_seconds": WINDOW_SECONDS,
-            "error": str(e)
+            "error": str(e),
         }
 
 
@@ -132,26 +132,23 @@ def get_rate_limit_status(api_name="companies_house"):
     window_start = current_time - WINDOW_SECONDS
 
     try:
-        response = table.get_item(
-            Key={"api_name": api_name}
-        )
+        response = table.get_item(Key={"api_name": api_name})
 
         if "Item" in response:
             item = response["Item"]
             requests = item.get("requests", [])
 
             # Filter requests in current window
-            recent_requests = [
-                req for req in requests
-                if req > window_start
-            ]
+            recent_requests = [req for req in requests if req > window_start]
 
             return {
                 "current_count": len(recent_requests),
                 "limit": COMPANIES_HOUSE_LIMIT,
                 "window_seconds": WINDOW_SECONDS,
                 "remaining": max(0, COMPANIES_HOUSE_LIMIT - len(recent_requests)),
-                "reset_at": min(recent_requests) + WINDOW_SECONDS if recent_requests else current_time
+                "reset_at": min(recent_requests) + WINDOW_SECONDS
+                if recent_requests
+                else current_time,
             }
         else:
             return {
@@ -159,7 +156,7 @@ def get_rate_limit_status(api_name="companies_house"):
                 "limit": COMPANIES_HOUSE_LIMIT,
                 "window_seconds": WINDOW_SECONDS,
                 "remaining": COMPANIES_HOUSE_LIMIT,
-                "reset_at": current_time + WINDOW_SECONDS
+                "reset_at": current_time + WINDOW_SECONDS,
             }
 
     except ClientError as e:
@@ -169,5 +166,5 @@ def get_rate_limit_status(api_name="companies_house"):
             "limit": COMPANIES_HOUSE_LIMIT,
             "window_seconds": WINDOW_SECONDS,
             "remaining": COMPANIES_HOUSE_LIMIT,
-            "error": str(e)
+            "error": str(e),
         }

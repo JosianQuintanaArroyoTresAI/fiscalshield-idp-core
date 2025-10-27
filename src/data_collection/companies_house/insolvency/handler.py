@@ -61,7 +61,9 @@ def lambda_handler(event, context):
     query_params = event.get("queryStringParameters") or {}
     force_refresh = query_params.get("refresh", "false").lower() == "true"
 
-    print(f"Looking up insolvency for company: {company_number}, force_refresh: {force_refresh}")
+    print(
+        f"Looking up insolvency for company: {company_number}, force_refresh: {force_refresh}"
+    )
 
     try:
         # Check cache first (unless force refresh)
@@ -86,7 +88,9 @@ def lambda_handler(event, context):
 
         # Lookup insolvency from Companies House API
         try:
-            insolvency_data = lookup_insolvency(company_number, api_credentials["api_key"])
+            insolvency_data = lookup_insolvency(
+                company_number, api_credentials["api_key"]
+            )
         except RateLimitExceeded as e:
             print(f"Rate limit exceeded: {str(e)}")
             return create_response(
@@ -141,7 +145,11 @@ def lambda_handler(event, context):
 
         print(f"Full traceback: {traceback.format_exc()}")
         return create_response(
-            500, {"success": False, "error": "Internal server error during insolvency lookup"}
+            500,
+            {
+                "success": False,
+                "error": "Internal server error during insolvency lookup",
+            },
         )
 
 
@@ -186,13 +194,15 @@ def lookup_insolvency(company_number, api_key):
     if check_rate_limit:
         try:
             rate_status = check_rate_limit("companies_house")
-            print(f"Rate limit status: {rate_status['current_count']}/{rate_status['limit']}")
+            print(
+                f"Rate limit status: {rate_status['current_count']}/{rate_status['limit']}"
+            )
         except RateLimitExceeded as e:
             print(f"Rate limit exceeded: {str(e)}")
             raise
         except Exception as e:
             print(f"Rate limit check failed: {e} - proceeding anyway")
-    
+
     base_url = "https://api.company-information.service.gov.uk"
 
     # Create authentication header
@@ -249,7 +259,7 @@ def format_insolvency_data(insolvency_data):
     Format insolvency data for frontend display
     """
     cases = insolvency_data.get("cases", [])
-    
+
     formatted_cases = []
     for case in cases:
         formatted_case = {
@@ -281,7 +291,7 @@ def get_from_cache(company_number):
 
         # Query cache with event_type_timestamp = "INSOLVENCY#YYYY-MM-DD"
         today = datetime.utcnow().isoformat()[:10]
-        
+
         response = table.get_item(
             Key={
                 "company_number": company_number,

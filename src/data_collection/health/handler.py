@@ -116,7 +116,7 @@ def check_dynamodb():
         # Check both FilingEvents and CompanyEvents tables
         tables = [
             f"fiscalshield-dc-{ENVIRONMENT}-FilingEvents",
-            f"fiscalshield-dc-{ENVIRONMENT}-CompanyEvents"
+            f"fiscalshield-dc-{ENVIRONMENT}-CompanyEvents",
         ]
 
         all_active = True

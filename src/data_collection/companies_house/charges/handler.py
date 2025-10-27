@@ -61,7 +61,9 @@ def lambda_handler(event, context):
     query_params = event.get("queryStringParameters") or {}
     force_refresh = query_params.get("refresh", "false").lower() == "true"
 
-    print(f"Looking up charges for company: {company_number}, force_refresh: {force_refresh}")
+    print(
+        f"Looking up charges for company: {company_number}, force_refresh: {force_refresh}"
+    )
 
     try:
         # Check cache first (unless force refresh)
@@ -143,7 +145,8 @@ def lambda_handler(event, context):
 
         print(f"Full traceback: {traceback.format_exc()}")
         return create_response(
-            500, {"success": False, "error": "Internal server error during charges lookup"}
+            500,
+            {"success": False, "error": "Internal server error during charges lookup"},
         )
 
 
@@ -188,13 +191,15 @@ def lookup_charges(company_number, api_key):
     if check_rate_limit:
         try:
             rate_status = check_rate_limit("companies_house")
-            print(f"Rate limit status: {rate_status['current_count']}/{rate_status['limit']}")
+            print(
+                f"Rate limit status: {rate_status['current_count']}/{rate_status['limit']}"
+            )
         except RateLimitExceeded as e:
             print(f"Rate limit exceeded: {str(e)}")
             raise
         except Exception as e:
             print(f"Rate limit check failed: {e} - proceeding anyway")
-    
+
     base_url = "https://api.company-information.service.gov.uk"
 
     # Create authentication header
@@ -251,16 +256,18 @@ def format_charges_data(charges_data):
     Format charges data for frontend display
     """
     items = charges_data.get("items", [])
-    
+
     outstanding_charges = []
     satisfied_charges = []
-    
+
     for charge in items:
         formatted_charge = {
             "charge_code": charge.get("charge_code", ""),
             "charge_number": charge.get("charge_number"),
             "classification": charge.get("classification", {}).get("type", ""),
-            "classification_description": charge.get("classification", {}).get("description", ""),
+            "classification_description": charge.get("classification", {}).get(
+                "description", ""
+            ),
             "status": charge.get("status", ""),
             "created_on": charge.get("created_on", ""),
             "delivered_on": charge.get("delivered_on", ""),
@@ -270,12 +277,18 @@ def format_charges_data(charges_data):
             "particulars": {
                 "type": charge.get("particulars", {}).get("type", ""),
                 "description": charge.get("particulars", {}).get("description", ""),
-                "contains_fixed_charge": charge.get("particulars", {}).get("contains_fixed_charge", False),
-                "contains_floating_charge": charge.get("particulars", {}).get("contains_floating_charge", False),
-                "contains_negative_pledge": charge.get("particulars", {}).get("contains_negative_pledge", False),
+                "contains_fixed_charge": charge.get("particulars", {}).get(
+                    "contains_fixed_charge", False
+                ),
+                "contains_floating_charge": charge.get("particulars", {}).get(
+                    "contains_floating_charge", False
+                ),
+                "contains_negative_pledge": charge.get("particulars", {}).get(
+                    "contains_negative_pledge", False
+                ),
             },
         }
-        
+
         # Categorize by status
         status = charge.get("status", "").lower()
         if status in ["outstanding", "part-satisfied"]:
@@ -285,7 +298,9 @@ def format_charges_data(charges_data):
 
     formatted = {
         "total_count": charges_data.get("total_count", 0),
-        "outstanding_count": charges_data.get("unfiltered_count", 0),  # Outstanding charges
+        "outstanding_count": charges_data.get(
+            "unfiltered_count", 0
+        ),  # Outstanding charges
         "satisfied_count": charges_data.get("satisfied_count", 0),
         "part_satisfied_count": charges_data.get("part_satisfied_count", 0),
         "outstanding_charges": outstanding_charges,
@@ -305,7 +320,7 @@ def get_from_cache(company_number):
 
         # Query cache with event_type_timestamp = "CHARGES#YYYY-MM-DD"
         today = datetime.utcnow().isoformat()[:10]
-        
+
         response = table.get_item(
             Key={
                 "company_number": company_number,
