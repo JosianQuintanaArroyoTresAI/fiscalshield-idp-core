@@ -418,6 +418,52 @@ Resources:
         - Key: Status
           Value: Future implementation
 
+  OpenSanctionsApiSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub 'fiscalshield-dc-${Environment}-OpenSanctionsAPI'
+      Description: OpenSanctions API key for sanctions and PEP screening
+      SecretString: |
+        {
+          "api_key": "PLACEHOLDER_COPY_FROM_EU_WEST_2",
+          "base_url": "https://api.opensanctions.org",
+          "rate_limit": 100,
+          "rate_limit_window": 60
+        }
+      KmsKeyId: alias/aws/secretsmanager
+      Tags:
+        - Key: Name
+          Value: !Sub 'fiscalshield-dc-${Environment}-OpenSanctionsAPI'
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Purpose
+          Value: AML sanctions and PEP screening
+        - Key: Status
+          Value: Update with real API key after deployment
+
+  NewsApiSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub 'fiscalshield-dc-${Environment}-NewsAPI'
+      Description: NewsAPI key for adverse media screening
+      SecretString: |
+        {
+          "api_key": "PLACEHOLDER_COPY_FROM_EU_WEST_2",
+          "base_url": "https://newsapi.org/v2",
+          "rate_limit": 100,
+          "rate_limit_window": 86400
+        }
+      KmsKeyId: alias/aws/secretsmanager
+      Tags:
+        - Key: Name
+          Value: !Sub 'fiscalshield-dc-${Environment}-NewsAPI'
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Purpose
+          Value: AML adverse media screening
+        - Key: Status
+          Value: Update with real API key after deployment
+
   # ========================================================================
   # IAM ROLES
   # ========================================================================
@@ -478,6 +524,16 @@ Resources:
                   - !Ref CompaniesHouseApiSecret
                   - !Ref HMRCApiSecret
                   - !Ref BankingApiSecret
+                  - !Ref OpenSanctionsApiSecret
+                  - !Ref NewsApiSecret
+              - Sid: CrossRegionSecretsAccess
+                Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                  - secretsmanager:DescribeSecret
+                Resource:
+                  - !Sub 'arn:aws:secretsmanager:eu-west-2:${AWS::AccountId}:secret:taxguard/opensanctions/*'
+                  - !Sub 'arn:aws:secretsmanager:eu-west-2:${AWS::AccountId}:secret:taxguard/newsapi/*'
         - PolicyName: S3DataArchiveAccess
           PolicyDocument:
             Version: '2012-10-17'
@@ -768,6 +824,52 @@ Resources:
             Description: Weekly sync of HMRC guidance from GOV.UK
             Enabled: true
 
+  SanctionsCheckerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'fiscalshield-dc-${Environment}-SanctionsChecker'
+      Description: Screen individuals against sanctions lists and PEP databases (OpenSanctions API)
+      CodeUri: ../../src/data_collection/aml/sanctions_checker/
+      Handler: handler.lambda_handler
+      Role: !GetAtt DataCollectionLambdaRole.Arn
+      Timeout: 60
+      MemorySize: 512
+      Environment:
+        Variables:
+          CACHE_TABLE_NAME: !Ref CompanyEventsTable
+          SECRET_NAME: !Ref OpenSanctionsApiSecret
+          DATA_ARCHIVE_BUCKET: !Sub 'fiscalshield-dc-${Environment}-data-archive-${AWS::AccountId}'
+      Events:
+        PostSanctionsCheck:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DataCollectionApi
+            Path: /sanctions/check
+            Method: POST
+
+  MediaCheckerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'fiscalshield-dc-${Environment}-MediaChecker'
+      Description: Search for adverse media articles about companies (NewsAPI)
+      CodeUri: ../../src/data_collection/aml/media_checker/
+      Handler: handler.lambda_handler
+      Role: !GetAtt DataCollectionLambdaRole.Arn
+      Timeout: 60
+      MemorySize: 512
+      Environment:
+        Variables:
+          CACHE_TABLE_NAME: !Ref CompanyEventsTable
+          SECRET_NAME: !Ref NewsApiSecret
+          DATA_ARCHIVE_BUCKET: !Sub 'fiscalshield-dc-${Environment}-data-archive-${AWS::AccountId}'
+      Events:
+        PostMediaCheck:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DataCollectionApi
+            Path: /media/check
+            Method: POST
+
   # ========================================================================
   # STEP FUNCTIONS STATE MACHINE
   # ========================================================================
@@ -785,6 +887,8 @@ Resources:
         ChargesFunctionArn: !GetAtt ChargesFunction.Arn
         InsolvencyFunctionArn: !GetAtt InsolvencyFunction.Arn
         FilingHistoryFunctionArn: !GetAtt FilingHistoryFunction.Arn
+        SanctionsCheckerFunctionArn: !GetAtt SanctionsCheckerFunction.Arn
+        MediaCheckerFunctionArn: !GetAtt MediaCheckerFunction.Arn
       Role: !GetAtt StepFunctionsExecutionRole.Arn
       Logging:
         Level: !If [IsProduction, ERROR, ALL]
@@ -824,6 +928,8 @@ Resources:
                   - !GetAtt ChargesFunction.Arn
                   - !GetAtt InsolvencyFunction.Arn
                   - !GetAtt FilingHistoryFunction.Arn
+                  - !GetAtt SanctionsCheckerFunction.Arn
+                  - !GetAtt MediaCheckerFunction.Arn
         - PolicyName: CloudWatchLogs
           PolicyDocument:
             Version: '2012-10-17'
@@ -945,6 +1051,18 @@ Outputs:
     Export:
       Name: !Sub '${AWS::StackName}-HMRCSecret'
 
+  OpenSanctionsSecretArn:
+    Description: ARN of OpenSanctions API secret (update with real key from eu-west-2)
+    Value: !Ref OpenSanctionsApiSecret
+    Export:
+      Name: !Sub '${AWS::StackName}-OpenSanctionsSecret'
+
+  NewsApiSecretArn:
+    Description: ARN of NewsAPI secret (update with real key from eu-west-2)
+    Value: !Ref NewsApiSecret
+    Export:
+      Name: !Sub '${AWS::StackName}-NewsApiSecret'
+
   LambdaExecutionRoleArn:
     Description: ARN of Lambda execution role
     Value: !GetAtt DataCollectionLambdaRole.Arn
@@ -1011,6 +1129,18 @@ Outputs:
     Export:
       Name: !Sub '${AWS::StackName}-InsolvencyFunction'
 
+  SanctionsCheckerFunctionArn:
+    Description: ARN of Sanctions Checker Lambda function (AML screening)
+    Value: !GetAtt SanctionsCheckerFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-SanctionsCheckerFunction'
+
+  MediaCheckerFunctionArn:
+    Description: ARN of Media Checker Lambda function (Adverse media screening)
+    Value: !GetAtt MediaCheckerFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-MediaCheckerFunction'
+
   ApiUrlParameterName:
     Description: SSM Parameter Store path for API URL (for Core Stack integration)
     Value: !Sub '/fiscalshield/data-collection/${Environment}/api-url'
@@ -1039,3 +1169,5 @@ Outputs:
       PSC: GET https://${DataCollectionApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/psc/{company_number}
       Charges: GET https://${DataCollectionApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/charges/{company_number}
       Insolvency: GET https://${DataCollectionApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/insolvency/{company_number}
+      Sanctions Check: POST https://${DataCollectionApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/sanctions/check
+      Media Check: POST https://${DataCollectionApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/media/check

@@ -317,6 +317,180 @@
         }
       ],
       "ResultPath": "$.companiesHouseData",
+      "Next": "CheckAMLEnabled"
+    },
+    "CheckAMLEnabled": {
+      "Type": "Choice",
+      "Comment": "Check if AML screening is enabled for this execution",
+      "Choices": [
+        {
+          "Variable": "$.enable_aml",
+          "BooleanEquals": true,
+          "Next": "PerformAMLScreening"
+        }
+      ],
+      "Default": "SetAMLDataNull"
+    },
+    "SetAMLDataNull": {
+      "Type": "Pass",
+      "Comment": "Set amlData to null when AML screening is disabled",
+      "Result": null,
+      "ResultPath": "$.amlData",
+      "Next": "ConsolidateResults"
+    },
+    "PerformAMLScreening": {
+      "Type": "Parallel",
+      "Comment": "Perform AML screening - sanctions and adverse media checks",
+      "Branches": [
+        {
+          "StartAt": "ScreenCompanyAdverseMedia",
+          "States": {
+            "ScreenCompanyAdverseMedia": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::lambda:invoke",
+              "Parameters": {
+                "FunctionName": "${MediaCheckerFunctionArn}",
+                "Payload": {
+                  "company_name.$": "$.companiesHouseData[0].companyProfile.body.company_name",
+                  "company_number.$": "$.company_number",
+                  "days": 30
+                }
+              },
+              "ResultSelector": {
+                "statusCode.$": "$.Payload.statusCode",
+                "body.$": "States.StringToJson($.Payload.body)"
+              },
+              "ResultPath": "$.adverseMedia",
+              "Retry": [
+                {
+                  "ErrorEquals": [
+                    "Lambda.ServiceException",
+                    "Lambda.AWSLambdaException",
+                    "Lambda.SdkClientException"
+                  ],
+                  "IntervalSeconds": 2,
+                  "MaxAttempts": 3,
+                  "BackoffRate": 2
+                }
+              ],
+              "Catch": [
+                {
+                  "ErrorEquals": ["States.ALL"],
+                  "ResultPath": "$.adverseMedia.error",
+                  "Next": "AdverseMediaFailed"
+                }
+              ],
+              "End": true
+            },
+            "AdverseMediaFailed": {
+              "Type": "Pass",
+              "Result": {
+                "success": false,
+                "error": "Failed to screen adverse media"
+              },
+              "ResultPath": "$.adverseMedia",
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "ExtractOfficersForScreening",
+          "States": {
+            "ExtractOfficersForScreening": {
+              "Type": "Pass",
+              "Comment": "Extract active officers for sanctions screening",
+              "Parameters": {
+                "officers.$": "$.companiesHouseData[1].officers.body.active_officers",
+                "company_number.$": "$.company_number"
+              },
+              "ResultPath": "$.officersToScreen",
+              "Next": "CheckOfficersExist"
+            },
+            "CheckOfficersExist": {
+              "Type": "Choice",
+              "Choices": [
+                {
+                  "Variable": "$.officersToScreen.officers[0]",
+                  "IsPresent": true,
+                  "Next": "ScreenOfficers"
+                }
+              ],
+              "Default": "NoOfficersToScreen"
+            },
+            "ScreenOfficers": {
+              "Type": "Map",
+              "Comment": "Screen each officer against sanctions lists",
+              "ItemsPath": "$.officersToScreen.officers",
+              "MaxConcurrency": 5,
+              "Parameters": {
+                "officer.$": "$$.Map.Item.Value",
+                "company_number.$": "$.officersToScreen.company_number"
+              },
+              "Iterator": {
+                "StartAt": "ScreenOfficerSanctions",
+                "States": {
+                  "ScreenOfficerSanctions": {
+                    "Type": "Task",
+                    "Resource": "arn:aws:states:::lambda:invoke",
+                    "Parameters": {
+                      "FunctionName": "${SanctionsCheckerFunctionArn}",
+                      "Payload": {
+                        "person_name.$": "$.officer.name",
+                        "company_number.$": "$.company_number"
+                      }
+                    },
+                    "ResultSelector": {
+                      "statusCode.$": "$.Payload.statusCode",
+                      "screening.$": "States.StringToJson($.Payload.body)"
+                    },
+                    "Retry": [
+                      {
+                        "ErrorEquals": [
+                          "Lambda.ServiceException",
+                          "Lambda.AWSLambdaException",
+                          "Lambda.SdkClientException"
+                        ],
+                        "IntervalSeconds": 2,
+                        "MaxAttempts": 3,
+                        "BackoffRate": 2
+                      }
+                    ],
+                    "Catch": [
+                      {
+                        "ErrorEquals": ["States.ALL"],
+                        "ResultPath": "$.error",
+                        "Next": "OfficerScreeningFailed"
+                      }
+                    ],
+                    "End": true
+                  },
+                  "OfficerScreeningFailed": {
+                    "Type": "Pass",
+                    "Result": {
+                      "success": false,
+                      "error": "Failed to screen officer"
+                    },
+                    "End": true
+                  }
+                }
+              },
+              "ResultPath": "$.sanctionsScreening",
+              "End": true
+            },
+            "NoOfficersToScreen": {
+              "Type": "Pass",
+              "Result": {
+                "success": true,
+                "message": "No officers to screen",
+                "screening_results": []
+              },
+              "ResultPath": "$.sanctionsScreening",
+              "End": true
+            }
+          }
+        }
+      ],
+      "ResultPath": "$.amlData",
       "Next": "ConsolidateResults"
     },
     "ConsolidateResults": {
@@ -332,12 +506,14 @@
           "psc.$": "$.companiesHouseData[2].psc.body",
           "charges.$": "$.companiesHouseData[3].charges.body",
           "insolvency.$": "$.companiesHouseData[4].insolvency.body",
-          "filing_history.$": "$.companiesHouseData[5].filingHistory"
+          "filing_history.$": "$.companiesHouseData[5].filingHistory",
+          "aml_screening.$": "$.amlData"
         },
         "metadata": {
-          "sources": ["companies_house"],
+          "sources.$": "States.Array('companies_house', 'aml_screening')",
+          "aml_enabled.$": "States.StringToJson(States.Format('{}', $.enable_aml))",
           "collection_complete": true,
-          "notes": "Filing history may be summarized due to size limits"
+          "notes": "Filing history may be summarized due to size limits. AML screening optional."
         }
       },
       "Next": "Success"
