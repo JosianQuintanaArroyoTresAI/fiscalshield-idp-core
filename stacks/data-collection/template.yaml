@@ -259,6 +259,52 @@ Resources:
         - Key: DataRetention
           Value: Auto-expire with TTL
 
+  HMRCGuidanceTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Sub 'fiscalshield-dc-${Environment}-HMRCGuidance'
+      BillingMode: PAY_PER_REQUEST
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: false  # Guidance doesn't expire, updated via weekly refresh
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !If [IsProduction, true, false]
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      AttributeDefinitions:
+        - AttributeName: section_id
+          AttributeType: S
+        - AttributeName: category
+          AttributeType: S
+        - AttributeName: last_updated
+          AttributeType: N
+      KeySchema:
+        - AttributeName: section_id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: category-index
+          KeySchema:
+            - AttributeName: category
+              KeyType: HASH
+            - AttributeName: last_updated
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: Name
+          Value: !Sub 'fiscalshield-dc-${Environment}-HMRCGuidance'
+        - Key: Purpose
+          Value: Store HMRC BIM compliance rules from GOV.UK API
+        - Key: DataSource
+          Value: GOV-UK-Content-API
+        - Key: UpdateFrequency
+          Value: Weekly
+
   # ========================================================================
   # S3 STORAGE
   # ========================================================================
@@ -414,9 +460,11 @@ Resources:
                   - !GetAtt CompanyEventsTable.Arn
                   - !GetAtt HMRCDataTable.Arn
                   - !GetAtt RateLimitsTable.Arn
+                  - !GetAtt HMRCGuidanceTable.Arn
                   - !Sub '${FilingEventsTable.Arn}/index/*'
                   - !Sub '${CompanyEventsTable.Arn}/index/*'
                   - !Sub '${HMRCDataTable.Arn}/index/*'
+                  - !Sub '${HMRCGuidanceTable.Arn}/index/*'
         - PolicyName: SecretsManagerAccess
           PolicyDocument:
             Version: '2012-10-17'
@@ -695,6 +743,31 @@ Resources:
             Path: /insolvency/{company_number}
             Method: GET
 
+  HMRCGuidanceFetcherFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'fiscalshield-dc-${Environment}-HMRCGuidanceFetcher'
+      Description: Fetch HMRC BIM compliance guidance from GOV.UK Content API (public, no auth)
+      CodeUri: ../../src/data_collection/hmrc/guidance_fetcher/
+      Handler: handler.lambda_handler
+      Role: !GetAtt DataCollectionLambdaRole.Arn
+      Timeout: 300  # 5 minutes (15 sections with rate limiting)
+      MemorySize: 512
+      Environment:
+        Variables:
+          GUIDANCE_TABLE_NAME: !Ref HMRCGuidanceTable
+          DATA_ARCHIVE_BUCKET: !Sub 'fiscalshield-dc-${Environment}-data-archive-${AWS::AccountId}'
+          GOVUK_API_BASE_URL: 'https://www.gov.uk/api/content'
+          RATE_LIMIT_PER_SEC: '8.3'  # GOV.UK public API rate limit
+      Events:
+        WeeklySchedule:
+          Type: Schedule
+          Properties:
+            Schedule: 'cron(0 2 ? * MON *)'  # Every Monday at 2 AM UTC
+            Name: !Sub 'fiscalshield-dc-${Environment}-HMRCGuidanceSync'
+            Description: Weekly sync of HMRC guidance from GOV.UK
+            Enabled: true
+
   # ========================================================================
   # STEP FUNCTIONS STATE MACHINE
   # ========================================================================
@@ -845,6 +918,12 @@ Outputs:
     Value: !Ref HMRCDataTable
     Export:
       Name: !Sub '${AWS::StackName}-HMRCDataTable'
+
+  HMRCGuidanceTableName:
+    Description: DynamoDB table for HMRC BIM guidance rules (GOV.UK)
+    Value: !Ref HMRCGuidanceTable
+    Export:
+      Name: !Sub '${AWS::StackName}-HMRCGuidanceTable'
 
   DataArchiveBucketName:
     Description: S3 bucket for archiving large API responses

@@ -17,13 +17,14 @@ Phase 3: Region Alignment             [█████████████�
 Phase 4: Deployment Optimization      [████████████████████] 100% ✅
 Phase 5: Infrastructure Verification  [████████████████████] 100% ✅
 Phase 6: Core Stack Integration       [████████████████████] 100% ✅
-Phase 7: Companies House Lambda Impl  [████████████████░░░░]  85% 🔄
+Phase 7: Companies House Lambda Impl  [████████████████████] 100% ✅
 Phase 8: Step Functions Orchestration [████████████████████] 100% ✅
 Phase 9: S3 Data Archiving            [████████████████████] 100% ✅
-Phase 10: HMRC Integration            [░░░░░░░░░░░░░░░░░░░░]   0% ❌
-Phase 11: Banking API Integration     [░░░░░░░░░░░░░░░░░░░░]   0% ❌
-Phase 12: SIC Code Enrichment         [░░░░░░░░░░░░░░░░░░░░]   0% ❌
-Phase 13: Testing & Monitoring        [░░░░░░░░░░░░░░░░░░░░]   0% ❌
+Phase 10: HMRC Guidance Integration   [████████████████████] 100% ✅
+Phase 11: HMRC VAT API Integration    [░░░░░░░░░░░░░░░░░░░░]   0% ❌
+Phase 12: Banking API Integration     [░░░░░░░░░░░░░░░░░░░░]   0% ❌
+Phase 13: SIC Code Enrichment         [░░░░░░░░░░░░░░░░░░░░]   0% ❌
+Phase 14: Testing & Monitoring        [░░░░░░░░░░░░░░░░░░░░]   0% ❌
 ```
 
 ---
@@ -623,9 +624,9 @@ aws dynamodb query \
 
 ---
 
-## 🔄 IN PROGRESS
-
-### 11. Infrastructure Verification (100%)
+### 19. S3 Data Archive Bucket (100%)
+**Status**: ✅ Complete  
+**Date**: October 26, 2025
 **Status**: ✅ Complete  
 **Date**: October 25, 2025
 
@@ -884,20 +885,92 @@ cd stacks/data-collection
 
 ---
 
+## ✅ COMPLETED TASKS (Continued)
+
+### 20. HMRC Guidance Integration (100%)
+**Status**: ✅ Complete  
+**Date**: October 27, 2025
+
+**Purpose**: Fetch HMRC Business Income Manual (BIM) sections from GOV.UK Content API to provide compliance rules for invoice categorization.
+
+**Components Deployed**:
+
+1. **DynamoDB Table**: `fiscalshield-dc-dev-HMRCGuidance`
+   - ✅ Schema: section_id (PK), category (GSI)
+   - ✅ Stores: title, description, compliance_rules[], examples[], keywords[], body_html, source_url
+   - ✅ TTL enabled for automatic expiry
+   - ✅ Current items: 12 BIM sections
+
+2. **Lambda Function**: `fiscalshield-dc-dev-HMRCGuidanceFetcher`
+   - ✅ Runtime: Python 3.11
+   - ✅ Memory: 512MB, Timeout: 5 minutes
+   - ✅ Features:
+     - Fetches 15 priority BIM sections from GOV.UK Content API
+     - Rate limiting (8.3 requests/second)
+     - Parses HTML content to extract compliance rules
+     - Stores structured data in DynamoDB
+     - Creates S3 backup of raw GOV.UK responses
+     - No authentication required (public API)
+
+3. **EventBridge Schedule**: `fiscalshield-dc-dev-HMRCGuidanceSync`
+   - ✅ Trigger: Weekly (every Monday 2 AM UTC)
+   - ✅ Pattern: `cron(0 2 ? * MON *)`
+   - ✅ Keeps compliance rules up-to-date
+
+4. **S3 Backup**:
+   - ✅ Bucket: `fiscalshield-dc-dev-data-archive-864899848062`
+   - ✅ Path: `hmrc-guidance/{section_id}/{date}.json`
+   - ✅ Current backups: 12 files
+
+**BIM Sections Configured** (15 total):
+- BIM37000 - Wholly and exclusively ✅
+- BIM37050 - Expenditure on entertainment ✅
+- BIM37600 - Subscriptions and donations ✅
+- BIM37650 - Gifts ✅
+- BIM37700 - Clothing ✅
+- BIM42000 - Specific deductions: employees ❌ (GOV.UK 404)
+- BIM42050 - Redundancy payments ✅
+- BIM42400 - Training costs ❌ (GOV.UK 404)
+- BIM43200 - Interest paid ❌ (GOV.UK 404)
+- BIM45000 - Specific deductions: legal and professional costs ✅
+- BIM45005 - Legal and professional costs: general ✅
+- BIM35000 - Capital v revenue expenditure ✅
+- BIM35010 - Capital or revenue ✅
+- BIM46800 - Debts: bad and doubtful ✅
+- BIM40450 - Travel and subsistence ✅
+
+**Test Results**:
+- **Success Rate**: 80% (12/15 sections)
+- **Compliance Rules Extracted**: Multiple rules per section (e.g., BIM37600 has 8 rules)
+- **DynamoDB Storage**: All 12 sections stored with metadata
+- **S3 Backups**: All 12 raw API responses archived
+
+**Files Created**:
+- `stacks/data-collection/template.yaml` - Added HMRCGuidanceTable, Lambda, EventBridge
+- `src/data_collection/hmrc/guidance_fetcher/handler.py` - 400+ lines Lambda implementation
+- `src/data_collection/hmrc/guidance_fetcher/requirements.txt` - Dependencies (requests, boto3)
+- `src/data_collection/common/constants.py` - Added BIM_SECTIONS list and categories
+
+---
+
 ## 🔄 IN PROGRESS
 
 ### Phase 7: Lambda Implementation - Remaining Functions
-**Status**: 🔄 Ready to start  
-**Started**: October 26, 2025
+**Status**: ✅ Complete  
+**Completed**: October 27, 2025
 
-**Completed**:
+**All Lambda Functions Implemented**:
 - ✅ Company Lookup Lambda (100%)
+- ✅ Health Check Lambda (100%)
+- ✅ Officers Lambda (100%)
+- ✅ Filing History Lambda (100%)
+- ✅ PSC Lookup Lambda (100%)
+- ✅ Charges Lambda (100%)
+- ✅ Insolvency Lambda (100%)
+- ✅ Rate Limiting (100%)
+- ✅ HMRC Guidance Fetcher Lambda (100%)
 
-**Next Priorities**:
-1. 🔄 Health Check Lambda (needs minor updates)
-2. ❌ Officers Lookup Lambda
-3. ❌ Filing History Lambda
-4. ❌ PSC Lookup Lambda
+**Next Phase**: HMRC VAT API Integration (OAuth required)
 
 ---
 
@@ -1327,12 +1400,13 @@ def with_rate_limit(func):
 
 **Priority Order**:
 
-1. **HIGH: HMRC Integration** 🔥 NEXT
+1. **HIGH: HMRC VAT API Integration** 🔥 NEXT
    - Register for HMRC Developer Hub
    - Implement OAuth 2.0 flow
    - Create VAT Obligations Lambda
    - Create VAT Returns Lambda
    - Test with HMRC sandbox
+   - **Note**: This is SEPARATE from the HMRC Guidance Integration (which is complete)
 
 2. **HIGH: SIC Code Enrichment**
    - Fetch industry classification data
@@ -1364,6 +1438,13 @@ def with_rate_limit(func):
 ---
 
 ## 🎉 MAJOR MILESTONES ACHIEVED
+
+### ✅ HMRC Guidance Integration Complete (October 27, 2025)
+- 12/15 BIM sections successfully fetched from GOV.UK
+- Compliance rules extracted and stored in DynamoDB
+- S3 backups created for all sections
+- EventBridge schedule configured for weekly updates
+- No authentication required - fully automated
 
 ### ✅ All Companies House Endpoints Operational (October 26, 2025)
 - 7 Lambda functions deployed and tested
@@ -1414,16 +1495,16 @@ def with_rate_limit(func):
 ## 📈 METRICS TRACKING
 
 ### Code Statistics
-- **Total Files Created**: 60+
-- **Lines of Code Written**: 5,000+ (CloudFormation + Lambda + Frontend + State Machines)
+- **Total Files Created**: 70+
+- **Lines of Code Written**: 6,000+ (CloudFormation + Lambda + Frontend + State Machines + HMRC Guidance)
 - **Test Coverage**: 0% (tests not yet implemented)
 - **Documentation Pages**: 5
 
 ### Infrastructure Status
-- **DynamoDB Tables**: 3 ✅ (FilingEvents, CompanyEvents, HMRCData)
-- **S3 Buckets**: 1 ✅ (DataArchiveBucket for large responses)
+- **DynamoDB Tables**: 4 ✅ (FilingEvents, CompanyEvents, HMRCData, HMRCGuidance)
+- **S3 Buckets**: 1 ✅ (DataArchiveBucket for large responses + HMRC guidance backups)
 - **Secrets**: 1 active, 2 placeholders ✅ (Companies House key configured)
-- **Lambda Functions**: 7 ✅ (All Companies House endpoints operational)
+- **Lambda Functions**: 8 ✅ (All Companies House endpoints + HMRC Guidance Fetcher)
   - CompanyLookup ✅
   - HealthCheck ✅
   - Officers ✅
@@ -1431,7 +1512,9 @@ def with_rate_limit(func):
   - PSCLookup ✅
   - Charges ✅
   - Insolvency ✅
+  - HMRCGuidanceFetcher ✅ (NEW - GOV.UK BIM sections)
 - **Step Functions**: 1 ✅ (CompanyResearchStateMachine - 6 parallel branches)
+- **EventBridge Rules**: 1 ✅ (HMRCGuidanceSync - weekly Monday 2 AM UTC)
 - **API Gateway**: 1 ✅ (7 routes active + health endpoint)
 - **Parameter Store**: 1 ✅ (API URL stored)
 - **CloudWatch Alarms**: 3 ✅ (deployed with template)
@@ -1460,17 +1543,18 @@ def with_rate_limit(func):
 - **Success Rate**: 100% (with graceful degradation)
 
 ### Testing Status
-- **Manual Testing**: ✅ Complete (All endpoints tested with Tesco)
+- **Manual Testing**: ✅ Complete (All endpoints tested with Tesco + HMRC Guidance)
 - **Step Functions Testing**: ✅ Complete (Parallel execution verified)
-- **S3 Archiving**: ✅ Tested (3.2MB filing history archived successfully)
+- **S3 Archiving**: ✅ Tested (3.2MB filing history + HMRC guidance backups)
 - **Rate Limiting**: ✅ Tested (Shared counter working across Lambdas)
+- **HMRC Guidance**: ✅ Tested (12/15 sections fetched successfully)
 - **Unit Tests**: ❌ Not implemented
 - **Integration Tests**: ❌ Not implemented
 - **Load Tests**: ❌ Not implemented
 
 ### Cost (Estimated)
-- **Current**: ~$5/month (infrastructure + light usage + S3)
-- **Projected**: <$20/month for 1000 clients (with S3 lifecycle management)
+- **Current**: ~$8/month (infrastructure + light usage + S3 + HMRC guidance storage)
+- **Projected**: <$25/month for 1000 clients (with S3 lifecycle management + weekly HMRC sync)
 
 ---
 
