@@ -171,6 +171,8 @@ jobs:
           echo "🎉 All production smoke tests passed!"
 
       - name: 📝 Create deployment issue
+        if: false  # Disabled - Issues are not enabled in this repository
+        continue-on-error: true
         uses: actions/github-script@v7
         with:
           script: |
@@ -211,7 +213,8 @@ jobs:
             });
 
       - name: ⚠️ Notify on failure
-        if: failure()
+        if: false  # Disabled - Issues are not enabled in this repository
+        continue-on-error: true
         uses: actions/github-script@v7
         with:
           script: |
