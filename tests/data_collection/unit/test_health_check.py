@@ -9,7 +9,7 @@ Unit tests for Data Collection Health Check Lambda function
 
 import json
 import os
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
 import pytest
 import sys
