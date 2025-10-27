@@ -82,7 +82,7 @@ jobs:
         run: |
           sam build --config-env prod --parallel --cached
 
-      - name: �� Check stack state
+      - name: 🔍 Check stack state
         id: check-stack
         run: |
           # Check if stack exists and get its status
@@ -118,6 +118,8 @@ jobs:
           fi
           
           echo "stack_status=$STACK_STATUS" >> $GITHUB_OUTPUT
+
+      - name: 📋 Create changeset
         working-directory: stacks/data-collection
         run: |
           sam deploy \
