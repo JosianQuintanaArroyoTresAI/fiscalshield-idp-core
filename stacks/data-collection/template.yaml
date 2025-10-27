@@ -501,7 +501,9 @@ Resources:
             Resource: '*'
             Condition:
               ArnLike:
-                'kms:EncryptionContext:aws:logs:arn': !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/fiscalshield-dc-${Environment}*'
+                'kms:EncryptionContext:aws:logs:arn':
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/fiscalshield-dc-${Environment}*'
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/vendedlogs/states/fiscalshield-dc-${Environment}*'
 
   LogsKMSKeyAlias:
     Type: AWS::KMS::Alias
