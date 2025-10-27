@@ -85,6 +85,7 @@ def handler(event, context):
 
         object_key = input_data.get("ObjectKey")
         queued_time = input_data.get("QueuedTime")
+        company_number = input_data.get("CompanyNumber")
 
         if not object_key or not isinstance(object_key, str):
             raise ValueError("ObjectKey must be a non-empty string")
@@ -92,7 +93,7 @@ def handler(event, context):
             raise ValueError("QueuedTime must be a non-empty string")
 
         logger.info(
-            f"Processing document: {object_key}, QueuedTime: {queued_time}, User: {user_id}"
+            f"Processing document: {object_key}, QueuedTime: {queued_time}, User: {user_id}, CompanyNumber: {company_number}"
         )
 
         tracking_table = dynamodb.Table(os.environ["TRACKING_TABLE_NAME"])
@@ -166,18 +167,20 @@ def handler(event, context):
                 Item={"PK": doc_pk, "SK": doc_sk, **input_data_with_user}
             )
 
-            # Create the list item with UserId for filtering
+            # Create the list item with UserId and CompanyNumber for filtering
             logger.info(f"Creating list item: PK={list_pk}, SK={list_sk}")
-            tracking_table.put_item(
-                Item={
-                    "PK": list_pk,
-                    "SK": list_sk,
-                    "ObjectKey": object_key,
-                    "QueuedTime": queued_time,
-                    "UserId": user_id,  # Add UserId to enable filtering
-                    "ExpiresAfter": input_data.get("ExpiresAfter"),
-                }
-            )
+            list_item = {
+                "PK": list_pk,
+                "SK": list_sk,
+                "ObjectKey": object_key,
+                "QueuedTime": queued_time,
+                "UserId": user_id,  # Add UserId to enable filtering
+                "ExpiresAfter": input_data.get("ExpiresAfter"),
+            }
+            # Add CompanyNumber if provided
+            if company_number:
+                list_item["CompanyNumber"] = company_number
+            tracking_table.put_item(Item=list_item)
 
             logger.info(
                 f"Successfully created document and list entries for user {user_id}, object {object_key}"

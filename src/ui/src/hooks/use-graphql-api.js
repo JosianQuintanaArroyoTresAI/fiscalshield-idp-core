@@ -107,11 +107,24 @@ const useGraphQlApi = ({ initialPeriodsToLoad = DOCUMENT_LIST_SHARDS_PER_DAY * 2
   }, []);
 
   const listDocumentIdsByDateShards = async ({ date, shards }) => {
-    logger.debug('[USER-DEBUG] Querying documents by date shards:', { date, shards });
+    // Read active company from localStorage for company filtering
+    const activeCompany = JSON.parse(localStorage.getItem('active_company') || 'null');
+    const companyNumber = activeCompany?.companyNumber || null;
+    
+    logger.debug('[USER-DEBUG] Querying documents by date shards:', { date, shards, companyNumber });
     logger.debug("[USER-DEBUG] These queries will be filtered by the authenticated user's sub (UserId)");
+    if (companyNumber) {
+      logger.debug('[USER-DEBUG] And filtered by CompanyNumber:', companyNumber);
+    } else {
+      logger.debug('[USER-DEBUG] No active company selected - will return all user documents');
+    }
+    
     const listDocumentsDateShardPromises = shards.map((i) => {
-      logger.debug('sending list document date shard', date, i);
-      return API.graphql({ query: listDocumentsDateShard, variables: { date, shard: i } });
+      logger.debug('sending list document date shard', date, i, 'company:', companyNumber);
+      return API.graphql({ 
+        query: listDocumentsDateShard, 
+        variables: { date, shard: i, companyNumber } 
+      });
     });
     const listDocumentsDateShardResolutions = await Promise.allSettled(listDocumentsDateShardPromises);
 
@@ -134,8 +147,9 @@ const useGraphQlApi = ({ initialPeriodsToLoad = DOCUMENT_LIST_SHARDS_PER_DAY * 2
       logger.warn('[USER-DEBUG] ⚠️ No documents returned! This means either:');
       logger.warn('[USER-DEBUG]   1. No documents exist for this time period');
       logger.warn('[USER-DEBUG]   2. Documents exist but UserId filter is excluding them');
-      logger.warn('[USER-DEBUG]   3. List partition items are missing/incorrect');
-      logger.warn('[USER-DEBUG]   4. Check browser console for your current sub/UserId');
+      logger.warn('[USER-DEBUG]   3. CompanyNumber filter is excluding them (if company selected)');
+      logger.warn('[USER-DEBUG]   4. List partition items are missing/incorrect');
+      logger.warn('[USER-DEBUG]   5. Check browser console for your current sub/UserId');
     } else {
       logger.info('[USER-DEBUG] ✅ Found list items, now fetching document details...');
     }
@@ -144,9 +158,16 @@ const useGraphQlApi = ({ initialPeriodsToLoad = DOCUMENT_LIST_SHARDS_PER_DAY * 2
   };
 
   const listDocumentIdsByDateHours = async ({ date, hours }) => {
+    // Read active company from localStorage for company filtering
+    const activeCompany = JSON.parse(localStorage.getItem('active_company') || 'null');
+    const companyNumber = activeCompany?.companyNumber || null;
+    
     const listDocumentsDateHourPromises = hours.map((i) => {
-      logger.debug('sending list document date hour', date, i);
-      return API.graphql({ query: listDocumentsDateHour, variables: { date, hour: i } });
+      logger.debug('sending list document date hour', date, i, 'company:', companyNumber);
+      return API.graphql({ 
+        query: listDocumentsDateHour, 
+        variables: { date, hour: i, companyNumber } 
+      });
     });
     const listDocumentsDateHourResolutions = await Promise.allSettled(listDocumentsDateHourPromises);
 

@@ -5615,28 +5615,42 @@ Resources:
       FieldName: listDocuments
       DataSourceName: !GetAtt TrackingTableDataSource.Name
       RequestMappingTemplate: |
+        ## Build filter expression dynamically
+        #set( $filterExpression = "" )
+        #set( $filterValues = {} )
+        
+        ## Add date filtering if provided
+        #if($context.arguments.startDateTime && $context.arguments.endDateTime)
+            #set( $filterExpression = "InitialEventTime BETWEEN :startDateTime AND :endDateTime" )
+            #set( $dummy = $filterValues.put("startDateTime", { "S": "$context.arguments.startDateTime" }) )
+            #set( $dummy = $filterValues.put("endDateTime", { "S": "$context.arguments.endDateTime" }) )
+        #elseif($context.arguments.startDateTime)
+            #set( $filterExpression = "InitialEventTime >= :startDateTime" )
+            #set( $dummy = $filterValues.put("startDateTime", { "S": "$context.arguments.startDateTime" }) )
+        #elseif($context.arguments.endDateTime)
+            #set( $filterExpression = "InitialEventTime <= :endDateTime" )
+            #set( $dummy = $filterValues.put("endDateTime", { "S": "$context.arguments.endDateTime" }) )
+        #end
+        
+        ## Add company filtering if provided
+        #if($context.arguments.companyNumber)
+            #if($filterExpression != "")
+                #set( $filterExpression = "${filterExpression} AND CompanyNumber = :companyNumber" )
+            #else
+                #set( $filterExpression = "CompanyNumber = :companyNumber" )
+            #end
+            #set( $dummy = $filterValues.put("companyNumber", { "S": "$context.arguments.companyNumber" }) )
+        #end
+        
         {
             "version": "2018-05-29",
             "operation": "Scan",
+            #if($filterExpression != "")
             "filter": {
-                #if($context.arguments.startDateTime && $context.arguments.endDateTime)
-                    "expression": "InitialEventTime BETWEEN :startDateTime AND :endDateTime",
-                    "expressionValues": {
-                        ":startDateTime": { "S": "$context.arguments.startDateTime" },
-                        ":endDateTime": { "S": "$context.arguments.endDateTime" }
-                    }
-                #elseif($context.arguments.startDateTime)
-                    "expression": "InitialEventTime >= :startDateTime",
-                    "expressionValues": {
-                        ":startDateTime": { "S": "$context.arguments.startDateTime" }
-                    }
-                #elseif($context.arguments.endDateTime)
-                    "expression": "InitialEventTime <= :endDateTime",
-                    "expressionValues": {
-                        ":endDateTime": { "S": "$context.arguments.endDateTime" }
-                    }
-                #end
+                "expression": "$filterExpression",
+                "expressionValues": $util.toJson($filterValues)
             },
+            #end
             #if($context.prev.result)
                 "nextToken": "$context.prev.result.nextToken",
             #end
@@ -5688,9 +5702,16 @@ Resources:
             },
           },
           "filter": {
-            "expression": "UserId = :userId",
+            #set( $filterExpression = "UserId = :userId" )
+            #if($ctx.args.companyNumber)
+              #set( $filterExpression = "${filterExpression} AND CompanyNumber = :companyNumber" )
+            #end
+            "expression": "$filterExpression",
             "expressionValues": {
               ":userId": $util.dynamodb.toDynamoDBJson($userId)
+              #if($ctx.args.companyNumber)
+              ,":companyNumber": $util.dynamodb.toDynamoDBJson($ctx.args.companyNumber)
+              #end
             }
           }
         }
@@ -5736,9 +5757,16 @@ Resources:
             }
           },
           "filter": {
-            "expression": "UserId = :userId",
+            #set( $filterExpression = "UserId = :userId" )
+            #if($ctx.args.companyNumber)
+              #set( $filterExpression = "${filterExpression} AND CompanyNumber = :companyNumber" )
+            #end
+            "expression": "$filterExpression",
             "expressionValues": {
               ":userId": $util.dynamodb.toDynamoDBJson($userId)
+              #if($ctx.args.companyNumber)
+              ,":companyNumber": $util.dynamodb.toDynamoDBJson($ctx.args.companyNumber)
+              #end
             }
           }
         }

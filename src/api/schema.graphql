@@ -93,6 +93,7 @@ input CreateDocumentInput {
   QueuedTime: AWSDateTime
   ExpiresAfter: AWSTimestamp
   UserId: String
+  CompanyNumber: String
 }
 
 type CreateDocumentOutput @aws_iam {
@@ -261,9 +262,9 @@ type Mutation  {
 
 type Query @aws_cognito_user_pools @aws_iam {
   getDocument(ObjectKey: ID!): Document
-  listDocuments(startDateTime: AWSDateTime, endDateTime: AWSDateTime): DocumentList
-  listDocumentsDateHour(date: AWSDate, hour: Int): DocumentList
-  listDocumentsDateShard(date: AWSDate, shard: Int): DocumentList 
+  listDocuments(startDateTime: AWSDateTime, endDateTime: AWSDateTime, companyNumber: String): DocumentList
+  listDocumentsDateHour(date: AWSDate, hour: Int, companyNumber: String): DocumentList
+  listDocumentsDateShard(date: AWSDate, shard: Int, companyNumber: String): DocumentList 
   getFileContents(s3Uri: String!): FileContentsResponse
   getConfiguration: ConfigurationResponse
   listDiscoveryJobs: DiscoveryJobList
