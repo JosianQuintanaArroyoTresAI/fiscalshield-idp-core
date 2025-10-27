@@ -85,28 +85,59 @@ jobs:
       run: |
         python3 publish.py fiscalshield-prod idp eu-central-1 --lint off
     
+    - name: Check if stack exists
+      id: check_stack
+      run: |
+        if aws cloudformation describe-stacks --stack-name fiscalshield-idp-prod --region eu-central-1 >/dev/null 2>&1; then
+          echo "stack_exists=true" >> $GITHUB_OUTPUT
+          echo "✓ Stack exists - will update"
+        else
+          echo "stack_exists=false" >> $GITHUB_OUTPUT
+          echo "✓ Stack does not exist - will create"
+        fi
+    
     - name: Deploy to production stack
       run: |
-        aws cloudformation update-stack \
-          --stack-name fiscalshield-idp-prod \
-          --template-url https://s3.eu-central-1.amazonaws.com/fiscalshield-prod-eu-central-1/idp/idp-main.yaml \
-          --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
-          --region eu-central-1 \
-          --parameters ParameterKey=AdminEmail,UsePreviousValue=true \
-                       ParameterKey=IDPPattern,UsePreviousValue=true
+        if [ "${{ steps.check_stack.outputs.stack_exists }}" == "true" ]; then
+          echo "🔄 Updating existing stack..."
+          aws cloudformation update-stack \
+            --stack-name fiscalshield-idp-prod \
+            --template-url https://s3.eu-central-1.amazonaws.com/fiscalshield-prod-eu-central-1/idp/idp-main.yaml \
+            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
+            --region eu-central-1 \
+            --parameters ParameterKey=AdminEmail,UsePreviousValue=true \
+                         ParameterKey=IDPPattern,UsePreviousValue=true \
+                         ParameterKey=Pattern2Configuration,UsePreviousValue=true \
+                         ParameterKey=DocumentKnowledgeBase,UsePreviousValue=true
+        else
+          echo "🆕 Creating new stack..."
+          sam deploy \
+            --stack-name fiscalshield-idp-prod \
+            --region eu-central-1 \
+            --config-file samconfig.toml \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset
+        fi
     
     - name: Wait for deployment to complete
       run: |
         echo "⏳ Waiting for CloudFormation stack to complete..."
         echo "This may take 15-20 minutes..."
-        aws cloudformation wait stack-update-complete \
-          --stack-name fiscalshield-idp-prod \
-          --region eu-central-1
+        
+        if [ "${{ steps.check_stack.outputs.stack_exists }}" == "true" ]; then
+          aws cloudformation wait stack-update-complete \
+            --stack-name fiscalshield-idp-prod \
+            --region eu-central-1
+        else
+          aws cloudformation wait stack-create-complete \
+            --stack-name fiscalshield-idp-prod \
+            --region eu-central-1
+        fi
         
         if [ $? -eq 0 ]; then
-          echo "✓ CloudFormation stack update completed successfully"
+          echo "✓ CloudFormation stack deployment completed successfully"
         else
-          echo "✗ CloudFormation stack update failed or timed out"
+          echo "✗ CloudFormation stack deployment failed or timed out"
           exit 1
         fi
     
