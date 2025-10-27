@@ -82,35 +82,42 @@ jobs:
         run: |
           sam build --config-env prod --parallel --cached
 
-      - name: � Check stack state
+      - name: �� Check stack state
         id: check-stack
         run: |
-          STACK_STATUS=$(aws cloudformation describe-stacks \
+          # Check if stack exists and get its status
+          if aws cloudformation describe-stacks \
             --stack-name ${{ env.STACK_NAME }} \
-            --region ${{ env.AWS_REGION }} \
-            --query 'Stacks[0].StackStatus' \
-            --output text 2>&1 || echo "DOES_NOT_EXIST")
-          
-          echo "Stack status: $STACK_STATUS"
-          
-          if [[ "$STACK_STATUS" == "ROLLBACK_COMPLETE" ]]; then
-            echo "⚠️ Stack is in ROLLBACK_COMPLETE state. Deleting before redeployment..."
-            aws cloudformation delete-stack \
-              --stack-name ${{ env.STACK_NAME }} \
-              --region ${{ env.AWS_REGION }}
+            --region ${{ env.AWS_REGION }} > /dev/null 2>&1; then
             
-            echo "Waiting for stack deletion to complete..."
-            aws cloudformation wait stack-delete-complete \
+            STACK_STATUS=$(aws cloudformation describe-stacks \
               --stack-name ${{ env.STACK_NAME }} \
-              --region ${{ env.AWS_REGION }}
+              --region ${{ env.AWS_REGION }} \
+              --query 'Stacks[0].StackStatus' \
+              --output text)
             
-            echo "✅ Stack deleted successfully"
+            echo "Stack exists with status: $STACK_STATUS"
+            
+            if [[ "$STACK_STATUS" == "ROLLBACK_COMPLETE" ]]; then
+              echo "⚠️ Stack is in ROLLBACK_COMPLETE state. Deleting before redeployment..."
+              aws cloudformation delete-stack \
+                --stack-name ${{ env.STACK_NAME }} \
+                --region ${{ env.AWS_REGION }}
+              
+              echo "Waiting for stack deletion to complete..."
+              aws cloudformation wait stack-delete-complete \
+                --stack-name ${{ env.STACK_NAME }} \
+                --region ${{ env.AWS_REGION }}
+              
+              echo "✅ Stack deleted successfully"
+              STACK_STATUS="DOES_NOT_EXIST"
+            fi
+          else
+            echo "Stack does not exist yet"
             STACK_STATUS="DOES_NOT_EXIST"
           fi
           
           echo "stack_status=$STACK_STATUS" >> $GITHUB_OUTPUT
-
-      - name: �📋 Create changeset
         working-directory: stacks/data-collection
         run: |
           sam deploy \
