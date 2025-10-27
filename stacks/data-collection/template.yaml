@@ -1,0 +1,960 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  FiscalShield Data Collection Stack
+  
+  Independent stack for fetching, caching, and managing external data sources
+  (Companies House, HMRC, Banking APIs). Convention-based naming enables 
+  cross-stack access without exports.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Environment Configuration"
+        Parameters:
+          - Environment
+      - Label:
+          default: "Cache Configuration"
+        Parameters:
+          - CacheTTLHours
+          - CompaniesHouseRateLimit
+          - CompaniesHouseRateWindow
+      - Label:
+          default: "Monitoring Configuration"
+        Parameters:
+          - EnableXRayTracing
+          - LogRetentionDays
+
+Parameters:
+  Environment:
+    Type: String
+    Description: Deployment environment (dev, staging, prod)
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+    Default: dev
+
+  CacheTTLHours:
+    Type: Number
+    Description: Default cache TTL in hours
+    Default: 24
+    MinValue: 1
+    MaxValue: 168
+
+  CompaniesHouseRateLimit:
+    Type: Number
+    Description: Companies House API rate limit (requests per window)
+    Default: 600
+
+  CompaniesHouseRateWindow:
+    Type: Number
+    Description: Rate limit window in seconds
+    Default: 300
+
+  EnableXRayTracing:
+    Type: String
+    Description: Enable AWS X-Ray tracing for Lambda functions
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Default: 'true'
+
+  LogRetentionDays:
+    Type: Number
+    Description: CloudWatch Logs retention period in days
+    AllowedValues: [1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1827, 3653]
+    Default: 7
+
+Conditions:
+  IsProduction: !Equals [!Ref Environment, 'prod']
+  EnableTracing: !Equals [!Ref EnableXRayTracing, 'true']
+
+Globals:
+  Function:
+    Runtime: python3.11
+    Timeout: 30
+    MemorySize: 256
+    Tracing: !If [EnableTracing, Active, PassThrough]
+    Environment:
+      Variables:
+        ENVIRONMENT: !Ref Environment
+        CACHE_TTL_HOURS: !Ref CacheTTLHours
+        LOG_LEVEL: !If [IsProduction, 'INFO', 'DEBUG']
+    Tags:
+      Environment: !Ref Environment
+      Stack: fiscalshield-dc
+      ManagedBy: CloudFormation
+
+Resources:
+  # ========================================================================
+  # DYNAMODB TABLES
+  # ========================================================================
+
+  FilingEventsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Sub 'fiscalshield-dc-${Environment}-FilingEvents'
+      BillingMode: PAY_PER_REQUEST
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !If [IsProduction, true, false]
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      AttributeDefinitions:
+        - AttributeName: company_number
+          AttributeType: S
+        - AttributeName: client_id
+          AttributeType: S
+        - AttributeName: last_updated
+          AttributeType: N
+      KeySchema:
+        - AttributeName: company_number
+          KeyType: HASH
+        - AttributeName: client_id
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: client-index
+          KeySchema:
+            - AttributeName: client_id
+              KeyType: HASH
+            - AttributeName: last_updated
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: Name
+          Value: !Sub 'fiscalshield-dc-${Environment}-FilingEvents'
+        - Key: Purpose
+          Value: Cache Companies House filing history data
+        - Key: DataRetention
+          Value: !Sub '${CacheTTLHours} hours'
+
+  CompanyEventsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Sub 'fiscalshield-dc-${Environment}-CompanyEvents'
+      BillingMode: PAY_PER_REQUEST
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !If [IsProduction, true, false]
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      AttributeDefinitions:
+        - AttributeName: company_number
+          AttributeType: S
+        - AttributeName: event_type_timestamp
+          AttributeType: S
+        - AttributeName: client_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: company_number
+          KeyType: HASH
+        - AttributeName: event_type_timestamp
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: client-event-index
+          KeySchema:
+            - AttributeName: client_id
+              KeyType: HASH
+            - AttributeName: event_type_timestamp
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: Name
+          Value: !Sub 'fiscalshield-dc-${Environment}-CompanyEvents'
+        - Key: Purpose
+          Value: Cache company information and officer data
+        - Key: DataRetention
+          Value: !Sub '${CacheTTLHours} hours'
+
+  HMRCDataTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Sub 'fiscalshield-dc-${Environment}-HMRCData'
+      BillingMode: PAY_PER_REQUEST
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !If [IsProduction, true, false]
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      AttributeDefinitions:
+        - AttributeName: vat_number
+          AttributeType: S
+        - AttributeName: period_key
+          AttributeType: S
+        - AttributeName: client_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: vat_number
+          KeyType: HASH
+        - AttributeName: period_key
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: client-period-index
+          KeySchema:
+            - AttributeName: client_id
+              KeyType: HASH
+            - AttributeName: period_key
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: Name
+          Value: !Sub 'fiscalshield-dc-${Environment}-HMRCData'
+        - Key: Purpose
+          Value: Cache HMRC VAT returns and tax data
+        - Key: DataRetention
+          Value: 7 days
+        - Key: Status
+          Value: Future implementation
+
+  RateLimitsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Sub 'fiscalshield-dc-${Environment}-RateLimits'
+      BillingMode: PAY_PER_REQUEST
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+      AttributeDefinitions:
+        - AttributeName: api_name
+          AttributeType: S
+      KeySchema:
+        - AttributeName: api_name
+          KeyType: HASH
+      Tags:
+        - Key: Name
+          Value: !Sub 'fiscalshield-dc-${Environment}-RateLimits'
+        - Key: Purpose
+          Value: Track API rate limits for external services
+        - Key: DataRetention
+          Value: Auto-expire with TTL
+
+  # ========================================================================
+  # S3 STORAGE
+  # ========================================================================
+
+  DataArchiveBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub 'fiscalshield-dc-${Environment}-data-archive-${AWS::AccountId}'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: TransitionToIA
+            Status: Enabled
+            Transitions:
+              - TransitionInDays: 30
+                StorageClass: STANDARD_IA
+              - TransitionInDays: 90
+                StorageClass: GLACIER
+          - Id: DeleteOldVersions
+            Status: Enabled
+            NoncurrentVersionExpirationInDays: 90
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Name
+          Value: !Sub 'fiscalshield-dc-${Environment}-data-archive'
+        - Key: Purpose
+          Value: Large-API-Response-Archive
+        - Key: DataRetention
+          Value: Lifecycle-Managed
+
+  # ========================================================================
+  # SECRETS MANAGER
+  # ========================================================================
+
+  CompaniesHouseApiSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub 'fiscalshield-dc-${Environment}-CompaniesHouseAPI'
+      Description: Companies House API credentials and configuration
+      SecretString: !Sub |
+        {
+          "api_key": "PLACEHOLDER_REPLACE_WITH_ACTUAL_KEY",
+          "base_url": "https://api.company-information.service.gov.uk",
+          "rate_limit": ${CompaniesHouseRateLimit},
+          "rate_limit_window": ${CompaniesHouseRateWindow}
+        }
+      KmsKeyId: alias/aws/secretsmanager
+      Tags:
+        - Key: Name
+          Value: !Sub 'fiscalshield-dc-${Environment}-CompaniesHouseAPI'
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Purpose
+          Value: Companies House API authentication
+
+  HMRCApiSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub 'fiscalshield-dc-${Environment}-HMRCAPI'
+      Description: HMRC API OAuth credentials (future implementation)
+      SecretString: |
+        {
+          "client_id": "PLACEHOLDER",
+          "client_secret": "PLACEHOLDER",
+          "access_token": "",
+          "refresh_token": "",
+          "token_expiry": "",
+          "base_url": "https://api.service.hmrc.gov.uk"
+        }
+      KmsKeyId: alias/aws/secretsmanager
+      Tags:
+        - Key: Name
+          Value: !Sub 'fiscalshield-dc-${Environment}-HMRCAPI'
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Purpose
+          Value: HMRC API OAuth authentication
+        - Key: Status
+          Value: Future implementation
+
+  BankingApiSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub 'fiscalshield-dc-${Environment}-BankingAPI'
+      Description: Banking API credentials (future implementation)
+      SecretString: |
+        {
+          "client_id": "PLACEHOLDER",
+          "client_secret": "PLACEHOLDER",
+          "base_url": ""
+        }
+      KmsKeyId: alias/aws/secretsmanager
+      Tags:
+        - Key: Name
+          Value: !Sub 'fiscalshield-dc-${Environment}-BankingAPI'
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Purpose
+          Value: Banking API authentication
+        - Key: Status
+          Value: Future implementation
+
+  # ========================================================================
+  # IAM ROLES
+  # ========================================================================
+
+  DataCollectionLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'fiscalshield-dc-${Environment}-LambdaExecutionRole'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - !If 
+          - EnableTracing
+          - arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess
+          - !Ref AWS::NoValue
+      Policies:
+        - PolicyName: DynamoDBAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: DynamoDBTableAccess
+                Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                  - dynamodb:BatchGetItem
+                  - dynamodb:BatchWriteItem
+                  - dynamodb:DescribeTable
+                Resource:
+                  - !GetAtt FilingEventsTable.Arn
+                  - !GetAtt CompanyEventsTable.Arn
+                  - !GetAtt HMRCDataTable.Arn
+                  - !GetAtt RateLimitsTable.Arn
+                  - !Sub '${FilingEventsTable.Arn}/index/*'
+                  - !Sub '${CompanyEventsTable.Arn}/index/*'
+                  - !Sub '${HMRCDataTable.Arn}/index/*'
+        - PolicyName: SecretsManagerAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: GetSecretValues
+                Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                  - secretsmanager:DescribeSecret
+                Resource:
+                  - !Ref CompaniesHouseApiSecret
+                  - !Ref HMRCApiSecret
+                  - !Ref BankingApiSecret
+        - PolicyName: S3DataArchiveAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: S3BucketAccess
+                Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:DeleteObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub 'arn:aws:s3:::fiscalshield-dc-${Environment}-data-archive-${AWS::AccountId}'
+                  - !Sub 'arn:aws:s3:::fiscalshield-dc-${Environment}-data-archive-${AWS::AccountId}/*'
+        - PolicyName: CloudWatchMetrics
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: PutMetricData
+                Effect: Allow
+                Action:
+                  - cloudwatch:PutMetricData
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    cloudwatch:namespace: FiscalShield/DataCollection
+      Tags:
+        - Key: Name
+          Value: !Sub 'fiscalshield-dc-${Environment}-LambdaExecutionRole'
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ========================================================================
+  # CLOUDWATCH LOG GROUPS
+  # ========================================================================
+
+  DataCollectionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/fiscalshield-dc-${Environment}'
+      RetentionInDays: !Ref LogRetentionDays
+      KmsKeyId: !If [IsProduction, !GetAtt LogsKMSKey.Arn, !Ref AWS::NoValue]
+
+  LogsKMSKey:
+    Type: AWS::KMS::Key
+    Condition: IsProduction
+    Properties:
+      Description: !Sub 'KMS key for CloudWatch Logs encryption - ${Environment}'
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: Enable IAM User Permissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action: 'kms:*'
+            Resource: '*'
+          - Sid: Allow CloudWatch Logs
+            Effect: Allow
+            Principal:
+              Service: !Sub 'logs.${AWS::Region}.amazonaws.com'
+            Action:
+              - 'kms:Encrypt'
+              - 'kms:Decrypt'
+              - 'kms:ReEncrypt*'
+              - 'kms:GenerateDataKey*'
+              - 'kms:CreateGrant'
+              - 'kms:DescribeKey'
+            Resource: '*'
+            Condition:
+              ArnLike:
+                'kms:EncryptionContext:aws:logs:arn': !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/fiscalshield-dc-${Environment}*'
+
+  LogsKMSKeyAlias:
+    Type: AWS::KMS::Alias
+    Condition: IsProduction
+    Properties:
+      AliasName: !Sub 'alias/fiscalshield-dc-${Environment}-logs'
+      TargetKeyId: !Ref LogsKMSKey
+
+  # ========================================================================
+  # CLOUDWATCH ALARMS
+  # ========================================================================
+
+  HighErrorRateAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'fiscalshield-dc-${Environment}-HighErrorRate'
+      AlarmDescription: Alert when error rate exceeds threshold
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 10
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Sub 'fiscalshield-dc-${Environment}'
+      TreatMissingData: notBreaching
+
+  # ========================================================================
+  # LAMBDA FUNCTIONS
+  # ========================================================================
+
+  CompanyLookupFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'fiscalshield-dc-${Environment}-CompanyLookup'
+      Description: Lookup Companies House company profile with caching
+      CodeUri: ../../src/data_collection/companies_house/company_lookup/
+      Handler: handler.lambda_handler
+      Role: !GetAtt DataCollectionLambdaRole.Arn
+      Environment:
+        Variables:
+          CACHE_TABLE_NAME: !Ref CompanyEventsTable
+          SECRET_NAME: !Ref CompaniesHouseApiSecret
+          RATE_LIMIT_TABLE: !Ref RateLimitsTable
+      Events:
+        GetCompany:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DataCollectionApi
+            Path: /company/{company_number}
+            Method: GET
+
+  HealthCheckFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'fiscalshield-dc-${Environment}-HealthCheck'
+      Description: Health check endpoint for Core Stack integration
+      CodeUri: ../../src/data_collection/health/
+      Handler: handler.lambda_handler
+      Role: !GetAtt DataCollectionLambdaRole.Arn
+      Timeout: 10
+      MemorySize: 128
+      Environment:
+        Variables:
+          SECRET_NAME: !Ref CompaniesHouseApiSecret
+      Events:
+        HealthCheck:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DataCollectionApi
+            Path: /health
+            Method: GET
+
+  OfficersFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'fiscalshield-dc-${Environment}-Officers'
+      Description: Fetch Companies House officers data with caching
+      CodeUri: ../../src/data_collection/companies_house/officers/
+      Handler: handler.lambda_handler
+      Role: !GetAtt DataCollectionLambdaRole.Arn
+      Timeout: 30
+      MemorySize: 256
+      Environment:
+        Variables:
+          CACHE_TABLE_NAME: !Ref CompanyEventsTable
+          SECRET_NAME: !Ref CompaniesHouseApiSecret
+          RATE_LIMIT_TABLE: !Ref RateLimitsTable
+      Events:
+        GetOfficers:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DataCollectionApi
+            Path: /officers/{company_number}
+            Method: GET
+
+  FilingHistoryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'fiscalshield-dc-${Environment}-FilingHistory'
+      Description: Fetch Companies House filing history with caching
+      CodeUri: ../../src/data_collection/companies_house/filing_history/
+      Handler: handler.lambda_handler
+      Role: !GetAtt DataCollectionLambdaRole.Arn
+      Timeout: 60
+      MemorySize: 512
+      Environment:
+        Variables:
+          CACHE_TABLE_NAME: !Ref CompanyEventsTable
+          SECRET_NAME: !Ref CompaniesHouseApiSecret
+          RATE_LIMIT_TABLE: !Ref RateLimitsTable
+          DATA_ARCHIVE_BUCKET: !Sub 'fiscalshield-dc-${Environment}-data-archive-${AWS::AccountId}'
+      Events:
+        GetFilingHistory:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DataCollectionApi
+            Path: /filing-history/{company_number}
+            Method: GET
+
+  PSCFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'fiscalshield-dc-${Environment}-PSCLookup'
+      Description: Fetch Companies House PSC data with caching
+      CodeUri: ../../src/data_collection/companies_house/psc_lookup/
+      Handler: handler.lambda_handler
+      Role: !GetAtt DataCollectionLambdaRole.Arn
+      Timeout: 30
+      MemorySize: 256
+      Environment:
+        Variables:
+          CACHE_TABLE_NAME: !Ref CompanyEventsTable
+          SECRET_NAME: !Ref CompaniesHouseApiSecret
+          RATE_LIMIT_TABLE: !Ref RateLimitsTable
+      Events:
+        GetPSC:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DataCollectionApi
+            Path: /psc/{company_number}
+            Method: GET
+
+  ChargesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'fiscalshield-dc-${Environment}-Charges'
+      Description: Fetch Companies House charges data with caching
+      CodeUri: ../../src/data_collection/companies_house/charges/
+      Handler: handler.lambda_handler
+      Role: !GetAtt DataCollectionLambdaRole.Arn
+      Timeout: 30
+      MemorySize: 256
+      Environment:
+        Variables:
+          CACHE_TABLE_NAME: !Ref CompanyEventsTable
+          SECRET_NAME: !Ref CompaniesHouseApiSecret
+          RATE_LIMIT_TABLE: !Ref RateLimitsTable
+      Events:
+        GetCharges:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DataCollectionApi
+            Path: /charges/{company_number}
+            Method: GET
+
+  InsolvencyFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'fiscalshield-dc-${Environment}-Insolvency'
+      Description: Fetch Companies House insolvency data with caching
+      CodeUri: ../../src/data_collection/companies_house/insolvency/
+      Handler: handler.lambda_handler
+      Role: !GetAtt DataCollectionLambdaRole.Arn
+      Timeout: 30
+      MemorySize: 256
+      Environment:
+        Variables:
+          CACHE_TABLE_NAME: !Ref CompanyEventsTable
+          SECRET_NAME: !Ref CompaniesHouseApiSecret
+          RATE_LIMIT_TABLE: !Ref RateLimitsTable
+      Events:
+        GetInsolvency:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DataCollectionApi
+            Path: /insolvency/{company_number}
+            Method: GET
+
+  # ========================================================================
+  # STEP FUNCTIONS STATE MACHINE
+  # ========================================================================
+
+  CompanyResearchStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Name: !Sub 'fiscalshield-dc-${Environment}-CompanyResearch'
+      Type: STANDARD
+      DefinitionUri: state-machines/company-research.asl.json
+      DefinitionSubstitutions:
+        CompanyLookupFunctionArn: !GetAtt CompanyLookupFunction.Arn
+        OfficersFunctionArn: !GetAtt OfficersFunction.Arn
+        PSCFunctionArn: !GetAtt PSCFunction.Arn
+        ChargesFunctionArn: !GetAtt ChargesFunction.Arn
+        InsolvencyFunctionArn: !GetAtt InsolvencyFunction.Arn
+        FilingHistoryFunctionArn: !GetAtt FilingHistoryFunction.Arn
+      Role: !GetAtt StepFunctionsExecutionRole.Arn
+      Logging:
+        Level: !If [IsProduction, ERROR, ALL]
+        IncludeExecutionData: true
+        Destinations:
+          - CloudWatchLogsLogGroup:
+              LogGroupArn: !GetAtt StepFunctionsLogGroup.Arn
+      Tracing:
+        Enabled: !If [EnableTracing, true, false]
+      Tags:
+        Environment: !Ref Environment
+        Purpose: Orchestrate company data collection from multiple sources
+
+  StepFunctionsExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'fiscalshield-dc-${Environment}-StepFunctionsRole'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: states.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: InvokeLambdaFunctions
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource:
+                  - !GetAtt CompanyLookupFunction.Arn
+                  - !GetAtt OfficersFunction.Arn
+                  - !GetAtt PSCFunction.Arn
+                  - !GetAtt ChargesFunction.Arn
+                  - !GetAtt InsolvencyFunction.Arn
+                  - !GetAtt FilingHistoryFunction.Arn
+        - PolicyName: CloudWatchLogs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogDelivery
+                  - logs:GetLogDelivery
+                  - logs:UpdateLogDelivery
+                  - logs:DeleteLogDelivery
+                  - logs:ListLogDeliveries
+                  - logs:PutLogEvents
+                  - logs:PutResourcePolicy
+                  - logs:DescribeResourcePolicies
+                  - logs:DescribeLogGroups
+                Resource: '*'
+        - PolicyName: XRayTracing
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - xray:PutTraceSegments
+                  - xray:PutTelemetryRecords
+                Resource: '*'
+      Tags:
+        - Key: Name
+          Value: !Sub 'fiscalshield-dc-${Environment}-StepFunctionsRole'
+        - Key: Environment
+          Value: !Ref Environment
+
+  StepFunctionsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/vendedlogs/states/fiscalshield-dc-${Environment}-CompanyResearch'
+      RetentionInDays: !Ref LogRetentionDays
+      KmsKeyId: !If [IsProduction, !GetAtt LogsKMSKey.Arn, !Ref AWS::NoValue]
+
+  # ========================================================================
+  # API GATEWAY
+  # ========================================================================
+
+  DataCollectionApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub 'fiscalshield-dc-${Environment}-api'
+      StageName: !Ref Environment
+      Cors:
+        AllowMethods: "'GET,POST,OPTIONS'"
+        AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+        AllowOrigin: "'*'"
+      TracingEnabled: !If [EnableTracing, true, false]
+      Tags:
+        Environment: !Ref Environment
+        Stack: fiscalshield-dc
+
+  # ========================================================================
+  # SSM PARAMETER STORE - API URL
+  # ========================================================================
+
+  ApiUrlParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub '/fiscalshield/data-collection/${Environment}/api-url'
+      Description: Data Collection API Gateway URL for cross-stack integration
+      Type: String
+      Value: !Sub 'https://${DataCollectionApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+      Tags:
+        Environment: !Ref Environment
+        Stack: fiscalshield-dc
+        Purpose: Cross-stack integration
+
+  # ========================================================================
+  # OUTPUTS
+  # ========================================================================
+
+Outputs:
+  FilingEventsTableName:
+    Description: DynamoDB table for filing events cache
+    Value: !Ref FilingEventsTable
+    Export:
+      Name: !Sub '${AWS::StackName}-FilingEventsTable'
+
+  CompanyEventsTableName:
+    Description: DynamoDB table for company events cache
+    Value: !Ref CompanyEventsTable
+    Export:
+      Name: !Sub '${AWS::StackName}-CompanyEventsTable'
+
+  HMRCDataTableName:
+    Description: DynamoDB table for HMRC data cache
+    Value: !Ref HMRCDataTable
+    Export:
+      Name: !Sub '${AWS::StackName}-HMRCDataTable'
+
+  DataArchiveBucketName:
+    Description: S3 bucket for archiving large API responses
+    Value: !Sub 'fiscalshield-dc-${Environment}-data-archive-${AWS::AccountId}'
+
+  DataArchiveBucketArn:
+    Description: ARN of S3 data archive bucket
+    Value: !Sub 'arn:aws:s3:::fiscalshield-dc-${Environment}-data-archive-${AWS::AccountId}'
+
+  CompaniesHouseSecretArn:
+    Description: ARN of Companies House API secret
+    Value: !Ref CompaniesHouseApiSecret
+    Export:
+      Name: !Sub '${AWS::StackName}-CompaniesHouseSecret'
+
+  HMRCSecretArn:
+    Description: ARN of HMRC API secret
+    Value: !Ref HMRCApiSecret
+    Export:
+      Name: !Sub '${AWS::StackName}-HMRCSecret'
+
+  LambdaExecutionRoleArn:
+    Description: ARN of Lambda execution role
+    Value: !GetAtt DataCollectionLambdaRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-LambdaExecutionRole'
+
+  StackEnvironment:
+    Description: Deployment environment
+    Value: !Ref Environment
+
+  StackRegion:
+    Description: AWS Region
+    Value: !Ref AWS::Region
+
+  ConventionBasedNaming:
+    Description: Resource naming convention for cross-stack access
+    Value: !Sub 'fiscalshield-dc-${Environment}-{ResourceName}'
+
+  ApiGatewayUrl:
+    Description: Base URL for Data Collection API Gateway
+    Value: !Sub 'https://${DataCollectionApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+    Export:
+      Name: !Sub '${AWS::StackName}-ApiUrl'
+
+  CompanyLookupFunctionArn:
+    Description: ARN of Company Lookup Lambda function
+    Value: !GetAtt CompanyLookupFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-CompanyLookupFunction'
+
+  HealthCheckFunctionArn:
+    Description: ARN of Health Check Lambda function
+    Value: !GetAtt HealthCheckFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-HealthCheckFunction'
+
+  OfficersFunctionArn:
+    Description: ARN of Officers Lambda function
+    Value: !GetAtt OfficersFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-OfficersFunction'
+
+  FilingHistoryFunctionArn:
+    Description: ARN of Filing History Lambda function
+    Value: !GetAtt FilingHistoryFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-FilingHistoryFunction'
+
+  PSCFunctionArn:
+    Description: ARN of PSC Lookup Lambda function
+    Value: !GetAtt PSCFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-PSCFunction'
+
+  ChargesFunctionArn:
+    Description: ARN of Charges Lambda function
+    Value: !GetAtt ChargesFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-ChargesFunction'
+
+  InsolvencyFunctionArn:
+    Description: ARN of Insolvency Lambda function
+    Value: !GetAtt InsolvencyFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-InsolvencyFunction'
+
+  ApiUrlParameterName:
+    Description: SSM Parameter Store path for API URL (for Core Stack integration)
+    Value: !Sub '/fiscalshield/data-collection/${Environment}/api-url'
+    Export:
+      Name: !Sub '${AWS::StackName}-ApiUrlParameter'
+
+  CompanyResearchStateMachineArn:
+    Description: ARN of Company Research Step Functions state machine
+    Value: !Ref CompanyResearchStateMachine
+    Export:
+      Name: !Sub '${AWS::StackName}-CompanyResearchStateMachine'
+
+  CompanyResearchStateMachineName:
+    Description: Name of Company Research Step Functions state machine
+    Value: !GetAtt CompanyResearchStateMachine.Name
+    Export:
+      Name: !Sub '${AWS::StackName}-CompanyResearchStateMachineName'
+
+  AllApiEndpoints:
+    Description: All available API endpoints
+    Value: !Sub |
+      Health Check: GET https://${DataCollectionApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/health
+      Company Lookup: GET https://${DataCollectionApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/company/{company_number}
+      Officers: GET https://${DataCollectionApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/officers/{company_number}
+      Filing History: GET https://${DataCollectionApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/filing-history/{company_number}
+      PSC: GET https://${DataCollectionApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/psc/{company_number}
+      Charges: GET https://${DataCollectionApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/charges/{company_number}
+      Insolvency: GET https://${DataCollectionApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/insolvency/{company_number}
