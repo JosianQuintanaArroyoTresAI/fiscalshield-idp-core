@@ -110,7 +110,7 @@ const useGraphQlApi = ({ initialPeriodsToLoad = DOCUMENT_LIST_SHARDS_PER_DAY * 2
     // Read active company from localStorage for company filtering
     const activeCompany = JSON.parse(localStorage.getItem('active_company') || 'null');
     const companyNumber = activeCompany?.companyNumber || null;
-    
+
     logger.debug('[USER-DEBUG] Querying documents by date shards:', { date, shards, companyNumber });
     logger.debug("[USER-DEBUG] These queries will be filtered by the authenticated user's sub (UserId)");
     if (companyNumber) {
@@ -118,12 +118,12 @@ const useGraphQlApi = ({ initialPeriodsToLoad = DOCUMENT_LIST_SHARDS_PER_DAY * 2
     } else {
       logger.debug('[USER-DEBUG] No active company selected - will return all user documents');
     }
-    
+
     const listDocumentsDateShardPromises = shards.map((i) => {
       logger.debug('sending list document date shard', date, i, 'company:', companyNumber);
-      return API.graphql({ 
-        query: listDocumentsDateShard, 
-        variables: { date, shard: i, companyNumber } 
+      return API.graphql({
+        query: listDocumentsDateShard,
+        variables: { date, shard: i, companyNumber },
       });
     });
     const listDocumentsDateShardResolutions = await Promise.allSettled(listDocumentsDateShardPromises);
@@ -161,12 +161,12 @@ const useGraphQlApi = ({ initialPeriodsToLoad = DOCUMENT_LIST_SHARDS_PER_DAY * 2
     // Read active company from localStorage for company filtering
     const activeCompany = JSON.parse(localStorage.getItem('active_company') || 'null');
     const companyNumber = activeCompany?.companyNumber || null;
-    
+
     const listDocumentsDateHourPromises = hours.map((i) => {
       logger.debug('sending list document date hour', date, i, 'company:', companyNumber);
-      return API.graphql({ 
-        query: listDocumentsDateHour, 
-        variables: { date, hour: i, companyNumber } 
+      return API.graphql({
+        query: listDocumentsDateHour,
+        variables: { date, hour: i, companyNumber },
       });
     });
     const listDocumentsDateHourResolutions = await Promise.allSettled(listDocumentsDateHourPromises);
