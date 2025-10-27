@@ -52,7 +52,7 @@ class TestHealthCheckHandler:
         # Verify response
         assert response["statusCode"] == 200
         assert "Content-Type" in response["headers"]
-        
+
         body = json.loads(response["body"])
         assert body["status"] == "available"
         assert body["environment"] == os.environ.get("ENVIRONMENT", "dev")
@@ -92,7 +92,7 @@ class TestHealthCheckHandler:
 
         # Verify response - still returns 200 but status is degraded
         assert response["statusCode"] == 200
-        
+
         body = json.loads(response["body"])
         assert body["status"] == "degraded"
         assert body["services"]["companies_house"] == "unavailable"

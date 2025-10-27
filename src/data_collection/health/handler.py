@@ -118,13 +118,13 @@ def check_dynamodb():
             f"fiscalshield-dc-{ENVIRONMENT}-FilingEvents",
             f"fiscalshield-dc-{ENVIRONMENT}-CompanyEvents"
         ]
-        
+
         all_active = True
         for table_name in tables:
             try:
                 response = dynamodb.describe_table(TableName=table_name)
                 status = response["Table"]["TableStatus"]
-                
+
                 if status == "ACTIVE":
                     print(f"DynamoDB table {table_name}: OK")
                 else:
@@ -136,7 +136,7 @@ def check_dynamodb():
                     all_active = False
                 else:
                     raise
-        
+
         return "operational" if all_active else "degraded"
 
     except ClientError as e:
