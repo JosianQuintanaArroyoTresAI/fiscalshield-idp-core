@@ -22,6 +22,7 @@ Phase 8: Step Functions Orchestration [█████████████�
 Phase 9: S3 Data Archiving            [████████████████████] 100% ✅
 Phase 10: HMRC Guidance Integration   [████████████████████] 100% ✅
 Phase 11: HMRC VAT API Integration    [░░░░░░░░░░░░░░░░░░░░]   0% ❌
+Phase 11.5: AML Data Collection       [████████████████████] 100% ✅
 Phase 12: Banking API Integration     [░░░░░░░░░░░░░░░░░░░░]   0% ❌
 Phase 13: SIC Code Enrichment         [░░░░░░░░░░░░░░░░░░░░]   0% ❌
 Phase 14: Testing & Monitoring        [░░░░░░░░░░░░░░░░░░░░]   0% ❌
@@ -953,24 +954,121 @@ cd stacks/data-collection
 
 ---
 
+### 21. AML Data Collection Integration (100%)
+**Status**: ✅ Complete  
+**Date**: October 27, 2025
+
+**Purpose**: Integrate Anti-Money Laundering (AML) data collection for sanctions/PEP screening and adverse media monitoring to support compliance workflows.
+
+**Components Deployed**:
+
+1. **Secrets Manager** (2 new secrets):
+   - ✅ `fiscalshield-dc-dev-OpenSanctionsAPI` - API key for sanctions screening
+   - ✅ `fiscalshield-dc-dev-NewsAPI` - API key for adverse media searches
+   - ✅ Cross-region IAM access configured (eu-central-1 ↔ eu-west-2)
+   - ✅ Real API keys migrated from eu-west-2
+
+2. **Lambda Functions** (2):
+   - ✅ **SanctionsCheckerFunction** (`fiscalshield-dc-dev-SanctionsChecker`)
+     - Runtime: Python 3.11, Memory: 256MB, Timeout: 30s
+     - OpenSanctions API integration (`/search/default`)
+     - Screens individuals against global sanctions/PEP lists
+     - Features: DecimalEncoder for DynamoDB compatibility, GLOBAL partition keys
+     - Caching: 30-day TTL in CompanyEventsTable
+     - S3 archival: `sanctions/{company_number}/{person_name}/{date}.json`
+     - Endpoint: `POST /sanctions/check` with `person_name`, `date_of_birth`, `company_number`
+
+   - ✅ **MediaCheckerFunction** (`fiscalshield-dc-dev-MediaChecker`)
+     - Runtime: Python 3.11, Memory: 256MB, Timeout: 30s
+     - NewsAPI integration (`/v2/everything`)
+     - Searches adverse media articles about companies
+     - Features: DecimalEncoder, GLOBAL partition keys, accepts `days` or `days_back` parameter
+     - Caching: 7-day TTL in CompanyEventsTable (time-sensitive data)
+     - S3 archival: `media/{company_number}/{date}.json`
+     - Endpoint: `POST /media/check` with `company_name`, `company_number`, `days`
+
+3. **Step Functions Integration**:
+   - ✅ Updated `CompanyResearchStateMachine` with AML orchestration
+   - ✅ Added `CheckAMLEnabled` choice state (controlled by `enable_aml` input parameter)
+   - ✅ Added `PerformAMLScreening` parallel state with 2 branches:
+     1. **ScreenCompanyAdverseMedia**: Invokes MediaChecker with company name
+     2. **ExtractOfficersForScreening**: Map state that screens each officer via SanctionsChecker
+   - ✅ Map state configuration: Max 5 concurrent officer screenings
+   - ✅ Results consolidated in `aml_screening` field of final output
+   - ✅ Graceful handling when AML disabled (sets aml_screening to null)
+
+4. **Data Storage**:
+   - ✅ Reused existing `CompanyEventsTable` with GLOBAL partition strategy
+   - ✅ Partition keys: `SANCTIONS_GLOBAL`, `MEDIA_GLOBAL`
+   - ✅ Reused existing `DataArchiveBucket` for full API responses
+   - ✅ Cache metadata includes S3 archive location
+
+5. **Bug Fixes During Implementation**:
+   - ✅ Fixed Decimal serialization (DynamoDB Decimal → JSON)
+   - ✅ Fixed partition key consistency (always use GLOBAL partitions)
+   - ✅ Fixed days parameter support (accept both `days` and `days_back`)
+   - ✅ Fixed S3 archive caching (include s3_archive in cache metadata)
+   - ✅ Fixed JSONPath for officer data (`active_officers` not `items`)
+   - ✅ Fixed Lambda response parsing (StringToJson for body field)
+
+**Testing Results**:
+- ✅ **Integration Tests**: 16/16 passing (100%)
+  - Test file: `tests/data_collection/integration/test_aml_integration.py` (564 lines)
+  - Coverage: Function existence, sanctioned/clean persons, caching, S3 archival, DynamoDB storage
+
+- ✅ **End-to-End Test** (Tesco PLC - 00445790):
+  - **With AML Enabled** (`enable_aml: true`):
+    - Status: SUCCEEDED
+    - Adverse Media: 4 articles found (30-day search)
+    - Sanctions: 12 officers screened (all clear, 0 matches)
+    - Duration: ~42 seconds
+    - Data cached in DynamoDB + archived to S3
+
+  - **With AML Disabled** (`enable_aml: false`):
+    - Status: SUCCEEDED
+    - AML screening skipped as intended
+    - Duration: ~20 seconds (faster without AML)
+    - Normal Companies House data collection only
+
+**API Endpoints**:
+- `POST /sanctions/check` - Screen individual against sanctions lists
+- `POST /media/check` - Search adverse media articles
+
+**Architecture Decisions**:
+- **No separate DynamoDB table**: Reused CompanyEventsTable with GLOBAL partitions
+- **Hybrid storage**: Summaries in DynamoDB, full responses in S3
+- **Optional orchestration**: AML screening controlled by input parameter
+- **Parallel execution**: MediaChecker and SanctionsChecker run simultaneously
+- **Map state for officers**: Screens multiple officers concurrently (max 5)
+
+**Files Created/Modified**:
+- `src/data_collection/aml/sanctions_checker/handler.py` (366 lines)
+- `src/data_collection/aml/media_checker/handler.py` (392 lines)
+- `tests/data_collection/integration/test_aml_integration.py` (564 lines)
+- `stacks/data-collection/template.yaml` (added 2 Lambda functions, 2 secrets, IAM permissions)
+- `stacks/data-collection/state-machines/company-research.asl.json` (added AML orchestration logic)
+
+**Git Commit**:
+- Branch: `dev`
+- Commit: `48b9bbb1`
+- Message: "feat(data-collection): Add AML screening with sanctions and adverse media checks"
+- Files changed: 2,635 (mostly Lambda dependencies)
+- Size: 13.80 MiB
+
+---
+
 ## 🔄 IN PROGRESS
 
-### Phase 7: Lambda Implementation - Remaining Functions
-**Status**: ✅ Complete  
-**Completed**: October 27, 2025
+### Phase 11: HMRC VAT API Integration
+**Status**: ❌ Not started  
+**Priority**: HIGH
 
-**All Lambda Functions Implemented**:
-- ✅ Company Lookup Lambda (100%)
-- ✅ Health Check Lambda (100%)
-- ✅ Officers Lambda (100%)
-- ✅ Filing History Lambda (100%)
-- ✅ PSC Lookup Lambda (100%)
-- ✅ Charges Lambda (100%)
-- ✅ Insolvency Lambda (100%)
-- ✅ Rate Limiting (100%)
-- ✅ HMRC Guidance Fetcher Lambda (100%)
-
-**Next Phase**: HMRC VAT API Integration (OAuth required)
+**Next Steps**:
+1. ❌ Register for HMRC Developer Hub
+2. ❌ Implement OAuth 2.0 flow
+3. ❌ Create VAT Obligations Lambda
+4. ❌ Create VAT Returns Lambda
+5. ❌ Test with HMRC sandbox
 
 ---
 
@@ -1439,6 +1537,15 @@ def with_rate_limit(func):
 
 ## 🎉 MAJOR MILESTONES ACHIEVED
 
+### ✅ AML Data Collection Complete (October 27, 2025)
+- 2 Lambda functions deployed and tested (SanctionsChecker + MediaChecker)
+- Step Functions orchestration with optional AML screening
+- 16/16 integration tests passing (100%)
+- Tested end-to-end with Tesco (12 officers screened, 4 media articles found)
+- Hybrid storage: DynamoDB cache + S3 archival
+- Bug fixes: Decimal serialization, partition keys, JSONPath, Lambda response parsing
+- Fully committed and pushed to dev branch (commit 48b9bbb1, 2,635 files, 13.80 MiB)
+
 ### ✅ HMRC Guidance Integration Complete (October 27, 2025)
 - 12/15 BIM sections successfully fetched from GOV.UK
 - Compliance rules extracted and stored in DynamoDB
@@ -1502,9 +1609,9 @@ def with_rate_limit(func):
 
 ### Infrastructure Status
 - **DynamoDB Tables**: 4 ✅ (FilingEvents, CompanyEvents, HMRCData, HMRCGuidance)
-- **S3 Buckets**: 1 ✅ (DataArchiveBucket for large responses + HMRC guidance backups)
-- **Secrets**: 1 active, 2 placeholders ✅ (Companies House key configured)
-- **Lambda Functions**: 8 ✅ (All Companies House endpoints + HMRC Guidance Fetcher)
+- **S3 Buckets**: 1 ✅ (DataArchiveBucket for large responses + HMRC guidance backups + AML data)
+- **Secrets**: 5 total ✅ (Companies House, HMRC, Banking placeholder, OpenSanctions, NewsAPI)
+- **Lambda Functions**: 10 ✅ (All Companies House endpoints + HMRC Guidance Fetcher + AML functions)
   - CompanyLookup ✅
   - HealthCheck ✅
   - Officers ✅
@@ -1512,10 +1619,12 @@ def with_rate_limit(func):
   - PSCLookup ✅
   - Charges ✅
   - Insolvency ✅
-  - HMRCGuidanceFetcher ✅ (NEW - GOV.UK BIM sections)
-- **Step Functions**: 1 ✅ (CompanyResearchStateMachine - 6 parallel branches)
+  - HMRCGuidanceFetcher ✅ (GOV.UK BIM sections)
+  - SanctionsChecker ✅ (NEW - OpenSanctions API)
+  - MediaChecker ✅ (NEW - NewsAPI)
+- **Step Functions**: 1 ✅ (CompanyResearchStateMachine - 6 parallel branches + optional AML)
 - **EventBridge Rules**: 1 ✅ (HMRCGuidanceSync - weekly Monday 2 AM UTC)
-- **API Gateway**: 1 ✅ (7 routes active + health endpoint)
+- **API Gateway**: 1 ✅ (9 routes active + health endpoint)
 - **Parameter Store**: 1 ✅ (API URL stored)
 - **CloudWatch Alarms**: 3 ✅ (deployed with template)
 - **IAM Roles**: 2 ✅ (LambdaExecutionRole + StepFunctionsExecutionRole)
@@ -1535,26 +1644,30 @@ def with_rate_limit(func):
 - **PSC**: `GET /psc/{company_number}` ✅ Working
 - **Charges**: `GET /charges/{company_number}` ✅ Working
 - **Insolvency**: `GET /insolvency/{company_number}` ✅ Working
+- **Sanctions Check**: `POST /sanctions/check` ✅ Working (NEW)
+- **Media Check**: `POST /media/check` ✅ Working (NEW)
 
 ### Step Functions
 - **State Machine**: `fiscalshield-dc-dev-CompanyResearch` ✅ Working
-- **Execution Pattern**: Parallel (6 branches)
-- **Average Duration**: ~23 seconds for full company research
+- **Execution Pattern**: Parallel (6 branches + optional AML screening)
+- **Average Duration**: 
+  - Without AML: ~20 seconds for full company research
+  - With AML: ~42 seconds (includes officer screening + media search)
 - **Success Rate**: 100% (with graceful degradation)
 
 ### Testing Status
-- **Manual Testing**: ✅ Complete (All endpoints tested with Tesco + HMRC Guidance)
-- **Step Functions Testing**: ✅ Complete (Parallel execution verified)
-- **S3 Archiving**: ✅ Tested (3.2MB filing history + HMRC guidance backups)
+- **Manual Testing**: ✅ Complete (All endpoints tested with Tesco + HMRC Guidance + AML screening)
+- **Step Functions Testing**: ✅ Complete (Parallel execution verified + AML orchestration tested)
+- **S3 Archiving**: ✅ Tested (3.2MB filing history + HMRC guidance backups + AML data)
 - **Rate Limiting**: ✅ Tested (Shared counter working across Lambdas)
 - **HMRC Guidance**: ✅ Tested (12/15 sections fetched successfully)
+- **AML Integration**: ✅ Tested (16/16 integration tests passing, end-to-end with Tesco)
 - **Unit Tests**: ❌ Not implemented
-- **Integration Tests**: ❌ Not implemented
 - **Load Tests**: ❌ Not implemented
 
 ### Cost (Estimated)
-- **Current**: ~$8/month (infrastructure + light usage + S3 + HMRC guidance storage)
-- **Projected**: <$25/month for 1000 clients (with S3 lifecycle management + weekly HMRC sync)
+- **Current**: ~$10/month (infrastructure + light usage + S3 + HMRC guidance storage + AML data)
+- **Projected**: <$30/month for 1000 clients (with S3 lifecycle management + weekly HMRC sync + AML screening)
 
 ---
 
