@@ -17,6 +17,7 @@ import {
   ExpandableSection,
   Badge,
   Table,
+  Grid,
 } from '@awsui/components-react';
 import { Logger } from 'aws-amplify';
 
@@ -27,6 +28,8 @@ import {
   lookupOfficers,
   checkFilingHistory,
 } from '../../services/dataCollection';
+import { fetchUserCompanies } from '../../services/userCompanies';
+import CompanyCard from '../company-card/CompanyCard';
 import useAppContext from '../../contexts/app';
 import { DOCUMENTS_PATH } from '../../routes/constants';
 
@@ -45,6 +48,11 @@ const CompanySelect = () => {
   const [error, setError] = useState('');
   const [isDataCollectionAvailable, setIsDataCollectionAvailable] = useState(null);
   const [healthCheckComplete, setHealthCheckComplete] = useState(false);
+
+  // User companies state
+  const [userCompanies, setUserCompanies] = useState([]);
+  const [loadingCompanies, setLoadingCompanies] = useState(true);
+  const [companiesError, setCompaniesError] = useState(null);
 
   // Officers state
   const [officersData, setOfficersData] = useState(null);
@@ -72,6 +80,26 @@ const CompanySelect = () => {
     };
 
     checkHealth();
+  }, []);
+
+  // Load user's registered companies on mount
+  useEffect(() => {
+    const loadUserCompanies = async () => {
+      try {
+        setLoadingCompanies(true);
+        setCompaniesError(null);
+        const companies = await fetchUserCompanies();
+        setUserCompanies(companies);
+        logger.debug(`Loaded ${companies.length} companies for user`);
+      } catch (err) {
+        logger.error('Error loading user companies:', err);
+        setCompaniesError('Failed to load your registered companies');
+      } finally {
+        setLoadingCompanies(false);
+      }
+    };
+
+    loadUserCompanies();
   }, []);
 
   const handleCompanyNumberChange = (event) => {
@@ -517,9 +545,63 @@ const CompanySelect = () => {
     history.push(DOCUMENTS_PATH);
   };
 
+  // Handle viewing documents for a registered company
+  const handleViewCompanyDocuments = (company) => {
+    logger.info(`Viewing documents for company: ${company.company_number}`);
+
+    // Store company context
+    const companyContext = {
+      company_number: company.company_number,
+      company_name: company.company_name,
+      selected_at: new Date().toISOString(),
+      user_id: user?.username || 'unknown',
+      from_registered: true,
+    };
+
+    localStorage.setItem('active_company', JSON.stringify(companyContext));
+    logger.debug('Company context saved:', companyContext);
+
+    // Navigate to documents page
+    history.push(DOCUMENTS_PATH);
+  };
+
   return (
     <Box padding={{ top: 'xxxl' }}>
       <SpaceBetween size="l">
+        {/* Registered Companies Section */}
+        {userCompanies && userCompanies.length > 0 && (
+          <Container
+            header={
+              <Header variant="h2" description="Companies you have registered documents for">
+                Your Registered Companies
+              </Header>
+            }
+          >
+            {loadingCompanies ? (
+              <Box textAlign="center" padding={{ vertical: 'l' }}>
+                <Spinner size="large" />
+                <Box variant="p" padding={{ top: 's' }}>
+                  Loading your companies...
+                </Box>
+              </Box>
+            ) : companiesError ? (
+              <Alert type="error" header="Failed to load companies">
+                {companiesError}
+              </Alert>
+            ) : (
+              <Grid gridDefinition={[{ colspan: 4 }, { colspan: 4 }, { colspan: 4 }]}>
+                {userCompanies.map((company) => (
+                  <CompanyCard
+                    key={company.company_number}
+                    company={company}
+                    onViewDocuments={handleViewCompanyDocuments}
+                  />
+                ))}
+              </Grid>
+            )}
+          </Container>
+        )}
+
         <Container
           header={
             <Header
@@ -531,7 +613,7 @@ const CompanySelect = () => {
                 </Button>
               }
             >
-              Select Your Company
+              {userCompanies && userCompanies.length > 0 ? 'Register Another Company' : 'Select Your Company'}
             </Header>
           }
         >
