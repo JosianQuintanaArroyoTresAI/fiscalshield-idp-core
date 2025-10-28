@@ -5,9 +5,8 @@
  * Service for managing user companies
  */
 
-import { API, graphqlOperation } from 'aws-amplify';
-import { Logger } from 'aws-amplify';
-import { getUserCompanies as getUserCompaniesQuery } from '../graphql/queries/getUserCompanies';
+import { API, graphqlOperation, Logger } from 'aws-amplify';
+import getUserCompaniesQuery from '../graphql/queries/getUserCompanies';
 
 const logger = new Logger('UserCompaniesService');
 

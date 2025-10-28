@@ -577,18 +577,20 @@ const CompanySelect = () => {
               </Header>
             }
           >
-            {loadingCompanies ? (
+            {loadingCompanies && (
               <Box textAlign="center" padding={{ vertical: 'l' }}>
                 <Spinner size="large" />
                 <Box variant="p" padding={{ top: 's' }}>
                   Loading your companies...
                 </Box>
               </Box>
-            ) : companiesError ? (
+            )}
+            {!loadingCompanies && companiesError && (
               <Alert type="error" header="Failed to load companies">
                 {companiesError}
               </Alert>
-            ) : (
+            )}
+            {!loadingCompanies && !companiesError && (
               <Grid gridDefinition={[{ colspan: 4 }, { colspan: 4 }, { colspan: 4 }]}>
                 {userCompanies.map((company) => (
                   <CompanyCard

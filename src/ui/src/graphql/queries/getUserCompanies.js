@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-export const getUserCompanies = /* GraphQL */ `
+const getUserCompanies = /* GraphQL */ `
   query GetUserCompanies {
     getUserCompanies {
       company_number
@@ -14,3 +14,5 @@ export const getUserCompanies = /* GraphQL */ `
     }
   }
 `;
+
+export default getUserCompanies;
