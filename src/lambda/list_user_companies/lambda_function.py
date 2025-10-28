@@ -3,7 +3,7 @@
 
 """
 Lambda function to list all companies registered under a user.
-Queries ExtractionResultsTable to find unique company registrations for a user.
+Queries TrackingTable to find unique company registrations for a user.
 """
 
 import json
@@ -17,7 +17,7 @@ from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 
 # Environment variables
-EXTRACTION_RESULTS_TABLE = os.environ.get("EXTRACTION_RESULTS_TABLE")
+TRACKING_TABLE = os.environ.get("TRACKING_TABLE")
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
 
 # AWS clients
@@ -28,7 +28,7 @@ def get_user_companies(user_id: str) -> List[Dict[str, Any]]:
     """
     Query DynamoDB to get all unique companies for a user.
     
-    This function queries the ExtractionResultsTable using GSI2-UserAllDocs
+    This function queries the TrackingTable using GSI1
     to find all documents for a user, then extracts unique companies.
     
     Args:
@@ -39,15 +39,15 @@ def get_user_companies(user_id: str) -> List[Dict[str, Any]]:
     """
     print(f"Querying companies for user: {user_id}")
     
-    table = dynamodb.Table(EXTRACTION_RESULTS_TABLE)
+    table = dynamodb.Table(TRACKING_TABLE)
     
-    # Query GSI2-UserAllDocs to get all user's documents
+    # Query GSI1 to get all user's documents
     response = table.query(
-        IndexName="GSI2-UserAllDocs",
+        IndexName="GSI1",
         KeyConditionExpression=Key("UserId").eq(user_id),
         ProjectionExpression=(
             "PK, SK, UserId, CompanyNumber, CompanyName, "
-            "ProcessedAt, DocumentType, DocumentId, TotalAmount"
+            "QueuedTime, ObjectKey, WorkflowStatus"
         ),
     )
     
@@ -56,11 +56,11 @@ def get_user_companies(user_id: str) -> List[Dict[str, Any]]:
     # Handle pagination if there are more results
     while "LastEvaluatedKey" in response:
         response = table.query(
-            IndexName="GSI2-UserAllDocs",
+            IndexName="GSI1",
             KeyConditionExpression=Key("UserId").eq(user_id),
             ProjectionExpression=(
                 "PK, SK, UserId, CompanyNumber, CompanyName, "
-                "ProcessedAt, DocumentType, DocumentId, TotalAmount"
+                "QueuedTime, ObjectKey, WorkflowStatus"
             ),
             ExclusiveStartKey=response["LastEvaluatedKey"],
         )
@@ -82,8 +82,8 @@ def get_user_companies(user_id: str) -> List[Dict[str, Any]]:
                 "company_name": item.get("CompanyName", "Unknown Company"),
                 "user_id": user_id,
                 "document_count": 0,
-                "first_registered": item.get("ProcessedAt"),
-                "last_activity": item.get("ProcessedAt"),
+                "first_registered": item.get("QueuedTime"),
+                "last_activity": item.get("QueuedTime"),
                 "document_types": set(),
             }
         
@@ -92,17 +92,18 @@ def get_user_companies(user_id: str) -> List[Dict[str, Any]]:
         company["document_count"] += 1
         
         # Update timestamps
-        processed_at = item.get("ProcessedAt")
-        if processed_at:
-            if processed_at < company["first_registered"]:
-                company["first_registered"] = processed_at
-            if processed_at > company["last_activity"]:
-                company["last_activity"] = processed_at
+        queued_time = item.get("QueuedTime")
+        if queued_time:
+            if queued_time < company["first_registered"]:
+                company["first_registered"] = queued_time
+            if queued_time > company["last_activity"]:
+                company["last_activity"] = queued_time
         
-        # Track document types
-        doc_type = item.get("DocumentType")
-        if doc_type:
-            company["document_types"].add(doc_type)
+        # Track document types (from filename extension)
+        object_key = item.get("ObjectKey", "")
+        if object_key:
+            ext = object_key.split(".")[-1].lower() if "." in object_key else "unknown"
+            company["document_types"].add(ext)
     
     # Convert to list and format for response
     companies = []

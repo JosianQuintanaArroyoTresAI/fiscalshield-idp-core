@@ -6993,18 +6993,18 @@ Resources:
       Environment:
         Variables:
           LOG_LEVEL: !Ref LogLevel
-          EXTRACTION_RESULTS_TABLE: !Ref ExtractionResultsTable
+          TRACKING_TABLE: !Ref TrackingTable
       LoggingConfig:
         LogGroup: !Ref ListUserCompaniesFunctionLogGroup
       Policies:
         - DynamoDBReadPolicy:
-            TableName: !Ref ExtractionResultsTable
+            TableName: !Ref TrackingTable
         - Statement:
             - Effect: Allow
               Action:
                 - dynamodb:Query
               Resource:
-                - !Sub "${ExtractionResultsTable.Arn}/index/GSI2-UserAllDocs"
+                - !Sub "${TrackingTable.Arn}/index/GSI1"
             - Effect: Allow
               Action:
                 - kms:Decrypt
