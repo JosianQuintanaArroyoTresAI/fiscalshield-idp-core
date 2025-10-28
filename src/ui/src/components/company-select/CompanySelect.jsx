@@ -28,7 +28,7 @@ import {
   lookupOfficers,
   checkFilingHistory,
 } from '../../services/dataCollection';
-import { fetchUserCompanies } from '../../services/userCompanies';
+import { fetchUserCompanies, registerCompany } from '../../services/userCompanies';
 import CompanyCard from '../company-card/CompanyCard';
 import useAppContext from '../../contexts/app';
 import { DOCUMENTS_PATH } from '../../routes/constants';
@@ -218,6 +218,15 @@ const CompanySelect = () => {
 
     localStorage.setItem('active_company', JSON.stringify(companyContext));
     logger.debug('Company context saved:', companyContext);
+
+    // Register company in UserProfileTable for persistent storage
+    try {
+      await registerCompany(companyData.company_number, companyData.company_name);
+      logger.debug('Company registered in user profile');
+    } catch (err) {
+      logger.error('Failed to register company:', err);
+      // Non-blocking error - still proceed with localStorage fallback
+    }
 
     // If Data Collection Stack is available, trigger background research
     if (isDataCollectionAvailable) {

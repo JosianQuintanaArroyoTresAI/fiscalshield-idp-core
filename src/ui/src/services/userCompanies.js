@@ -7,8 +7,39 @@
 
 import { API, graphqlOperation, Logger } from 'aws-amplify';
 import getUserCompaniesQuery from '../graphql/queries/getUserCompanies';
+import registerUserCompanyMutation from '../graphql/queries/registerUserCompany';
 
 const logger = new Logger('UserCompaniesService');
+
+/**
+ * Register a company for the current user
+ * @param {string} companyNumber - UK Companies House number
+ * @param {string} companyName - Company name
+ * @returns {Promise<boolean>} Registration success
+ */
+export const registerCompany = async (companyNumber, companyName) => {
+  try {
+    logger.debug(`Registering company ${companyNumber} (${companyName})`);
+
+    const response = await API.graphql(
+      graphqlOperation(registerUserCompanyMutation, {
+        companyNumber,
+        companyName,
+      })
+    );
+
+    const success = response?.data?.registerUserCompany;
+
+    if (success) {
+      logger.debug('Company registered successfully');
+    }
+
+    return success;
+  } catch (error) {
+    logger.error('Error registering company:', error);
+    throw error;
+  }
+};
 
 /**
  * Fetch all companies registered under the current user

@@ -3,7 +3,7 @@
 
 """
 Lambda function to list all companies registered under a user.
-Queries TrackingTable to find unique company registrations for a user.
+Queries UserProfileTable for company registrations and enriches with document counts from TrackingTable.
 """
 
 import json
@@ -17,6 +17,7 @@ from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 
 # Environment variables
+USER_PROFILE_TABLE = os.environ.get("USER_PROFILE_TABLE")
 TRACKING_TABLE = os.environ.get("TRACKING_TABLE")
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
 
@@ -26,102 +27,111 @@ dynamodb = boto3.resource("dynamodb")
 
 def get_user_companies(user_id: str) -> List[Dict[str, Any]]:
     """
-    Query DynamoDB to get all unique companies for a user.
+    Query DynamoDB to get all registered companies for a user.
     
-    This function queries the TrackingTable using GSI1
-    to find all documents for a user, then extracts unique companies.
+    This function queries the UserProfileTable for company registrations,
+    then enriches with document counts from TrackingTable.
     
     Args:
         user_id: The Cognito user ID
         
     Returns:
-        List of company dictionaries with company details
+        List of company dictionaries with company details and document counts
     """
     print(f"Querying companies for user: {user_id}")
     
-    table = dynamodb.Table(TRACKING_TABLE)
+    # Query UserProfileTable for registered companies
+    profile_table = dynamodb.Table(USER_PROFILE_TABLE)
     
-    # Query GSI1 to get all user's documents
-    response = table.query(
-        IndexName="GSI1",
-        KeyConditionExpression=Key("UserId").eq(user_id),
-        ProjectionExpression=(
-            "PK, SK, UserId, CompanyNumber, CompanyName, "
-            "QueuedTime, ObjectKey, WorkflowStatus"
-        ),
+    response = profile_table.query(
+        KeyConditionExpression=Key("PK").eq(user_id) & Key("SK").begins_with("COMPANY#"),
+        ProjectionExpression="SK, CompanyNumber, CompanyName, CreatedAt"
     )
     
-    items = response.get("Items", [])
+    registered_companies = response.get("Items", [])
     
-    # Handle pagination if there are more results
+    # Handle pagination
     while "LastEvaluatedKey" in response:
-        response = table.query(
-            IndexName="GSI1",
-            KeyConditionExpression=Key("UserId").eq(user_id),
-            ProjectionExpression=(
-                "PK, SK, UserId, CompanyNumber, CompanyName, "
-                "QueuedTime, ObjectKey, WorkflowStatus"
-            ),
+        response = profile_table.query(
+            KeyConditionExpression=Key("PK").eq(user_id) & Key("SK").begins_with("COMPANY#"),
+            ProjectionExpression="SK, CompanyNumber, CompanyName, CreatedAt",
             ExclusiveStartKey=response["LastEvaluatedKey"],
         )
-        items.extend(response.get("Items", []))
+        registered_companies.extend(response.get("Items", []))
     
-    print(f"Found {len(items)} documents for user {user_id}")
+    print(f"Found {len(registered_companies)} registered companies")
     
-    # Group by company number and aggregate data
-    companies_map: Dict[str, Dict[str, Any]] = {}
+    if not registered_companies:
+        return []
     
-    for item in items:
-        company_number = item.get("CompanyNumber")
+    # Now query TrackingTable to get document counts for each company
+    tracking_table = dynamodb.Table(TRACKING_TABLE)
+    companies = []
+    
+    for company_item in registered_companies:
+        company_number = company_item.get("CompanyNumber")
+        company_name = company_item.get("CompanyName", "Unknown Company")
+        created_at = company_item.get("CreatedAt")
+        
         if not company_number:
             continue
-            
-        if company_number not in companies_map:
-            companies_map[company_number] = {
-                "company_number": company_number,
-                "company_name": item.get("CompanyName", "Unknown Company"),
-                "user_id": user_id,
-                "document_count": 0,
-                "first_registered": item.get("QueuedTime"),
-                "last_activity": item.get("QueuedTime"),
-                "document_types": set(),
-            }
         
-        # Update company data
-        company = companies_map[company_number]
-        company["document_count"] += 1
+        # Query TrackingTable for documents from this user AND company
+        doc_response = tracking_table.query(
+            IndexName="GSI1",
+            KeyConditionExpression=Key("UserId").eq(user_id),
+            FilterExpression=Key("CompanyNumber").eq(company_number),
+            ProjectionExpression="QueuedTime, ObjectKey",
+            Select="SPECIFIC_ATTRIBUTES"
+        )
         
-        # Update timestamps
-        queued_time = item.get("QueuedTime")
-        if queued_time:
-            if queued_time < company["first_registered"]:
-                company["first_registered"] = queued_time
-            if queued_time > company["last_activity"]:
-                company["last_activity"] = queued_time
+        docs = doc_response.get("Items", [])
         
-        # Track document types (from filename extension)
-        object_key = item.get("ObjectKey", "")
-        if object_key:
-            ext = object_key.split(".")[-1].lower() if "." in object_key else "unknown"
-            company["document_types"].add(ext)
-    
-    # Convert to list and format for response
-    companies = []
-    for company_number, company_data in companies_map.items():
+        # Handle pagination
+        while "LastEvaluatedKey" in doc_response:
+            doc_response = tracking_table.query(
+                IndexName="GSI1",
+                KeyConditionExpression=Key("UserId").eq(user_id),
+                FilterExpression=Key("CompanyNumber").eq(company_number),
+                ProjectionExpression="QueuedTime, ObjectKey",
+                Select="SPECIFIC_ATTRIBUTES",
+                ExclusiveStartKey=doc_response["LastEvaluatedKey"],
+            )
+            docs.extend(doc_response.get("Items", []))
+        
+        # Calculate statistics
+        document_count = len(docs)
+        first_registered = created_at
+        last_activity = created_at
+        
+        if docs:
+            # Find earliest and latest document times
+            doc_times = [doc.get("QueuedTime") for doc in docs if doc.get("QueuedTime")]
+            if doc_times:
+                last_activity = max(doc_times)
+        
+        # Extract document types from filenames
+        document_types = set()
+        for doc in docs:
+            object_key = doc.get("ObjectKey", "")
+            if object_key:
+                ext = object_key.split(".")[-1].lower() if "." in object_key else "unknown"
+                document_types.add(ext)
+        
         companies.append({
-            "company_number": company_data["company_number"],
-            "company_name": company_data["company_name"],
-            "user_id": company_data["user_id"],
-            "document_count": company_data["document_count"],
-            "first_registered": company_data["first_registered"],
-            "last_activity": company_data["last_activity"],
-            "document_types": sorted(list(company_data["document_types"])),
+            "company_number": company_number,
+            "company_name": company_name,
+            "user_id": user_id,
+            "document_count": document_count,
+            "first_registered": first_registered,
+            "last_activity": last_activity,
+            "document_types": sorted(list(document_types)),
         })
     
     # Sort by last activity (most recent first)
     companies.sort(key=lambda x: x["last_activity"], reverse=True)
     
-    print(f"Returning {len(companies)} unique companies")
+    print(f"Returning {len(companies)} companies with document counts")
     return companies
 
 
