@@ -25,7 +25,7 @@ export const registerCompany = async (companyNumber, companyName) => {
       graphqlOperation(registerUserCompanyMutation, {
         companyNumber,
         companyName,
-      })
+      }),
     );
 
     const success = response?.data?.registerUserCompany;
