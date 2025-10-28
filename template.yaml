@@ -2642,6 +2642,13 @@ Resources:
                 - kms:GenerateDataKey*
                 - kms:DescribeKey
               Resource: !GetAtt CustomerManagedEncryptionKey.Arn
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:GetObjectMetadata
+                - s3:HeadObject
+              Resource:
+                - !Sub "${InputBucket.Arn}/*"
       Events:
         S3Event:
           Type: CloudWatchEvent
