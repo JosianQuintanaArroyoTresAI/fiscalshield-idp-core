@@ -53,10 +53,21 @@ const UploadDocumentPanel = () => {
     setUploadStatus([]);
     setError(null);
 
+    // Get active company context from localStorage
+    const activeCompanyStr = localStorage.getItem('active_company');
+    const activeCompany = activeCompanyStr ? JSON.parse(activeCompanyStr) : null;
+
+    if (!activeCompany || !activeCompany.company_number) {
+      setError('No company selected. Please select a company from the landing page first.');
+      setIsUploading(false);
+      return;
+    }
+
+    console.log('Uploading documents for company:', activeCompany.company_name, activeCompany.company_number);
+
     const newUploadStatus = [];
 
     try {
-      // Use array reduce to process files sequentially
       await selectedFiles.reduce(async (previousPromise, file) => {
         // Wait for the previous file to finish
         await previousPromise;
@@ -65,6 +76,7 @@ const UploadDocumentPanel = () => {
           // Step 1: Get presigned URL data
           console.log(`Getting upload credentials for ${file.name}...`);
           console.log(`Using prefix: ${prefix || 'none'}`);
+          console.log(`Company: ${activeCompany.company_name} (${activeCompany.company_number})`);
 
           const response = await API.graphql(
             graphqlOperation(uploadDocument, {
@@ -72,10 +84,10 @@ const UploadDocumentPanel = () => {
               contentType: file.type,
               prefix: prefix || '', // Use the user-provided prefix or empty string
               bucket: settings.InputBucket, // Explicitly pass the input bucket
+              companyNumber: activeCompany.company_number, // Pass company number for isolation
+              companyName: activeCompany.company_name, // Pass company name for metadata
             }),
-          );
-
-          const { presignedUrl, objectKey, usePostMethod } = response.data.uploadDocument;
+          );          const { presignedUrl, objectKey, usePostMethod } = response.data.uploadDocument;
 
           if (!usePostMethod) {
             throw new Error('Server returned PUT method which is not supported. Please update your backend code.');

@@ -98,6 +98,25 @@ def handler(event, context):
 
         logger.info(f"Processing S3 event: bucket={bucket_name}, key={object_key}")
 
+        # Extract company metadata from S3 object if available
+        company_number = None
+        company_name = None
+        try:
+            # Get object metadata to extract company information
+            head_response = boto3.client("s3").head_object(
+                Bucket=bucket_name, Key=object_key
+            )
+            metadata = head_response.get("Metadata", {})
+            company_number = metadata.get("company-number")
+            company_name = metadata.get("company-name")
+            if company_number:
+                logger.info(
+                    f"Extracted company metadata: {company_name} ({company_number})"
+                )
+        except Exception as e:
+            logger.warning(f"Could not retrieve object metadata: {str(e)}")
+            # Continue without company metadata
+
         # Extract user ID from path
         try:
             user_id = extract_user_id_from_path(object_key)
@@ -120,11 +139,15 @@ def handler(event, context):
             queued_time=event_time,
             initial_event_time=event_time,
             user_id=user_id,
+            company_number=company_number,
+            company_name=company_name,
             pages={},
             sections=[],
         )
 
-        logger.info(f"Created document object for user {user_id}: {object_key}")
+        logger.info(
+            f"Created document object for user {user_id}, company {company_number}: {object_key}"
+        )
 
         # Calculate expiry timestamp
         expires_after = int(
@@ -139,7 +162,31 @@ def handler(event, context):
         # Prepare SQS message with document and metadata
         message_body = doc_json
 
-        logger.info(f"Sending message to SQS with UserId: {user_id}")
+        logger.info(
+            f"Sending message to SQS with UserId: {user_id}, CompanyNumber: {company_number}"
+        )
+
+        # Build message attributes
+        message_attributes = {
+            "UserId": {"StringValue": user_id, "DataType": "String"},
+            "ObjectKey": {"StringValue": object_key, "DataType": "String"},
+            "ExpiresAfter": {
+                "StringValue": str(expires_after),
+                "DataType": "Number",
+            },
+        }
+
+        # Add company metadata if available
+        if company_number:
+            message_attributes["CompanyNumber"] = {
+                "StringValue": company_number,
+                "DataType": "String",
+            }
+        if company_name:
+            message_attributes["CompanyName"] = {
+                "StringValue": company_name,
+                "DataType": "String",
+            }
 
         # Send to SQS
         queue_url = os.environ.get(
@@ -148,14 +195,7 @@ def handler(event, context):
         response = sqs.send_message(
             QueueUrl=queue_url,
             MessageBody=message_body,
-            MessageAttributes={
-                "UserId": {"StringValue": user_id, "DataType": "String"},
-                "ObjectKey": {"StringValue": object_key, "DataType": "String"},
-                "ExpiresAfter": {
-                    "StringValue": str(expires_after),
-                    "DataType": "Number",
-                },
-            },
+            MessageAttributes=message_attributes,
         )
 
         logger.info(
