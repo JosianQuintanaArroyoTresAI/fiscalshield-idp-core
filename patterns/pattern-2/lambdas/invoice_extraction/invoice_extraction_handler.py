@@ -462,6 +462,14 @@ def lambda_handler(event, context):
                         # rawText.json contains the extracted text - try different field names
                         page_text = raw_text_data.get('text', '') or raw_text_data.get('Text', '') or raw_text_data.get('content', '')
 
+                        # Try Bedrock Nova response format: output.message.content[0].text
+                        if not page_text and 'output' in raw_text_data:
+                            try:
+                                page_text = raw_text_data['output']['message']['content'][0]['text']
+                                log_with_timestamp(f"📝 Extracted text from Bedrock response format")
+                            except (KeyError, IndexError, TypeError):
+                                pass
+
                         # If still empty, try to extract from blocks or lines
                         if not page_text and 'Blocks' in raw_text_data:
                             # Textract format - extract text from LINE blocks
