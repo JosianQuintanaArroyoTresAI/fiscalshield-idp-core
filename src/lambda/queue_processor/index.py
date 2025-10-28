@@ -151,6 +151,8 @@ def process_message(record: Dict[str, Any]) -> Tuple[bool, str]:
             "stringValue"
         )
         expires_after = int(expires_after_str) if expires_after_str else None
+        company_number = message_attributes.get("CompanyNumber", {}).get("stringValue")
+        company_name = message_attributes.get("CompanyName", {}).get("stringValue")
 
         document = Document.load_document(message_data, working_bucket, logger)
 
@@ -162,6 +164,14 @@ def process_message(record: Dict[str, Any]) -> Tuple[bool, str]:
             logger.warning(
                 f"No UserId found in SQS message for document: {document.input_key}"
             )
+
+        # Set company metadata on the Document object if present in message attributes
+        if company_number:
+            document.company_number = company_number
+            logger.info(f"Set company_number on document: {company_number}")
+        if company_name:
+            document.company_name = company_name
+            logger.info(f"Set company_name on document: {company_name}")
 
         object_key = document.input_key
         logger.info(
