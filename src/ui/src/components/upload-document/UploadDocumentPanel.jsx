@@ -87,7 +87,8 @@ const UploadDocumentPanel = () => {
               companyNumber: activeCompany.company_number, // Pass company number for isolation
               companyName: activeCompany.company_name, // Pass company name for metadata
             }),
-          );          const { presignedUrl, objectKey, usePostMethod } = response.data.uploadDocument;
+          );
+          const { presignedUrl, objectKey, usePostMethod } = response.data.uploadDocument;
 
           if (!usePostMethod) {
             throw new Error('Server returned PUT method which is not supported. Please update your backend code.');
