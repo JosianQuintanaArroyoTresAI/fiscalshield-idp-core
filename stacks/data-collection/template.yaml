@@ -560,6 +560,16 @@ Resources:
                 Condition:
                   StringEquals:
                     cloudwatch:namespace: FiscalShield/DataCollection
+        - PolicyName: StepFunctionsReadAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: DescribeStateMachine
+                Effect: Allow
+                Action:
+                  - states:DescribeStateMachine
+                Resource:
+                  - !Sub 'arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:fiscalshield-dc-${Environment}-CompanyResearch'
       Tags:
         - Key: Name
           Value: !Sub 'fiscalshield-dc-${Environment}-LambdaExecutionRole'
