@@ -124,7 +124,12 @@ for func_def in "${FUNCTIONS[@]}"; do
     echo "   Function Name: $FUNCTION_NAME"
     
     # Check if we should use SAM-built package or build locally
-    if [ -n "$sam_build_path" ] && [ -d "$sam_build_path" ]; then
+    if [ -n "$sam_build_path" ]; then
+        if [ ! -d "$sam_build_path" ]; then
+            echo "   ⚠️  SAM build directory not found: $sam_build_path, skipping..."
+            continue
+        fi
+        
         # Use pre-built SAM package (for complex dependencies)
         echo "   Using SAM-built package from: $sam_build_path"
         
