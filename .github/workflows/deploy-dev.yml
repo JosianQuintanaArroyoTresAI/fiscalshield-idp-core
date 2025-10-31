@@ -28,17 +28,27 @@ jobs:
         cache: 'npm'
         cache-dependency-path: src/ui/package-lock.json
     
-    - name: Check UI code formatting with Prettier
+    - name: Auto-format UI code with Prettier
       run: |
-        echo "🎨 Checking code formatting with Prettier..."
+        echo "🎨 Auto-formatting code with Prettier..."
         cd src/ui
         npm ci --prefer-offline --no-audit
-        npx prettier --check "src/**/*.{js,jsx,ts,tsx,json,css,scss}" || {
-          echo "❌ Code formatting issues detected!"
-          echo "💡 Run 'cd src/ui && npx prettier --write \"src/**/*.{js,jsx}\"' to fix"
-          exit 1
-        }
-        echo "✅ All code is properly formatted"
+        npx prettier --write "src/**/*.{js,jsx,ts,tsx,json,css,scss}"
+        echo "✅ Code formatted successfully"
+    
+    - name: Commit formatting changes if any
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+        if git diff --quiet; then
+          echo "No formatting changes needed"
+        else
+          git add .
+          git commit -m "chore: auto-format code with Prettier [skip ci]"
+          git push
+          echo "✅ Formatting changes committed and pushed"
+          exit 0
+        fi
     
     - name: Set up Python 3.12
       uses: actions/setup-python@v4
