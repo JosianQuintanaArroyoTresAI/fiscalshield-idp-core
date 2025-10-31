@@ -7370,6 +7370,8 @@ Resources:
         Type: LINUX_CONTAINER
         PrivilegedMode: true
         EnvironmentVariables:
+          - Name: DISABLE_ESLINT_PLUGIN
+            Value: 'true'
           - Name: AWS_DEFAULT_REGION
             Value: !Ref AWS::Region
           - Name: AWS_ACCOUNT_ID
