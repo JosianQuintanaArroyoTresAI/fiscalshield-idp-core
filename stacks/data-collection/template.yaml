@@ -1291,3 +1291,4 @@ Outputs:
       Insolvency: GET https://${DataCollectionApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/insolvency/{company_number}
       Sanctions Check: POST https://${DataCollectionApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/sanctions/check
       Media Check: POST https://${DataCollectionApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/media/check
+# Trigger deployment - Fri Oct 31 14:05:21 GMT 2025
