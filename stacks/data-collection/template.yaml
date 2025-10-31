@@ -870,6 +870,126 @@ Resources:
             Path: /media/check
             Method: POST
 
+  TriggerResearchFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'fiscalshield-dc-${Environment}-TriggerResearch'
+      Description: Trigger Step Functions workflow for company background research
+      InlineCode: |
+        import json
+        import os
+        import boto3
+        from datetime import datetime
+
+        sfn_client = boto3.client('stepfunctions')
+        STATE_MACHINE_ARN = os.environ['STATE_MACHINE_ARN']
+
+        def lambda_handler(event, context):
+            print(f"Event: {json.dumps(event)}")
+            
+            try:
+                # Parse request body
+                body = json.loads(event.get('body', '{}'))
+                
+                company_number = body.get('company_number')
+                company_name = body.get('company_name')
+                enable_aml = body.get('enable_aml', True)  # Default to True
+                
+                if not company_number:
+                    return {
+                        'statusCode': 400,
+                        'headers': {
+                            'Content-Type': 'application/json',
+                            'Access-Control-Allow-Origin': '*',
+                            'Access-Control-Allow-Headers': 'Content-Type',
+                            'Access-Control-Allow-Methods': 'POST,OPTIONS'
+                        },
+                        'body': json.dumps({'error': 'company_number is required'})
+                    }
+                
+                # Start Step Functions execution
+                execution_name = f"ui-trigger-{company_number}-{int(datetime.now().timestamp())}"
+                
+                input_data = {
+                    'company_number': company_number,
+                    'company_name': company_name or f"Company {company_number}",
+                    'enable_aml': enable_aml
+                }
+                
+                response = sfn_client.start_execution(
+                    stateMachineArn=STATE_MACHINE_ARN,
+                    name=execution_name,
+                    input=json.dumps(input_data)
+                )
+                
+                return {
+                    'statusCode': 200,
+                    'headers': {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*',
+                        'Access-Control-Allow-Headers': 'Content-Type',
+                        'Access-Control-Allow-Methods': 'POST,OPTIONS'
+                    },
+                    'body': json.dumps({
+                        'success': True,
+                        'execution_arn': response['executionArn'],
+                        'execution_name': execution_name,
+                        'message': 'Background research initiated',
+                        'estimated_completion_seconds': 45
+                    })
+                }
+                
+            except Exception as e:
+                print(f"Error: {str(e)}")
+                return {
+                    'statusCode': 500,
+                    'headers': {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*',
+                        'Access-Control-Allow-Headers': 'Content-Type',
+                        'Access-Control-Allow-Methods': 'POST,OPTIONS'
+                    },
+                    'body': json.dumps({'error': str(e)})
+                }
+      Handler: index.lambda_handler
+      Runtime: python3.11
+      Timeout: 10
+      MemorySize: 128
+      Role: !GetAtt TriggerResearchLambdaRole.Arn
+      Environment:
+        Variables:
+          STATE_MACHINE_ARN: !Ref CompanyResearchStateMachine
+      Events:
+        PostTriggerResearch:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DataCollectionApi
+            Path: /research/company
+            Method: POST
+
+  TriggerResearchLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'fiscalshield-dc-${Environment}-TriggerResearchRole'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: StartStepFunctionsExecution
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - states:StartExecution
+                Resource: !Ref CompanyResearchStateMachine
+
   # ========================================================================
   # STEP FUNCTIONS STATE MACHINE
   # ========================================================================

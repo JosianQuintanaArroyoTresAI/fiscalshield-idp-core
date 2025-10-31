@@ -790,12 +790,12 @@ const CompanySelect = () => {
                             iconAlign="right"
                             iconName="arrow-right"
                           >
-                            {isDataCollectionAvailable
-                              ? 'Confirm and research company background'
-                              : 'Confirm and continue'}
+                            Confirm and research company
                           </Button>
                           <Box variant="small" color="text-status-inactive">
-                            By confirming, you agree this is the correct company
+                            {isDataCollectionAvailable
+                              ? 'Background research will include: company data, officers, compliance checks, and AML screening'
+                              : 'Background research currently unavailable - you can still proceed'}
                           </Box>
                         </>
                       )}
