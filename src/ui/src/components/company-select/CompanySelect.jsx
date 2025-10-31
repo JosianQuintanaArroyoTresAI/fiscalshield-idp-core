@@ -794,8 +794,10 @@ const CompanySelect = () => {
                           </Button>
                           <Box variant="small" color="text-status-inactive">
                             {isDataCollectionAvailable
-                              ? 'Background research will include: company data, officers, compliance checks, and AML screening'
-                              : 'Background research currently unavailable - you can still proceed'}
+                              ? 'Background research will include: company data, officers, '
+                                + 'compliance checks, and AML screening'
+                              : 'Background research currently unavailable - you can still '
+                                + 'proceed'}
                           </Box>
                         </>
                       )}
