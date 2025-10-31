@@ -674,6 +674,7 @@ Resources:
       MemorySize: 128
       Environment:
         Variables:
+          ENVIRONMENT: !Ref Environment
           SECRET_NAME: !Ref CompaniesHouseApiSecret
       Events:
         HealthCheck:
