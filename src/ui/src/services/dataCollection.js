@@ -286,6 +286,7 @@ export const triggerBackgroundResearch = async ({ company_number, company_name, 
         user_id,
         client_id,
         requested_at: new Date().toISOString(),
+        enable_aml: true, // Enable AML screening (sanctions + adverse media)
       }),
     });
 
