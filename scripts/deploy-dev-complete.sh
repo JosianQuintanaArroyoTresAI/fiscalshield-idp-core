@@ -89,11 +89,15 @@ echo ""
 if [ $DEPLOY_EXIT_CODE -eq 0 ]; then
     echo "Waiting for CloudFormation stack to complete..."
     echo "This may take 15-20 minutes..."
-    aws cloudformation wait stack-update-complete --stack-name fiscalshield-idp-dev --region eu-central-1
+    
+    # Try update wait first, fall back to create wait
+    aws cloudformation wait stack-update-complete --stack-name fiscalshield-idp-dev --region eu-central-1 2>/dev/null || \
+    aws cloudformation wait stack-create-complete --stack-name fiscalshield-idp-dev --region eu-central-1
+    
     if [ $? -eq 0 ]; then
-        echo -e "${GREEN}✓ CloudFormation stack update completed successfully${NC}"
+        echo -e "${GREEN}✓ CloudFormation stack completed successfully${NC}"
     else
-        echo -e "${RED}✗ CloudFormation stack update failed or timed out${NC}"
+        echo -e "${RED}✗ CloudFormation stack failed or timed out${NC}"
         echo -e "${YELLOW}You can check the status with:${NC}"
         echo "  aws cloudformation describe-stacks --stack-name fiscalshield-idp-dev --region eu-central-1"
         exit 1
