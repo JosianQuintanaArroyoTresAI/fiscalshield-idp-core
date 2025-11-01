@@ -64,8 +64,8 @@ def get_user_companies(user_id: str) -> List[Dict[str, Any]]:
     if not registered_companies:
         return []
     
-    # Now query TrackingTable to get document counts for each company
-    tracking_table = dynamodb.Table(TRACKING_TABLE)
+    # TODO: Query TrackingTable to get document counts once GSI1 index is available
+    # For now, return companies with default document count = 0
     companies = []
     
     for company_item in registered_companies:
@@ -76,28 +76,29 @@ def get_user_companies(user_id: str) -> List[Dict[str, Any]]:
         if not company_number:
             continue
         
-        # Query TrackingTable for documents from this user AND company
-        doc_response = tracking_table.query(
-            IndexName="GSI1",
-            KeyConditionExpression=Key("UserId").eq(user_id),
-            FilterExpression=Key("CompanyNumber").eq(company_number),
-            ProjectionExpression="QueuedTime, ObjectKey",
-            Select="SPECIFIC_ATTRIBUTES"
-        )
+        # Skip TrackingTable query for now - GSI1 index not available
+        # doc_response = tracking_table.query(
+        #     IndexName="GSI1",
+        #     KeyConditionExpression=Key("UserId").eq(user_id),
+        #     FilterExpression=Key("CompanyNumber").eq(company_number),
+        #     ProjectionExpression="QueuedTime, ObjectKey",
+        #     Select="SPECIFIC_ATTRIBUTES"
+        # )
         
-        docs = doc_response.get("Items", [])
+        # Use empty list for docs
+        docs = []
         
-        # Handle pagination
-        while "LastEvaluatedKey" in doc_response:
-            doc_response = tracking_table.query(
-                IndexName="GSI1",
-                KeyConditionExpression=Key("UserId").eq(user_id),
-                FilterExpression=Key("CompanyNumber").eq(company_number),
-                ProjectionExpression="QueuedTime, ObjectKey",
-                Select="SPECIFIC_ATTRIBUTES",
-                ExclusiveStartKey=doc_response["LastEvaluatedKey"],
-            )
-            docs.extend(doc_response.get("Items", []))
+        # Skip pagination for now
+        # while "LastEvaluatedKey" in doc_response:
+        #     doc_response = tracking_table.query(
+        #         IndexName="GSI1",
+        #         KeyConditionExpression=Key("UserId").eq(user_id),
+        #         FilterExpression=Key("CompanyNumber").eq(company_number),
+        #         ProjectionExpression="QueuedTime, ObjectKey",
+        #         Select="SPECIFIC_ATTRIBUTES",
+        #         ExclusiveStartKey=doc_response["LastEvaluatedKey"],
+        #     )
+        #     docs.extend(doc_response.get("Items", []))
         
         # Calculate statistics
         document_count = len(docs)
