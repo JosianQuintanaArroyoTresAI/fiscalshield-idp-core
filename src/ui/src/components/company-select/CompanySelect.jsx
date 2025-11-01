@@ -21,11 +21,7 @@ import {
 } from '@awsui/components-react';
 import { Logger } from 'aws-amplify';
 
-import {
-  checkDataCollectionHealth,
-  lookupCompany,
-  triggerBackgroundResearch,
-} from '../../services/dataCollection';
+import { checkDataCollectionHealth, lookupCompany, triggerBackgroundResearch } from '../../services/dataCollection';
 import { fetchUserCompanies, registerCompany } from '../../services/userCompanies';
 import CompanyCard from '../company-card/CompanyCard';
 import useAppContext from '../../contexts/app';
@@ -686,8 +682,8 @@ const CompanySelect = () => {
                           </Button>
                           {isDataCollectionAvailable && (
                             <Box variant="small" color="text-status-inactive">
-                              Our comprehensive verification includes: Corporate structure · Compliance
-                              screening · Officer verification · Risk assessment
+                              Our comprehensive verification includes: Corporate structure · Compliance screening ·
+                              Officer verification · Risk assessment
                             </Box>
                           )}
                           {!isDataCollectionAvailable && (
