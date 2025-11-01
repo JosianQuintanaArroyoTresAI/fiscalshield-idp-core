@@ -1,0 +1,6 @@
+{
+  "Environment": "prod",
+  "AnalysisCacheTTLHours": "24",
+  "EnableXRayTracing": "true",
+  "LogRetentionDays": "30"
+}
