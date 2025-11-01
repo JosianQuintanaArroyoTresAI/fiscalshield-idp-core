@@ -19,11 +19,7 @@ import {
 } from '@awsui/components-react';
 import { Logger } from 'aws-amplify';
 
-import {
-  checkAnalysisStackHealth,
-  fetchCompanyIntelligence,
-  generateAMLReport,
-} from '../../services/analysisStack';
+import { checkAnalysisStackHealth, fetchCompanyIntelligence, generateAMLReport } from '../../services/analysisStack';
 import { COMPANY_SELECT_PATH } from '../../routes/constants';
 
 import '@awsui/global-styles/index.css';
@@ -106,13 +102,13 @@ const CompanyIntelligence = () => {
       setIsGeneratingReport(true);
       setReportMessage('');
       const result = await generateAMLReport(companyNumber);
-      
+
       if (result.success) {
         setReportMessage('Report generated successfully!');
       } else {
         setReportMessage(result.message);
       }
-      
+
       logger.debug('AML report generation result:', result);
     } catch (err) {
       logger.error('Error generating AML report:', err);
@@ -158,7 +154,8 @@ const CompanyIntelligence = () => {
             }}
           />
           <Alert type="warning" header="Analysis Stack Not Available">
-            The Analysis Stack is not deployed or not accessible. Company intelligence features are currently unavailable.
+            The Analysis Stack is not deployed or not accessible. Company intelligence features are currently
+            unavailable.
           </Alert>
         </SpaceBetween>
       </Box>
@@ -203,9 +200,7 @@ const CompanyIntelligence = () => {
           <Alert type="error" header="Error Loading Intelligence">
             {error}
           </Alert>
-          <Button onClick={() => history.push(COMPANY_SELECT_PATH)}>
-            Back to Company Select
-          </Button>
+          <Button onClick={() => history.push(COMPANY_SELECT_PATH)}>Back to Company Select</Button>
         </SpaceBetween>
       </Box>
     );
@@ -245,11 +240,7 @@ const CompanyIntelligence = () => {
               description={`Company Number: ${intelligence.company_number}`}
               actions={
                 <SpaceBetween direction="horizontal" size="xs">
-                  <Button
-                    onClick={handleRefresh}
-                    loading={isRefreshing}
-                    iconName="refresh"
-                  >
+                  <Button onClick={handleRefresh} loading={isRefreshing} iconName="refresh">
                     Refresh Intelligence
                   </Button>
                 </SpaceBetween>
@@ -262,21 +253,15 @@ const CompanyIntelligence = () => {
           <ColumnLayout columns={3} variant="text-grid">
             <div>
               <Box variant="awsui-key-label">Risk Level</Box>
-              <Badge color={getRiskBadgeType(riskAssessment.risk_level)}>
-                {riskAssessment.risk_level}
-              </Badge>
+              <Badge color={getRiskBadgeType(riskAssessment.risk_level)}>{riskAssessment.risk_level}</Badge>
             </div>
             <div>
               <Box variant="awsui-key-label">Risk Score</Box>
-              <Box variant="p">
-                {(riskAssessment.overall_risk_score || 0).toFixed(2)} / 1.00
-              </Box>
+              <Box variant="p">{(riskAssessment.overall_risk_score || 0).toFixed(2)} / 1.00</Box>
             </div>
             <div>
               <Box variant="awsui-key-label">Last Updated</Box>
-              <StatusIndicator type="success">
-                {formatDataAge(intelligence.data_age_hours || 0)}
-              </StatusIndicator>
+              <StatusIndicator type="success">{formatDataAge(intelligence.data_age_hours || 0)}</StatusIndicator>
             </div>
           </ColumnLayout>
 
@@ -353,9 +338,7 @@ const CompanyIntelligence = () => {
             <ColumnLayout columns={1} variant="text-grid">
               <div>
                 <Box variant="awsui-key-label">Filing Compliance</Box>
-                <StatusIndicator type="success">
-                  {financial.filing_compliance || 'Unknown'}
-                </StatusIndicator>
+                <StatusIndicator type="success">{financial.filing_compliance || 'Unknown'}</StatusIndicator>
               </div>
               <div>
                 <Box variant="awsui-key-label">Accounts Status</Box>
@@ -400,9 +383,7 @@ const CompanyIntelligence = () => {
                     {aml.sanctioned_directors?.length > 0 && (
                       <div>Sanctioned: {aml.sanctioned_directors.join(', ')}</div>
                     )}
-                    {aml.pep_directors?.length > 0 && (
-                      <div>PEP: {aml.pep_directors.join(', ')}</div>
-                    )}
+                    {aml.pep_directors?.length > 0 && <div>PEP: {aml.pep_directors.join(', ')}</div>}
                   </Box>
                 </div>
               )}
@@ -461,26 +442,18 @@ const CompanyIntelligence = () => {
         {/* Generate AML Report Section - At Bottom */}
         <Container
           header={
-            <Header
-              variant="h2"
-              description="Generate a comprehensive AML compliance report for this company"
-            >
+            <Header variant="h2" description="Generate a comprehensive AML compliance report for this company">
               AML Compliance Report
             </Header>
           }
         >
           <SpaceBetween size="m">
             <Box variant="p">
-              Generate a detailed Anti-Money Laundering (AML) compliance report including risk assessment, 
-              due diligence findings, and regulatory compliance summary for client files.
+              Generate a detailed Anti-Money Laundering (AML) compliance report including risk assessment, due diligence
+              findings, and regulatory compliance summary for client files.
             </Box>
-            
-            <Button
-              variant="primary"
-              onClick={handleGenerateReport}
-              loading={isGeneratingReport}
-              iconName="download"
-            >
+
+            <Button variant="primary" onClick={handleGenerateReport} loading={isGeneratingReport} iconName="download">
               Generate AML Report
             </Button>
 

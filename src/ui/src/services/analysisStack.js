@@ -22,10 +22,10 @@ const getAnalysisApiUrl = async () => {
     const ssmClient = new SSMClient({ region: REGION });
     const command = new GetParameterCommand({ Name: SSM_PARAM_NAME });
     const response = await ssmClient.send(command);
-    
+
     cachedApiUrl = response.Parameter.Value;
     logger.debug('Analysis Stack API URL retrieved:', cachedApiUrl);
-    
+
     return cachedApiUrl;
   } catch (error) {
     logger.error('Failed to get Analysis Stack API URL:', error);
@@ -53,7 +53,7 @@ export const checkAnalysisStackHealth = async () => {
 
     const data = await response.json();
     logger.debug('Analysis Stack health check response:', data);
-    
+
     return data.status === 'available';
   } catch (error) {
     logger.error('Analysis Stack health check error:', error);
@@ -70,9 +70,9 @@ export const fetchCompanyIntelligence = async (companyNumber, forceRefresh = fal
   try {
     const apiUrl = await getAnalysisApiUrl();
     const url = `${apiUrl}/company/${companyNumber}/intelligence${forceRefresh ? '?force_refresh=true' : ''}`;
-    
+
     logger.debug(`Fetching company intelligence for ${companyNumber}, force_refresh=${forceRefresh}`);
-    
+
     const response = await fetch(url, {
       method: 'GET',
       headers: {
@@ -89,7 +89,7 @@ export const fetchCompanyIntelligence = async (companyNumber, forceRefresh = fal
 
     const data = await response.json();
     logger.debug('Company intelligence data received:', data);
-    
+
     return data;
   } catch (error) {
     logger.error('Error fetching company intelligence:', error);
@@ -103,19 +103,20 @@ export const fetchCompanyIntelligence = async (companyNumber, forceRefresh = fal
  */
 export const generateAMLReport = async (companyNumber) => {
   logger.debug(`AML report generation requested for ${companyNumber}`);
-  
+
   // Placeholder: Check if Analysis Stack has report generation capability
   try {
     const available = await checkAnalysisStackHealth();
     if (!available) {
       throw new Error('Analysis Stack is not available');
     }
-    
+
     // TODO: Implement actual report generation endpoint
     // For now, return a placeholder response
     return {
       success: false,
-      message: 'AML report generation is not yet available. This feature requires the Analysis Stack to be fully deployed with AI report generation capability.',
+      message:
+        'AML report generation is not yet available. This feature requires the Analysis Stack to be fully deployed with AI report generation capability.',
       companyNumber,
       timestamp: new Date().toISOString(),
     };
