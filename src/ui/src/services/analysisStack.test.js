@@ -1,9 +1,9 @@
 /**
  * Tests for Analysis Stack service layer.
- * 
+ *
  * These tests validate the frontend service that communicates with the Analysis Stack API.
  * Tests include SSM parameter fetching, health checks, and intelligence data fetching.
- * 
+ *
  * Run: npm test -- analysisStack.test.js
  */
 
@@ -37,24 +37,20 @@ global.fetch = jest.fn();
 // Import after mocking
 import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
 import { Auth } from 'aws-amplify';
-import {
-  checkAnalysisStackHealth,
-  fetchCompanyIntelligence,
-  generateAMLReport,
-} from './analysisStack';
+import { checkAnalysisStackHealth, fetchCompanyIntelligence, generateAMLReport } from './analysisStack';
 
 describe('Analysis Stack Service', () => {
   beforeEach(() => {
     // Clear all mocks before each test
     jest.clearAllMocks();
-    
+
     // Mock Auth.currentUserCredentials to return valid credentials
     Auth.currentUserCredentials.mockResolvedValue({
       accessKeyId: 'test-access-key',
       secretAccessKey: 'test-secret-key',
       sessionToken: 'test-session-token',
     });
-    
+
     // Reset cached API URL
     // Note: In real implementation, you might need to export a resetCache function
   });
@@ -82,9 +78,7 @@ describe('Analysis Stack Service', () => {
       await checkAnalysisStackHealth();
 
       // Verify SSM was called
-      expect(mockSend).toHaveBeenCalledWith(
-        expect.any(GetParameterCommand)
-      );
+      expect(mockSend).toHaveBeenCalledWith(expect.any(GetParameterCommand));
     });
   });
 
@@ -115,7 +109,7 @@ describe('Analysis Stack Service', () => {
         expect.stringContaining('/health'),
         expect.objectContaining({
           method: 'GET',
-        })
+        }),
       );
     });
 
@@ -178,7 +172,7 @@ describe('Analysis Stack Service', () => {
       expect(result).toEqual(mockIntelligence);
       expect(global.fetch).toHaveBeenCalledWith(
         expect.stringContaining(`/company/${TEST_COMPANY_NUMBER}/intelligence`),
-        expect.any(Object)
+        expect.any(Object),
       );
     });
 
@@ -190,10 +184,7 @@ describe('Analysis Stack Service', () => {
 
       await fetchCompanyIntelligence(TEST_COMPANY_NUMBER, true);
 
-      expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('force_refresh=true'),
-        expect.any(Object)
-      );
+      expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('force_refresh=true'), expect.any(Object));
     });
 
     test('should throw error for 404 response', async () => {
@@ -203,9 +194,7 @@ describe('Analysis Stack Service', () => {
         statusText: 'Not Found',
       });
 
-      await expect(
-        fetchCompanyIntelligence(TEST_COMPANY_NUMBER)
-      ).rejects.toThrow('No intelligence data found');
+      await expect(fetchCompanyIntelligence(TEST_COMPANY_NUMBER)).rejects.toThrow('No intelligence data found');
     });
 
     test('should throw error for other non-OK responses', async () => {
@@ -215,9 +204,9 @@ describe('Analysis Stack Service', () => {
         statusText: 'Internal Server Error',
       });
 
-      await expect(
-        fetchCompanyIntelligence(TEST_COMPANY_NUMBER)
-      ).rejects.toThrow('Failed to fetch company intelligence');
+      await expect(fetchCompanyIntelligence(TEST_COMPANY_NUMBER)).rejects.toThrow(
+        'Failed to fetch company intelligence',
+      );
     });
   });
 
@@ -258,9 +247,7 @@ describe('Analysis Stack Service', () => {
         status: 500,
       });
 
-      await expect(
-        generateAMLReport(TEST_COMPANY_NUMBER)
-      ).rejects.toThrow('Analysis Stack is not available');
+      await expect(generateAMLReport(TEST_COMPANY_NUMBER)).rejects.toThrow('Analysis Stack is not available');
     });
   });
 });

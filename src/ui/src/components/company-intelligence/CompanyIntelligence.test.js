@@ -1,9 +1,9 @@
 /**
  * Tests for CompanyIntelligence component.
- * 
+ *
  * Basic smoke tests to ensure the component renders correctly
  * and handles different states (loading, error, success).
- * 
+ *
  * Run: npm test -- CompanyIntelligence.test.js
  */
 
@@ -103,13 +103,13 @@ describe('CompanyIntelligence Component', () => {
     test('should show loading spinner initially', async () => {
       // Mock health check to be pending
       analysisStack.checkAnalysisStackHealth.mockImplementation(
-        () => new Promise(() => {}) // Never resolves
+        () => new Promise(() => {}), // Never resolves
       );
 
       render(
         <BrowserRouter>
           <CompanyIntelligence />
-        </BrowserRouter>
+        </BrowserRouter>,
       );
 
       expect(screen.getByText(/loading company intelligence/i)).toBeInTheDocument();
@@ -123,7 +123,7 @@ describe('CompanyIntelligence Component', () => {
       render(
         <BrowserRouter>
           <CompanyIntelligence />
-        </BrowserRouter>
+        </BrowserRouter>,
       );
 
       await waitFor(() => {
@@ -135,14 +135,12 @@ describe('CompanyIntelligence Component', () => {
   describe('Error State', () => {
     test('should display error message when intelligence fetch fails', async () => {
       analysisStack.checkAnalysisStackHealth.mockResolvedValue(true);
-      analysisStack.fetchCompanyIntelligence.mockRejectedValue(
-        new Error('Failed to fetch data')
-      );
+      analysisStack.fetchCompanyIntelligence.mockRejectedValue(new Error('Failed to fetch data'));
 
       render(
         <BrowserRouter>
           <CompanyIntelligence />
-        </BrowserRouter>
+        </BrowserRouter>,
       );
 
       await waitFor(() => {
@@ -162,33 +160,39 @@ describe('CompanyIntelligence Component', () => {
       const { container } = render(
         <BrowserRouter>
           <CompanyIntelligence />
-        </BrowserRouter>
+        </BrowserRouter>,
       );
 
-      await waitFor(() => {
-        // Component rendered - check for any content
-        expect(container.querySelector('.awsui')).toBeTruthy();
-      }, { timeout: 3000 });
+      await waitFor(
+        () => {
+          // Component rendered - check for any content
+          expect(container.querySelector('.awsui')).toBeTruthy();
+        },
+        { timeout: 3000 },
+      );
     });
 
     test('should display company name and number', async () => {
       const { container } = render(
         <BrowserRouter>
           <CompanyIntelligence />
-        </BrowserRouter>
+        </BrowserRouter>,
       );
 
-      await waitFor(() => {
-        // Just verify component rendered with Cloudscape elements
-        expect(container).toBeTruthy();
-      }, { timeout: 3000 });
+      await waitFor(
+        () => {
+          // Just verify component rendered with Cloudscape elements
+          expect(container).toBeTruthy();
+        },
+        { timeout: 3000 },
+      );
     });
 
     test('should display risk level badge', async () => {
       render(
         <BrowserRouter>
           <CompanyIntelligence />
-        </BrowserRouter>
+        </BrowserRouter>,
       );
 
       await waitFor(() => {
@@ -200,7 +204,7 @@ describe('CompanyIntelligence Component', () => {
       render(
         <BrowserRouter>
           <CompanyIntelligence />
-        </BrowserRouter>
+        </BrowserRouter>,
       );
 
       await waitFor(() => {
@@ -215,7 +219,7 @@ describe('CompanyIntelligence Component', () => {
       render(
         <BrowserRouter>
           <CompanyIntelligence />
-        </BrowserRouter>
+        </BrowserRouter>,
       );
 
       await waitFor(() => {
@@ -229,7 +233,7 @@ describe('CompanyIntelligence Component', () => {
       render(
         <BrowserRouter>
           <CompanyIntelligence />
-        </BrowserRouter>
+        </BrowserRouter>,
       );
 
       await waitFor(() => {
@@ -243,7 +247,7 @@ describe('CompanyIntelligence Component', () => {
       render(
         <BrowserRouter>
           <CompanyIntelligence />
-        </BrowserRouter>
+        </BrowserRouter>,
       );
 
       await waitFor(() => {
@@ -256,7 +260,7 @@ describe('CompanyIntelligence Component', () => {
       render(
         <BrowserRouter>
           <CompanyIntelligence />
-        </BrowserRouter>
+        </BrowserRouter>,
       );
 
       await waitFor(() => {
@@ -274,13 +278,16 @@ describe('CompanyIntelligence Component', () => {
       const { container } = render(
         <BrowserRouter>
           <CompanyIntelligence />
-        </BrowserRouter>
+        </BrowserRouter>,
       );
 
-      await waitFor(() => {
-        // Component rendered successfully
-        expect(container).toBeTruthy();
-      }, { timeout: 3000 });
+      await waitFor(
+        () => {
+          // Component rendered successfully
+          expect(container).toBeTruthy();
+        },
+        { timeout: 3000 },
+      );
     });
   });
 });

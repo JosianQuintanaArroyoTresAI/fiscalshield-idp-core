@@ -8,8 +8,7 @@ const logger = new Logger('AnalysisStackService');
 
 const SSM_PARAM_NAME = '/fiscalshield/analysis/dev/api-url';
 const ANALYSIS_API_FALLBACK =
-  process.env.REACT_APP_ANALYSIS_API ||
-  'https://qruy5j9952.execute-api.eu-central-1.amazonaws.com/dev';
+  process.env.REACT_APP_ANALYSIS_API || 'https://qruy5j9952.execute-api.eu-central-1.amazonaws.com/dev';
 
 let cachedApiUrl = null;
 let apiUrlFetchAttempted = false;
