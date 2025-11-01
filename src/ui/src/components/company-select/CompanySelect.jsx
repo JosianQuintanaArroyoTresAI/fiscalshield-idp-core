@@ -99,8 +99,6 @@ const CompanySelect = () => {
     setCompanyNumber(sanitized);
     setCompanyData(null);
     setError('');
-    setOfficersData(null);
-    setFilingHistory(null);
   };
 
   const handleSearch = async () => {
@@ -112,8 +110,6 @@ const CompanySelect = () => {
     setIsLoading(true);
     setError('');
     setCompanyData(null);
-    setOfficersData(null);
-    setFilingHistory(null);
 
     try {
       const data = await lookupCompany(companyNumber);
@@ -311,175 +307,6 @@ const CompanySelect = () => {
           )}
         </SpaceBetween>
       </div>
-    );
-  };
-
-  const renderOfficersAnalysis = () => {
-    if (!officersData) return null;
-
-    let alertType = 'success';
-    if (officersData.risk_level === 'HIGH') {
-      alertType = 'error';
-    } else if (officersData.risk_level === 'MEDIUM') {
-      alertType = 'warning';
-    }
-
-    return (
-      <SpaceBetween size="m">
-        <Alert type={alertType} header={`${officersData.risk_level} RISK (Score: ${officersData.risk_score})`}>
-          <SpaceBetween size="xs">
-            <div>
-              <strong>Total Directors:</strong> {officersData.total_officers} ({officersData.active_officers} active)
-            </div>
-
-            {officersData.risk_indicators && officersData.risk_indicators.length > 0 && (
-              <div>
-                <strong>Risk Factors:</strong>
-                <ul style={{ marginTop: '5px', marginBottom: '0', paddingLeft: '20px' }}>
-                  {officersData.risk_indicators.map((indicator) => (
-                    <li key={indicator}>{indicator}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </SpaceBetween>
-        </Alert>
-
-        {officersData.officers && officersData.officers.length > 0 && (
-          <ExpandableSection
-            headerText={`Directors Details (${officersData.officers.length})`}
-            defaultExpanded={officersData.risk_level === 'HIGH'}
-          >
-            {/* eslint-disable react/no-unstable-nested-components */}
-            <Table
-              columnDefinitions={[
-                {
-                  id: 'name',
-                  header: 'Name',
-                  cell: (officer) => (
-                    <>
-                      {officer.name}
-                      {officer.risk_flag && <span style={{ color: '#d13212', marginLeft: '5px' }}>⚠️</span>}
-                    </>
-                  ),
-                },
-                {
-                  id: 'role',
-                  header: 'Role',
-                  cell: (officer) => officer.officer_role,
-                },
-                {
-                  id: 'appointed',
-                  header: 'Appointed',
-                  cell: (officer) => officer.appointed_on || '-',
-                },
-                {
-                  id: 'status',
-                  header: 'Status',
-                  cell: (officer) => (
-                    <StatusIndicator type={officer.is_active ? 'success' : 'stopped'}>
-                      {officer.is_active ? 'Active' : 'Resigned'}
-                    </StatusIndicator>
-                  ),
-                },
-                {
-                  id: 'nationality',
-                  header: 'Nationality',
-                  cell: (officer) => officer.nationality || '-',
-                },
-              ]}
-              items={officersData.officers}
-              loadingText="Loading officers..."
-              sortingDisabled
-              empty={
-                <Box textAlign="center" color="inherit">
-                  <b>No officers</b>
-                </Box>
-              }
-            />
-            {/* eslint-enable react/no-unstable-nested-components */}
-          </ExpandableSection>
-        )}
-      </SpaceBetween>
-    );
-  };
-
-  const renderFilingHistory = () => {
-    if (!filingHistory) return null;
-
-    return (
-      <Container header={<Header variant="h3">Filing History Analysis</Header>}>
-        <SpaceBetween size="m">
-          <ColumnLayout columns={3}>
-            <Box>
-              <Box variant="awsui-key-label">Compliance Score</Box>
-              <StatusIndicator type={getScoreType(filingHistory.compliance_score)}>
-                {filingHistory.compliance_score}/10
-              </StatusIndicator>
-            </Box>
-            <Box>
-              <Box variant="awsui-key-label">Total Filings</Box>
-              <div>{filingHistory.total_filings}</div>
-            </Box>
-            <Box>
-              <Box variant="awsui-key-label">Overdue Filings</Box>
-              <div>{filingHistory.overdue_filings}</div>
-            </Box>
-          </ColumnLayout>
-
-          {filingHistory.risk_indicators?.length > 0 && (
-            <Alert type="warning" header="Risk Indicators">
-              <ul style={{ margin: 0, paddingLeft: '20px' }}>
-                {filingHistory.risk_indicators.map((indicator) => (
-                  <li key={indicator}>{indicator}</li>
-                ))}
-              </ul>
-            </Alert>
-          )}
-
-          {filingHistory.recent_filings?.length > 0 && (
-            /* eslint-disable react/no-unstable-nested-components */
-            <Table
-              columnDefinitions={[
-                {
-                  id: 'filing_type',
-                  header: 'Filing Type',
-                  cell: (item) => item.filing_type || 'N/A',
-                },
-                {
-                  id: 'filing_date',
-                  header: 'Filed Date',
-                  cell: (item) => item.filing_date || 'N/A',
-                },
-                {
-                  id: 'status',
-                  header: 'Status',
-                  cell: (item) => item.status || 'Filed',
-                },
-              ]}
-              items={filingHistory.recent_filings}
-              loadingText="Loading filings..."
-              sortingDisabled
-              empty={
-                <Box textAlign="center" color="inherit">
-                  <b>No filings</b>
-                  <Box padding={{ bottom: 's' }} variant="p" color="inherit">
-                    No filing history available for this company.
-                  </Box>
-                </Box>
-              }
-            />
-            /* eslint-enable react/no-unstable-nested-components */
-          )}
-
-          {filingHistory.next_due_date && (
-            <Box>
-              <Box variant="awsui-key-label">Next Filing Due</Box>
-              <div>{new Date(filingHistory.next_due_date).toLocaleDateString('en-GB')}</div>
-            </Box>
-          )}
-        </SpaceBetween>
-      </Container>
     );
   };
 
