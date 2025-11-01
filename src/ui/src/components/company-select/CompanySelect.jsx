@@ -25,8 +25,6 @@ import {
   checkDataCollectionHealth,
   lookupCompany,
   triggerBackgroundResearch,
-  lookupOfficers,
-  checkFilingHistory,
 } from '../../services/dataCollection';
 import { fetchUserCompanies, registerCompany } from '../../services/userCompanies';
 import CompanyCard from '../company-card/CompanyCard';
@@ -55,14 +53,8 @@ const CompanySelect = () => {
   const [companiesError, setCompaniesError] = useState(null);
 
   // Officers state
-  const [officersData, setOfficersData] = useState(null);
-  const [officersLoading, setOfficersLoading] = useState(false);
-  const [officersError, setOfficersError] = useState(null);
-
-  // Filing history state
-  const [filingHistory, setFilingHistory] = useState(null);
-  const [filingLoading, setFilingLoading] = useState(false);
-  const [showFilingHistory, setShowFilingHistory] = useState(false);
+  // Research status message state
+  const [researchStatusMessage, setResearchStatusMessage] = useState('');
 
   // Check if Data Collection Stack is available on mount
   useEffect(() => {
@@ -143,72 +135,29 @@ const CompanySelect = () => {
     }
   };
 
-  const handleCheckOfficers = async () => {
-    if (!companyNumber) {
-      setOfficersError('No company number available');
-      return;
-    }
-
-    setOfficersLoading(true);
-    setOfficersError(null);
-    setOfficersData(null);
-
-    try {
-      const result = await lookupOfficers(companyNumber);
-      logger.debug('Officers data:', result);
-
-      if (result.total_officers !== undefined) {
-        setOfficersData(result);
-      } else {
-        setOfficersError('Failed to fetch officers data');
-      }
-    } catch (err) {
-      logger.error('Officers check failed:', err);
-
-      if (err.message.includes('404')) {
-        setOfficersError('No officers found for this company');
-      } else {
-        setOfficersError('Failed to check officers');
-      }
-    } finally {
-      setOfficersLoading(false);
-    }
-  };
-
-  const handleCheckFilingHistory = async () => {
-    if (!companyNumber) {
-      setError('No company number available');
-      return;
-    }
-
-    // Validate company number format
-    const cleanCompanyNumber = companyNumber.trim();
-    if (cleanCompanyNumber.includes(' ') || !/^[A-Z0-9]+$/.test(cleanCompanyNumber)) {
-      setError(`Invalid company number format: ${cleanCompanyNumber}. Expected alphanumeric ID.`);
-      return;
-    }
-
-    setFilingLoading(true);
-    setError(null);
-
-    try {
-      const response = await checkFilingHistory(cleanCompanyNumber);
-      logger.debug('Filing history response:', response);
-      setFilingHistory(response);
-      setShowFilingHistory(true);
-    } catch (err) {
-      logger.error('Filing history check failed:', err);
-      setError('Failed to fetch filing history');
-    } finally {
-      setFilingLoading(false);
-    }
-  };
-
   const handleConfirmAndResearch = async () => {
     if (!companyData) return;
 
-    // Store company selection (would be saved to DynamoDB via API)
-    // For now, we'll store in localStorage as temporary solution
+    setIsResearching(true);
+
+    // Cycling status messages for elegant loading experience
+    const statusMessages = [
+      'Verifying company information...',
+      'Analyzing corporate structure...',
+      'Running compliance checks...',
+      'Preparing your workspace...',
+    ];
+
+    let messageIndex = 0;
+    setResearchStatusMessage(statusMessages[0]);
+
+    // Cycle through messages every 700ms
+    const messageInterval = setInterval(() => {
+      messageIndex = (messageIndex + 1) % statusMessages.length;
+      setResearchStatusMessage(statusMessages[messageIndex]);
+    }, 700);
+
+    // Store company selection
     const companyContext = {
       company_number: companyData.company_number,
       company_name: companyData.company_name,
@@ -230,13 +179,12 @@ const CompanySelect = () => {
 
     // If Data Collection Stack is available, trigger background research
     if (isDataCollectionAvailable) {
-      setIsResearching(true);
       try {
         await triggerBackgroundResearch({
           company_number: companyData.company_number,
           company_name: companyData.company_name,
           user_id: user?.username || 'unknown',
-          client_id: user?.username || 'unknown', // TODO: Replace with actual client_id
+          client_id: user?.username || 'unknown',
         });
         logger.debug('Background research initiated');
       } catch (err) {
@@ -245,10 +193,11 @@ const CompanySelect = () => {
       }
     }
 
-    // Redirect to documents page
+    // Redirect after 2.5 seconds of elegant loading
     setTimeout(() => {
+      clearInterval(messageInterval);
       history.push(DOCUMENTS_PATH);
-    }, 1000);
+    }, 2500);
   };
 
   const handleKeyPress = (event) => {
@@ -716,70 +665,13 @@ const CompanySelect = () => {
                   {/* Risk Analysis Section */}
                   {renderRiskAnalysis()}
 
-                  {/* Directors Risk Analysis Section */}
-                  {isDataCollectionAvailable && (
-                    <div style={{ borderTop: '1px solid #eee', paddingTop: '16px' }}>
-                      <Header
-                        variant="h3"
-                        description="Check company directors and risk indicators"
-                        actions={
-                          <Button
-                            variant="primary"
-                            loading={officersLoading}
-                            onClick={handleCheckOfficers}
-                            disabled={officersLoading}
-                            iconName="search"
-                          >
-                            {officersData ? 'Refresh Directors' : 'Check Directors'}
-                          </Button>
-                        }
-                      >
-                        Directors Risk Analysis
-                      </Header>
-
-                      {officersError && (
-                        <Alert type="warning" header="Directors Check">
-                          {officersError}
-                        </Alert>
-                      )}
-
-                      {officersData && renderOfficersAnalysis()}
-                    </div>
-                  )}
-
-                  {/* Filing History Section */}
-                  {isDataCollectionAvailable && (
-                    <div style={{ borderTop: '1px solid #eee', paddingTop: '16px' }}>
-                      <SpaceBetween size="s">
-                        <SpaceBetween direction="horizontal" size="s">
-                          <Button
-                            variant="normal"
-                            loading={filingLoading}
-                            onClick={handleCheckFilingHistory}
-                            iconName="search"
-                          >
-                            {filingLoading ? 'Analyzing Filing History...' : 'Check Filing History'}
-                          </Button>
-
-                          {showFilingHistory && filingHistory && (
-                            <Button variant="link" onClick={() => setShowFilingHistory(!showFilingHistory)}>
-                              {showFilingHistory ? 'Hide' : 'Show'} Filing Analysis
-                            </Button>
-                          )}
-                        </SpaceBetween>
-
-                        {showFilingHistory && renderFilingHistory()}
-                      </SpaceBetween>
-                    </div>
-                  )}
-
-                  <Box textAlign="center" padding={{ top: 'm' }}>
-                    <SpaceBetween size="xs" direction="vertical">
+                  <Box textAlign="center" padding={{ top: 'l' }}>
+                    <SpaceBetween size="m" direction="vertical">
                       {isResearching ? (
                         <Box>
                           <Spinner size="large" />
-                          <Box variant="p" padding={{ top: 's' }}>
-                            Initiating background research...
+                          <Box variant="p" padding={{ top: 's' }} fontSize="body-m" fontWeight="normal">
+                            {researchStatusMessage}
                           </Box>
                         </Box>
                       ) : (
@@ -790,13 +682,19 @@ const CompanySelect = () => {
                             iconAlign="right"
                             iconName="arrow-right"
                           >
-                            Confirm and research company
+                            Begin Background Research
                           </Button>
-                          <Box variant="small" color="text-status-inactive">
-                            {isDataCollectionAvailable
-                              ? 'Includes: company data, officers, compliance checks, and AML screening'
-                              : 'Background research currently unavailable - you can still proceed'}
-                          </Box>
+                          {isDataCollectionAvailable && (
+                            <Box variant="small" color="text-status-inactive">
+                              Our comprehensive verification includes: Corporate structure · Compliance
+                              screening · Officer verification · Risk assessment
+                            </Box>
+                          )}
+                          {!isDataCollectionAvailable && (
+                            <Box variant="small" color="text-status-warning">
+                              Background research currently unavailable - you can still proceed
+                            </Box>
+                          )}
                         </>
                       )}
                     </SpaceBetween>
