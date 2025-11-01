@@ -11,8 +11,9 @@ import { formatCompanyDate, formatRelativeTime } from '../../services/userCompan
  * @param {Object} props
  * @param {Object} props.company - Company data object
  * @param {Function} props.onViewDocuments - Callback when "View Documents" is clicked
+ * @param {Function} props.onViewIntelligence - Callback when "View Intelligence" is clicked
  */
-const CompanyCard = ({ company, onViewDocuments }) => {
+const CompanyCard = ({ company, onViewDocuments, onViewIntelligence }) => {
   const {
     company_number: companyNumber,
     company_name: companyName,
@@ -28,13 +29,24 @@ const CompanyCard = ({ company, onViewDocuments }) => {
     }
   };
 
+  const handleViewIntelligence = () => {
+    if (onViewIntelligence) {
+      onViewIntelligence(company);
+    }
+  };
+
   return (
     <Container
       footer={
         <Box float="right">
-          <Button variant="primary" onClick={handleViewDocuments} iconAlign="right" iconName="arrow-right">
-            View Documents
-          </Button>
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button onClick={handleViewIntelligence} iconAlign="right" iconName="status-info">
+              View Intelligence
+            </Button>
+            <Button variant="primary" onClick={handleViewDocuments} iconAlign="right" iconName="arrow-right">
+              View Documents
+            </Button>
+          </SpaceBetween>
         </Box>
       }
     >
@@ -99,6 +111,7 @@ CompanyCard.propTypes = {
     document_types: PropTypes.arrayOf(PropTypes.string),
   }).isRequired,
   onViewDocuments: PropTypes.func,
+  onViewIntelligence: PropTypes.func,
 };
 
 CompanyCard.defaultProps = {

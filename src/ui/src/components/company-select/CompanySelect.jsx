@@ -25,7 +25,7 @@ import { checkDataCollectionHealth, lookupCompany, triggerBackgroundResearch } f
 import { fetchUserCompanies, registerCompany } from '../../services/userCompanies';
 import CompanyCard from '../company-card/CompanyCard';
 import useAppContext from '../../contexts/app';
-import { DOCUMENTS_PATH } from '../../routes/constants';
+import { DOCUMENTS_PATH, COMPANY_INTELLIGENCE_PATH } from '../../routes/constants';
 
 import '@awsui/global-styles/index.css';
 
@@ -346,6 +346,27 @@ const CompanySelect = () => {
     history.push(DOCUMENTS_PATH);
   };
 
+  // Handle viewing intelligence for a registered company
+  const handleViewCompanyIntelligence = (company) => {
+    logger.info(`Viewing intelligence for company: ${company.company_number}`);
+
+    // Store company context
+    const companyContext = {
+      company_number: company.company_number,
+      company_name: company.company_name,
+      selected_at: new Date().toISOString(),
+      user_id: user?.username || 'unknown',
+      from_registered: true,
+    };
+
+    localStorage.setItem('active_company', JSON.stringify(companyContext));
+    logger.debug('Company context saved:', companyContext);
+
+    // Navigate to intelligence page
+    const intelligencePath = COMPANY_INTELLIGENCE_PATH.replace(':companyNumber', company.company_number);
+    history.push(intelligencePath);
+  };
+
   return (
     <Box padding={{ top: 'xxxl' }}>
       <SpaceBetween size="l">
@@ -378,6 +399,7 @@ const CompanySelect = () => {
                     key={company.company_number}
                     company={company}
                     onViewDocuments={handleViewCompanyDocuments}
+                    onViewIntelligence={handleViewCompanyIntelligence}
                   />
                 ))}
               </Grid>
