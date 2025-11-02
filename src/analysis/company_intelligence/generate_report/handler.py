@@ -14,7 +14,7 @@ from botocore.exceptions import ClientError
 
 # Initialize AWS clients
 dynamodb = boto3.resource('dynamodb')
-bedrock_runtime = boto3.client('bedrock-runtime', region_name='eu-west-2')
+bedrock_runtime = boto3.client('bedrock-runtime', region_name='eu-central-1')
 s3_client = boto3.client('s3')
 
 # Environment variables
@@ -31,8 +31,9 @@ class ReportGenerator:
         self.intelligence_table = dynamodb.Table(COMPANY_INTELLIGENCE_TABLE)
         self.company_events_table = dynamodb.Table(DC_COMPANY_EVENTS_TABLE)
         
-        # Use Claude 3.5 Sonnet v2 for best performance
-        self.model_id = "anthropic.claude-3-5-sonnet-20241022-v2:0"
+        # Use Claude 3.7 Sonnet for best reasoning and compliance analysis
+        # Available via cross-region inference in eu-central-1
+        self.model_id = "anthropic.claude-3-7-sonnet-20250219-v1:0"
         
         # System prompt for UK accountant context
         self.system_prompt = """You are a senior AML compliance officer and UK chartered accountant with deep expertise in Money Laundering Regulations 2017 (MLR 2017). 
