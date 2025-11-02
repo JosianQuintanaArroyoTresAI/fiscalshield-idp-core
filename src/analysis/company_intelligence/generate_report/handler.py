@@ -63,15 +63,21 @@ Always maintain professional skepticism while being fair and objective."""
         """Retrieve intelligence data from Analysis Stack"""
         
         try:
-            # Get intelligence assessment
-            response = self.intelligence_table.get_item(
-                Key={'company_number': company_number}
+            # Query intelligence assessment (need to query because table has composite key)
+            response = self.intelligence_table.query(
+                KeyConditionExpression='company_number = :cn AND begins_with(intelligence_type_timestamp, :type)',
+                ExpressionAttributeValues={
+                    ':cn': company_number,
+                    ':type': 'ASSESSMENT#'
+                },
+                ScanIndexForward=False,  # Get most recent first
+                Limit=1
             )
             
-            if 'Item' not in response:
+            if not response.get('Items'):
                 raise ValueError(f"No intelligence data found for company {company_number}")
             
-            intelligence = response['Item']
+            intelligence = response['Items'][0]
             print(f"Retrieved intelligence data for {company_number}")
             
             # Also get raw company data from Data Collection Stack
