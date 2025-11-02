@@ -374,11 +374,11 @@ const CompanySelect = () => {
     try {
       setLoadingCompanies(true);
       await deleteCompany(company.company_number);
-      
+
       // Refresh companies list
       const companies = await fetchUserCompanies();
       setUserCompanies(companies);
-      
+
       logger.debug('Company deleted and list refreshed');
     } catch (error) {
       logger.error('Error deleting company:', error);

@@ -3,7 +3,16 @@
 
 import React, { useState } from 'react';
 import PropTypes from 'prop-types';
-import { Container, Box, Badge, Button, ColumnLayout, SpaceBetween, Modal, ButtonDropdown } from '@awsui/components-react';
+import {
+  Container,
+  Box,
+  Badge,
+  Button,
+  ColumnLayout,
+  SpaceBetween,
+  Modal,
+  ButtonDropdown,
+} from '@awsui/components-react';
 import { formatCompanyDate, formatRelativeTime } from '../../services/userCompanies';
 
 /**
@@ -85,83 +94,84 @@ const CompanyCard = ({ company, onViewDocuments, onViewIntelligence, onDelete })
           </Box>
         }
       >
-      <SpaceBetween size="m">
-        <div>
-          <Box variant="h3" margin={{ bottom: 'xxs' }}>
-            {companyName || 'Unknown Company'}
-          </Box>
-          <Box variant="small" color="text-status-inactive">
-            Company #{companyNumber}
-          </Box>
-        </div>
-
-        <ColumnLayout columns={3} variant="text-grid">
+        <SpaceBetween size="m">
           <div>
-            <Box variant="awsui-key-label">Documents</Box>
-            <Box fontSize="heading-l" fontWeight="bold">
-              {documentCount || 0}
+            <Box variant="h3" margin={{ bottom: 'xxs' }}>
+              {companyName || 'Unknown Company'}
             </Box>
-          </div>
-
-          <div>
-            <Box variant="awsui-key-label">Last Activity</Box>
-            <Box>{formatRelativeTime(lastActivity)}</Box>
             <Box variant="small" color="text-status-inactive">
-              {formatCompanyDate(lastActivity)}
+              Company #{companyNumber}
             </Box>
           </div>
 
-          <div>
-            <Box variant="awsui-key-label">First Registered</Box>
-            <Box>{formatCompanyDate(firstRegistered)}</Box>
-          </div>
-        </ColumnLayout>
+          <ColumnLayout columns={3} variant="text-grid">
+            <div>
+              <Box variant="awsui-key-label">Documents</Box>
+              <Box fontSize="heading-l" fontWeight="bold">
+                {documentCount || 0}
+              </Box>
+            </div>
 
-        {documentTypes && documentTypes.length > 0 && (
-          <div>
-            <Box variant="awsui-key-label" margin={{ bottom: 'xxs' }}>
-              Document Types
-            </Box>
-            <SpaceBetween size="xs" direction="horizontal">
-              {documentTypes.map((type) => (
-                <Badge key={type} color="blue">
-                  {type}
-                </Badge>
-              ))}
+            <div>
+              <Box variant="awsui-key-label">Last Activity</Box>
+              <Box>{formatRelativeTime(lastActivity)}</Box>
+              <Box variant="small" color="text-status-inactive">
+                {formatCompanyDate(lastActivity)}
+              </Box>
+            </div>
+
+            <div>
+              <Box variant="awsui-key-label">First Registered</Box>
+              <Box>{formatCompanyDate(firstRegistered)}</Box>
+            </div>
+          </ColumnLayout>
+
+          {documentTypes && documentTypes.length > 0 && (
+            <div>
+              <Box variant="awsui-key-label" margin={{ bottom: 'xxs' }}>
+                Document Types
+              </Box>
+              <SpaceBetween size="xs" direction="horizontal">
+                {documentTypes.map((type) => (
+                  <Badge key={type} color="blue">
+                    {type}
+                  </Badge>
+                ))}
+              </SpaceBetween>
+            </div>
+          )}
+        </SpaceBetween>
+      </Container>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        visible={showDeleteModal}
+        onDismiss={handleDeleteCancel}
+        header="Delete Company"
+        closeAriaLabel="Close"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={handleDeleteCancel}>
+                Cancel
+              </Button>
+              <Button variant="primary" onClick={handleDeleteConfirm}>
+                Delete
+              </Button>
             </SpaceBetween>
-          </div>
-        )}
-      </SpaceBetween>
-    </Container>
-
-    {/* Delete Confirmation Modal */}
-    <Modal
-      visible={showDeleteModal}
-      onDismiss={handleDeleteCancel}
-      header="Delete Company"
-      closeAriaLabel="Close"
-      footer={
-        <Box float="right">
-          <SpaceBetween direction="horizontal" size="xs">
-            <Button variant="link" onClick={handleDeleteCancel}>
-              Cancel
-            </Button>
-            <Button variant="primary" onClick={handleDeleteConfirm}>
-              Delete
-            </Button>
-          </SpaceBetween>
-        </Box>
-      }
-    >
-      <SpaceBetween size="m">
-        <Box variant="p">
-          Are you sure you want to delete <strong>{companyName}</strong> (#{companyNumber}) from your registered companies?
-        </Box>
-        <Box variant="p" color="text-status-warning">
-          This will remove the company from your list, but any cached data and documents will remain in the system.
-        </Box>
-      </SpaceBetween>
-    </Modal>
+          </Box>
+        }
+      >
+        <SpaceBetween size="m">
+          <Box variant="p">
+            Are you sure you want to delete <strong>{companyName}</strong> (#{companyNumber}) from your registered
+            companies?
+          </Box>
+          <Box variant="p" color="text-status-warning">
+            This will remove the company from your list, but any cached data and documents will remain in the system.
+          </Box>
+        </SpaceBetween>
+      </Modal>
     </>
   );
 };
