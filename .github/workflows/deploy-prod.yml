@@ -127,7 +127,7 @@ jobs:
               ParameterKey=Pattern2Configuration,ParameterValue=rvl-cdip-package-sample \
               ParameterKey=Pattern3Configuration,ParameterValue=rvl-cdip-package-sample \
               ParameterKey=DocumentKnowledgeBase,ParameterValue=DISABLED \
-              ParameterKey=AllowedSignUpEmailDomain,ParameterValue="" \
+              ParameterKey=AllowedSignUpEmailDomain,ParameterValue="gmail.com,outlook.com,yahoo.com,hotmail.com,icloud.com,protonmail.com,tresai.ai" \
               ParameterKey=EnableHITL,ParameterValue=true \
               ParameterKey=LogLevel,ParameterValue=INFO \
               ParameterKey=LogRetentionDays,ParameterValue=30 \
