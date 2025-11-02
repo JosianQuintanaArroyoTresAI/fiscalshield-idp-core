@@ -89,9 +89,14 @@ def get_api_credentials() -> Dict[str, str]:
         raise
 
 
-def check_cache(company_name: str, days_back: int = 30) -> Optional[Dict]:
+def check_cache(company_name: str, days_back: int = 30, company_number: Optional[str] = None) -> Optional[Dict]:
     """Check if media data exists in cache."""
     try:
+        # If no company number provided, can't check cache
+        if not company_number:
+            logger.info(f"No company number provided, skipping cache check for: {company_name}")
+            return None
+        
         table = dynamodb.Table(CACHE_TABLE_NAME)
         
         # Sort key: MEDIA#COMPANY#{name}#DAYS_{days}
@@ -99,7 +104,7 @@ def check_cache(company_name: str, days_back: int = 30) -> Optional[Dict]:
         
         response = table.get_item(
             Key={
-                'company_number': 'MEDIA_GLOBAL',
+                'company_number': company_number,
                 'event_type_timestamp': cache_key
             }
         )
@@ -109,10 +114,10 @@ def check_cache(company_name: str, days_back: int = 30) -> Optional[Dict]:
             item = response['Item']
             if 'ttl' in item:
                 if datetime.now().timestamp() < item['ttl']:
-                    logger.info(f"Cache hit for: {company_name}")
+                    logger.info(f"Cache hit for: {company_name} (company: {company_number})")
                     return item
         
-        logger.info(f"Cache miss for: {company_name}")
+        logger.info(f"Cache miss for: {company_name} (company: {company_number})")
         return None
     
     except Exception as e:
@@ -123,27 +128,33 @@ def check_cache(company_name: str, days_back: int = 30) -> Optional[Dict]:
 def save_to_cache(company_name: str, api_response: Dict, days_back: int = 30, company_number: Optional[str] = None, s3_archive: Optional[Dict] = None):
     """Save raw NewsAPI response to DynamoDB cache."""
     try:
+        # If no company number provided, can't cache
+        if not company_number:
+            logger.warning(f"No company number provided, skipping cache for: {company_name}")
+            return
+        
         table = dynamodb.Table(CACHE_TABLE_NAME)
         
         cache_key = f"MEDIA#COMPANY#{company_name.upper().replace(' ', '_')}#DAYS_{days_back}"
         
-        ttl = int((datetime.now() + timedelta(days=CACHE_TTL_DAYS)).timestamp())
+        now = datetime.now()
+        ttl = int((now + timedelta(days=CACHE_TTL_DAYS)).timestamp())
         
         item = {
-            'company_number': 'MEDIA_GLOBAL',  # Always use GLOBAL partition for consistency
+            'company_number': company_number,  # Use actual company number as PK
             'event_type_timestamp': cache_key,
             'company_name': company_name,
-            'company_number_context': company_number,  # Store company context separately
-            'collection_date': datetime.now().isoformat(),
             'days_searched': days_back,
+            'timestamp': now.isoformat(),
+            'last_updated': now.isoformat(),
             'ttl': ttl,
             'data_source': 'newsapi',
-            'api_response': api_response,  # Store raw API response
+            'data': api_response,  # Store raw API response as 'data' to match other entries
             's3_archive': s3_archive  # Store S3 location
         }
         
         table.put_item(Item=item)
-        logger.info(f"Cached media data for: {company_name} (TTL: {CACHE_TTL_DAYS} days)")
+        logger.info(f"Cached media data for: {company_name} under company: {company_number} (TTL: {CACHE_TTL_DAYS} days)")
     
     except Exception as e:
         logger.warning(f"Failed to cache results (non-blocking): {e}")
@@ -315,12 +326,14 @@ def lambda_handler(event, context):
         logger.info(f"Processing media search for: {company_name} ({days_back} days)")
         
         # Check cache first
-        cached_data = check_cache(company_name, days_back)
+        cached_data = check_cache(company_name, days_back, company_number)
         if cached_data:
             # Convert Decimals before serialization
             cached_data = convert_decimals(cached_data)
             
-            api_response = cached_data.get('api_response', {})
+            # Support both old 'api_response' and new 'data' fields
+            api_data = cached_data.get('data') or cached_data.get('api_response', {})
+            
             return {
                 'statusCode': 200,
                 'headers': {
@@ -332,11 +345,11 @@ def lambda_handler(event, context):
                     'company_name': company_name,
                     'company_number': company_number,
                     'cached': True,
-                    'collection_date': cached_data.get('collection_date'),
+                    'collection_date': cached_data.get('last_updated') or cached_data.get('collection_date'),
                     'days_searched': days_back,
-                    'total_results': api_response.get('totalResults', 0),
-                    'articles_returned': len(api_response.get('articles', [])),
-                    'api_response': api_response,
+                    'total_results': api_data.get('totalResults', 0),
+                    'articles_returned': len(api_data.get('articles', [])),
+                    'api_response': api_data,
                     's3_archive': cached_data.get('s3_archive')
                 })
             }

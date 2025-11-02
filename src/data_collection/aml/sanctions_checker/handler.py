@@ -89,9 +89,14 @@ def get_api_credentials() -> Dict[str, str]:
         raise
 
 
-def check_cache(person_name: str, dob: Optional[str] = None) -> Optional[Dict]:
+def check_cache(person_name: str, dob: Optional[str] = None, company_number: Optional[str] = None) -> Optional[Dict]:
     """Check if sanctions data exists in cache."""
     try:
+        # If no company number provided, can't check cache
+        if not company_number:
+            logger.info(f"No company number provided, skipping cache check for: {person_name}")
+            return None
+        
         table = dynamodb.Table(CACHE_TABLE_NAME)
         
         # Sort key: SANCTIONS#PERSON#{name}#{dob}
@@ -101,7 +106,7 @@ def check_cache(person_name: str, dob: Optional[str] = None) -> Optional[Dict]:
         
         response = table.get_item(
             Key={
-                'company_number': 'SANCTIONS_GLOBAL',
+                'company_number': company_number,
                 'event_type_timestamp': cache_key
             }
         )
@@ -111,10 +116,10 @@ def check_cache(person_name: str, dob: Optional[str] = None) -> Optional[Dict]:
             item = response['Item']
             if 'ttl' in item:
                 if datetime.now().timestamp() < item['ttl']:
-                    logger.info(f"Cache hit for: {person_name}")
+                    logger.info(f"Cache hit for: {person_name} (company: {company_number})")
                     return item
         
-        logger.info(f"Cache miss for: {person_name}")
+        logger.info(f"Cache miss for: {person_name} (company: {company_number})")
         return None
     
     except Exception as e:
@@ -125,29 +130,35 @@ def check_cache(person_name: str, dob: Optional[str] = None) -> Optional[Dict]:
 def save_to_cache(person_name: str, api_response: Dict, dob: Optional[str] = None, company_number: Optional[str] = None, s3_archive: Optional[Dict] = None):
     """Save raw OpenSanctions API response to DynamoDB cache."""
     try:
+        # If no company number provided, can't cache
+        if not company_number:
+            logger.warning(f"No company number provided, skipping cache for: {person_name}")
+            return
+        
         table = dynamodb.Table(CACHE_TABLE_NAME)
         
         cache_key = f"SANCTIONS#PERSON#{person_name.upper().replace(' ', '_')}"
         if dob:
             cache_key += f"#{dob}"
         
-        ttl = int((datetime.now() + timedelta(days=CACHE_TTL_DAYS)).timestamp())
+        now = datetime.now()
+        ttl = int((now + timedelta(days=CACHE_TTL_DAYS)).timestamp())
         
         item = {
-            'company_number': 'SANCTIONS_GLOBAL',  # Always use GLOBAL partition for consistency
+            'company_number': company_number,  # Use actual company number as PK
             'event_type_timestamp': cache_key,
             'person_name': person_name,
             'date_of_birth': dob,
-            'company_number_context': company_number,  # Store company context separately
-            'screening_date': datetime.now().isoformat(),
+            'timestamp': now.isoformat(),
+            'last_updated': now.isoformat(),
             'ttl': ttl,
             'data_source': 'opensanctions',
-            'api_response': api_response,  # Store raw API response
+            'data': api_response,  # Store raw API response as 'data' to match other entries
             's3_archive': s3_archive  # Store S3 location
         }
         
         table.put_item(Item=item)
-        logger.info(f"Cached sanctions data for: {person_name} (TTL: {CACHE_TTL_DAYS} days)")
+        logger.info(f"Cached sanctions data for: {person_name} under company: {company_number} (TTL: {CACHE_TTL_DAYS} days)")
     
     except Exception as e:
         logger.warning(f"Failed to cache results (non-blocking): {e}")
@@ -293,10 +304,13 @@ def lambda_handler(event, context):
         logger.info(f"Processing sanctions check for: {person_name}")
         
         # Check cache first
-        cached_data = check_cache(person_name, dob)
+        cached_data = check_cache(person_name, dob, company_number)
         if cached_data:
             # Convert Decimals before serialization
             cached_data = convert_decimals(cached_data)
+            
+            # Support both old 'api_response' and new 'data' fields
+            api_data = cached_data.get('data') or cached_data.get('api_response', {})
             
             return {
                 'statusCode': 200,
@@ -310,9 +324,9 @@ def lambda_handler(event, context):
                     'date_of_birth': dob,
                     'company_number': company_number,
                     'cached': True,
-                    'collection_date': cached_data.get('screening_date'),
-                    'total_results': len(cached_data.get('api_response', {}).get('results', [])),
-                    'api_response': cached_data.get('api_response'),
+                    'collection_date': cached_data.get('last_updated') or cached_data.get('screening_date'),
+                    'total_results': len(api_data.get('results', [])),
+                    'api_response': api_data,
                     's3_archive': cached_data.get('s3_archive')
                 })
             }
