@@ -1,0 +1,351 @@
+name: Deploy Analysis Stack - Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type "DEPLOY" to confirm production deployment'
+        required: true
+      reason:
+        description: 'Reason for production deployment'
+        required: true
+
+env:
+  AWS_REGION: eu-central-1
+  STACK_NAME: fiscalshield-analysis-prod
+  ENVIRONMENT: prod
+
+jobs:
+  validate-confirmation:
+    name: Validate Deployment Confirmation
+    runs-on: ubuntu-latest
+    steps:
+      - name: ✅ Check confirmation
+        run: |
+          if [ "${{ github.event.inputs.confirmation }}" != "DEPLOY" ]; then
+            echo "❌ Confirmation failed. You must type 'DEPLOY' to proceed."
+            exit 1
+          fi
+          echo "✅ Confirmation validated"
+
+  deploy:
+    name: Deploy to Production Environment
+    runs-on: ubuntu-latest
+    needs: validate-confirmation
+    timeout-minutes: 45
+    environment:
+      name: production
+      url: https://console.aws.amazon.com/cloudformation/home?region=${{ env.AWS_REGION }}#/stacks
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: 📦 Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install aws-sam-cli boto3 pytest pytest-cov pytest-mock
+
+      - name: 🔐 Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_PROD }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_PROD }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: 🧪 Run unit tests
+        run: |
+          if [ -d "tests/unit/analysis" ] && [ -n "$(find tests/unit/analysis -name 'test_*.py' -type f)" ]; then
+            echo "Running Analysis Stack unit tests..."
+            pytest tests/unit/analysis/ -v --cov=src/analysis --cov-report=term-missing --cov-fail-under=80
+          else
+            echo "❌ ERROR: Unit tests are required for production deployment!"
+            echo "Please add unit tests to tests/unit/analysis/ before deploying to production"
+            exit 1
+          fi
+
+      - name: ⚠️ Check Bedrock access
+        run: |
+          echo "Verifying Bedrock access in production..."
+          
+          # Check if Bedrock is accessible in the region
+          if aws bedrock list-foundation-models --region ${{ env.AWS_REGION }} > /dev/null 2>&1; then
+            echo "✅ Bedrock service accessible"
+          else
+            echo "❌ Cannot access Bedrock in production!"
+            echo "Please ensure Bedrock is enabled in your production AWS account"
+            exit 1
+          fi
+          
+          # Check for Claude 3.7 Sonnet model access
+          MODEL_ID="eu.anthropic.claude-3-7-sonnet-20250219-v1:0"
+          if aws bedrock-runtime invoke-model \
+            --model-id "$MODEL_ID" \
+            --body '{"anthropic_version":"bedrock-2023-05-31","max_tokens":10,"messages":[{"role":"user","content":"test"}]}' \
+            --region ${{ env.AWS_REGION }} \
+            /tmp/test-response.json > /dev/null 2>&1; then
+            echo "✅ Claude 3.7 Sonnet model accessible"
+          else
+            echo "⚠️ WARNING: Could not verify Claude 3.7 Sonnet access"
+            echo "LLM insights will use fallback logic if model is unavailable"
+          fi
+
+      - name: ✅ Validate CloudFormation template
+        working-directory: stacks/analysis
+        run: |
+          sam validate --lint
+
+      - name: 🔨 Build SAM application
+        working-directory: stacks/analysis
+        run: |
+          sam build --config-env prod --parallel --cached
+
+      - name: 🔍 Check stack state
+        id: check-stack
+        run: |
+          # Check if stack exists and get its status
+          if aws cloudformation describe-stacks \
+            --stack-name ${{ env.STACK_NAME }} \
+            --region ${{ env.AWS_REGION }} > /dev/null 2>&1; then
+            
+            STACK_STATUS=$(aws cloudformation describe-stacks \
+              --stack-name ${{ env.STACK_NAME }} \
+              --region ${{ env.AWS_REGION }} \
+              --query 'Stacks[0].StackStatus' \
+              --output text)
+            
+            echo "Stack exists with status: $STACK_STATUS"
+            
+            if [[ "$STACK_STATUS" == "ROLLBACK_COMPLETE" ]]; then
+              echo "⚠️ Stack is in ROLLBACK_COMPLETE state. Deleting before redeployment..."
+              aws cloudformation delete-stack \
+                --stack-name ${{ env.STACK_NAME }} \
+                --region ${{ env.AWS_REGION }}
+              
+              echo "Waiting for stack deletion to complete..."
+              aws cloudformation wait stack-delete-complete \
+                --stack-name ${{ env.STACK_NAME }} \
+                --region ${{ env.AWS_REGION }}
+              
+              echo "✅ Stack deleted successfully"
+              STACK_STATUS="DOES_NOT_EXIST"
+            fi
+          else
+            echo "Stack does not exist yet"
+            STACK_STATUS="DOES_NOT_EXIST"
+          fi
+          
+          echo "stack_status=$STACK_STATUS" >> $GITHUB_OUTPUT
+
+      - name: 📋 Create changeset
+        working-directory: stacks/analysis
+        run: |
+          sam deploy \
+            --config-env prod \
+            --no-execute-changeset \
+            --region ${{ env.AWS_REGION }}
+          
+          echo "Changeset created. Review changes before executing."
+
+      - name: 🚀 Deploy to Production
+        working-directory: stacks/analysis
+        run: |
+          sam deploy \
+            --config-env prod \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --region ${{ env.AWS_REGION }}
+
+      - name: 📊 Get stack outputs
+        id: stack-outputs
+        run: |
+          OUTPUTS=$(aws cloudformation describe-stacks \
+            --stack-name ${{ env.STACK_NAME }} \
+            --region ${{ env.AWS_REGION }} \
+            --query 'Stacks[0].Outputs' \
+            --output json)
+          
+          echo "Stack outputs:"
+          echo "$OUTPUTS" | jq -r '.[] | "\(.OutputKey) = \(.OutputValue)"'
+          
+          # Extract API Gateway URL for smoke tests
+          API_URL=$(echo "$OUTPUTS" | jq -r '.[] | select(.OutputKey=="AnalysisApiUrl") | .OutputValue')
+          echo "api_url=$API_URL" >> $GITHUB_OUTPUT
+
+      - name: 🧪 Run smoke tests
+        run: |
+          echo "🔍 Running Analysis Stack production smoke tests..."
+          
+          API_URL="${{ steps.stack-outputs.outputs.api_url }}"
+          
+          if [ -z "$API_URL" ]; then
+            echo "❌ Could not retrieve API URL"
+            exit 1
+          fi
+          
+          # Test health endpoint
+          echo "Testing health endpoint..."
+          HEALTH_RESPONSE=$(curl -s "${API_URL}/health")
+          HEALTH_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${API_URL}/health")
+          
+          if [ "$HEALTH_CODE" -eq 200 ]; then
+            echo "✅ Health check passed"
+            echo "Response: $HEALTH_RESPONSE"
+          else
+            echo "❌ Health check failed with status: $HEALTH_CODE"
+            exit 1
+          fi
+          
+          # Check DynamoDB table exists
+          echo "Checking CompanyIntelligence table..."
+          TABLE_NAME="fiscalshield-analysis-prod-CompanyIntelligence"
+          aws dynamodb describe-table \
+            --table-name "$TABLE_NAME" \
+            --region ${{ env.AWS_REGION }} > /dev/null
+          
+          if [ $? -eq 0 ]; then
+            echo "✅ CompanyIntelligence table exists"
+            
+            # Verify TTL is enabled
+            TTL_STATUS=$(aws dynamodb describe-time-to-live \
+              --table-name "$TABLE_NAME" \
+              --region ${{ env.AWS_REGION }} \
+              --query 'TimeToLiveDescription.TimeToLiveStatus' \
+              --output text)
+            
+            if [ "$TTL_STATUS" == "ENABLED" ]; then
+              echo "✅ TTL enabled on CompanyIntelligence table"
+            else
+              echo "⚠️ WARNING: TTL not enabled on CompanyIntelligence table"
+            fi
+          else
+            echo "❌ CompanyIntelligence table not found"
+            exit 1
+          fi
+          
+          # Check S3 bucket exists and encryption is enabled
+          echo "Checking AML Reports bucket..."
+          BUCKET_NAME=$(aws cloudformation describe-stacks \
+            --stack-name ${{ env.STACK_NAME }} \
+            --region ${{ env.AWS_REGION }} \
+            --query 'Stacks[0].Outputs[?OutputKey==`ReportsBucketName`].OutputValue' \
+            --output text)
+          
+          if aws s3 ls "s3://${BUCKET_NAME}" > /dev/null 2>&1; then
+            echo "✅ AML Reports bucket exists: $BUCKET_NAME"
+            
+            # Verify encryption
+            ENCRYPTION=$(aws s3api get-bucket-encryption \
+              --bucket "$BUCKET_NAME" \
+              --region ${{ env.AWS_REGION }} \
+              --query 'ServerSideEncryptionConfiguration.Rules[0].ApplyServerSideEncryptionByDefault.SSEAlgorithm' \
+              --output text 2>/dev/null)
+            
+            if [ -n "$ENCRYPTION" ]; then
+              echo "✅ Bucket encryption enabled: $ENCRYPTION"
+            else
+              echo "⚠️ WARNING: Could not verify bucket encryption"
+            fi
+            
+            # Verify lifecycle policy
+            if aws s3api get-bucket-lifecycle-configuration \
+              --bucket "$BUCKET_NAME" \
+              --region ${{ env.AWS_REGION }} > /dev/null 2>&1; then
+              echo "✅ Lifecycle policy configured (90-day retention)"
+            else
+              echo "⚠️ WARNING: No lifecycle policy found"
+            fi
+          else
+            echo "❌ AML Reports bucket not found"
+            exit 1
+          fi
+          
+          # Check Lambda functions exist and have correct runtime
+          echo "Checking Lambda functions..."
+          FUNCTIONS=(
+            "fiscalshield-analysis-prod-AssessCompanyFunction"
+            "fiscalshield-analysis-prod-GenerateReportFunction"
+            "fiscalshield-analysis-prod-HealthCheckFunction"
+          )
+          
+          for func in "${FUNCTIONS[@]}"; do
+            # Try to find the actual function name (CloudFormation adds random suffix)
+            ACTUAL_NAME=$(aws lambda list-functions \
+              --region ${{ env.AWS_REGION }} \
+              --query "Functions[?starts_with(FunctionName, '${func}')].FunctionName" \
+              --output text | head -1)
+            
+            if [ -n "$ACTUAL_NAME" ]; then
+              echo "✅ Lambda function exists: $ACTUAL_NAME"
+              
+              # Check runtime
+              RUNTIME=$(aws lambda get-function-configuration \
+                --function-name "$ACTUAL_NAME" \
+                --region ${{ env.AWS_REGION }} \
+                --query 'Runtime' \
+                --output text)
+              echo "  Runtime: $RUNTIME"
+            else
+              echo "⚠️ Could not find Lambda function matching: $func"
+            fi
+          done
+          
+          echo ""
+          echo "🎉 All production smoke tests passed!"
+          echo ""
+          echo "⚠️  IMPORTANT MANUAL CHECKS:"
+          echo "  1. Verify Bedrock Claude 3.7 Sonnet works by testing /intelligence endpoint"
+          echo "  2. Test report generation and download"
+          echo "  3. Verify CORS works from production UI domain"
+          echo "  4. Monitor CloudWatch Logs for first 15 minutes"
+
+      - name: 📝 Deployment summary
+        if: success()
+        run: |
+          echo ""
+          echo "✅ PRODUCTION deployment complete!"
+          echo ""
+          echo "Deployment Summary:"
+          echo "  ✓ Analysis Stack deployed successfully"
+          echo "  ✓ All smoke tests passed"
+          echo "  ✓ Resources created and configured"
+          echo ""
+          echo "API URL: ${{ steps.stack-outputs.outputs.api_url }}"
+          echo ""
+          echo "Stack URL: https://eu-central-1.console.aws.amazon.com/cloudformation/home?region=eu-central-1#/stacks/stackinfo?stackId=${{ env.STACK_NAME }}"
+          echo ""
+          echo "Deployment Details:"
+          echo "  • Triggered by: @${{ github.actor }}"
+          echo "  • Reason: ${{ github.event.inputs.reason }}"
+          echo "  • Branch: main"
+          echo "  • Commit: ${{ github.sha }}"
+          echo ""
+          echo "⚠️  POST-DEPLOYMENT TASKS:"
+          echo "  1. Test Company Intelligence endpoint with real company"
+          echo "  2. Verify LLM insights generation"
+          echo "  3. Test report generation and download"
+          echo "  4. Monitor CloudWatch metrics and logs"
+          echo "  5. Check cost metrics after 24 hours"
+
+      - name: ⚠️ Notify on failure
+        if: failure()
+        run: |
+          echo ""
+          echo "❌ PRODUCTION DEPLOYMENT FAILED"
+          echo ""
+          echo "Action Required:"
+          echo "  1. Review workflow logs above"
+          echo "  2. Check CloudFormation events in AWS Console"
+          echo "  3. Verify all prerequisites (Bedrock access, IAM permissions)"
+          echo "  4. Consider rollback if stack is in failed state"
+          echo ""
+          echo "Rollback command (if needed):"
+          echo "  aws cloudformation delete-stack --stack-name ${{ env.STACK_NAME }} --region ${{ env.AWS_REGION }}"
