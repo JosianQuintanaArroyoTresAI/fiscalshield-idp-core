@@ -365,8 +365,13 @@ def extract_companies_house_flags(ch_data: dict) -> list:
         })
     
     # Check for disqualified directors
-    if officers.get('items'):
-        for officer in officers.get('items', []):
+    # Officers data structure: { "active_officers": [...], "resigned_officers": [...] }
+    active_officers = officers.get('active_officers', [])
+    resigned_officers = officers.get('resigned_officers', [])
+    all_officers = active_officers + resigned_officers
+    
+    if all_officers:
+        for officer in all_officers:
             if officer.get('disqualifications'):
                 flags.append({
                     'flag_type': 'disqualified_director',
@@ -388,7 +393,13 @@ def build_intelligence_report(company_number: str, company_data: dict, risk_asse
     
     # Extract key metrics
     company_profile = ch_data.get('company_profile', {})
-    officers = ch_data.get('officers', {}).get('items', [])
+    officers_data = ch_data.get('officers', {})
+    
+    # Officers data structure from Data Collection Stack:
+    # { "active_officers": [...], "resigned_officers": [...], "active_count": N }
+    active_officers = officers_data.get('active_officers', [])
+    resigned_officers = officers_data.get('resigned_officers', [])
+    all_officers = active_officers + resigned_officers
     
     intelligence = {
         'success': True,
@@ -410,9 +421,9 @@ def build_intelligence_report(company_number: str, company_data: dict, risk_asse
         
         # Governance
         'governance': {
-            'total_officers': len(officers),
-            'active_officers': len([o for o in officers if o.get('resigned_on') is None]),
-            'director_stability': 'good' if len(officers) > 0 else 'unknown',
+            'total_officers': len(all_officers),
+            'active_officers': len(active_officers),
+            'director_stability': 'good' if len(all_officers) > 0 else 'unknown',
             'company_status': company_profile.get('company_status', 'unknown'),
             'company_type': company_profile.get('type', 'unknown')
         },
