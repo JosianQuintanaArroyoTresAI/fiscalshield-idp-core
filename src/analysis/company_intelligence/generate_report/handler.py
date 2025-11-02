@@ -442,6 +442,18 @@ def lambda_handler(event, context):
     try:
         print(f"Event: {json.dumps(event)}")
         
+        # Handle OPTIONS request for CORS
+        if event.get('httpMethod') == 'OPTIONS':
+            return {
+                'statusCode': 200,
+                'headers': {
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
+                    'Access-Control-Allow-Methods': 'POST,OPTIONS'
+                },
+                'body': ''
+            }
+        
         # Extract company number from path parameters
         company_number = event.get('pathParameters', {}).get('company_number')
         
