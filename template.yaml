@@ -5498,6 +5498,7 @@ Resources:
                   - !GetAtt DiscoveryUploadResolverFunction.Arn
                   - !GetAtt RegisterUserCompanyFunction.Arn
                   - !GetAtt ListUserCompaniesFunction.Arn
+                  - !GetAtt DeleteUserCompanyFunction.Arn
 
   # Lambda function for Create Document resolver
   CreateDocumentResolverFunction:
