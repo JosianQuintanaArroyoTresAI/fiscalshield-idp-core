@@ -58,6 +58,9 @@ ALL_FUNCTIONS=(
     "AssessmentFunction:fiscalshield-idp-dev-PATTERN2STACK-19EURLXCA5XXH:patterns/pattern-2/.aws-sam/build/AssessmentFunction"
     "ProcessResultsFunction:fiscalshield-idp-dev-PATTERN2STACK-19EURLXCA5XXH:patterns/pattern-2/.aws-sam/build/ProcessResultsFunction"
     "SummarizationFunction:fiscalshield-idp-dev-PATTERN2STACK-19EURLXCA5XXH:patterns/pattern-2/.aws-sam/build/SummarizationFunction"
+    # Analysis Stack Functions
+    "AssessCompanyFunction:fiscalshield-analysis-dev:stacks/analysis/.aws-sam/build/AssessCompanyFunction"
+    "HealthCheckFunction:fiscalshield-analysis-dev:stacks/analysis/.aws-sam/build/HealthCheckFunction"
     # Add more as your project grows:
     # "DiscoveryUploadResolverFunction::.aws-sam/build/DiscoveryUploadResolverFunction"
     # "UpdateConfigurationFunction::.aws-sam/build/UpdateConfigurationFunction"
