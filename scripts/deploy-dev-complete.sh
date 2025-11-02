@@ -89,11 +89,15 @@ echo ""
 if [ $DEPLOY_EXIT_CODE -eq 0 ]; then
     echo "Waiting for CloudFormation stack to complete..."
     echo "This may take 15-20 minutes..."
-    aws cloudformation wait stack-update-complete --stack-name fiscalshield-idp-dev --region eu-central-1
+    
+    # Try update wait first, fall back to create wait
+    aws cloudformation wait stack-update-complete --stack-name fiscalshield-idp-dev --region eu-central-1 2>/dev/null || \
+    aws cloudformation wait stack-create-complete --stack-name fiscalshield-idp-dev --region eu-central-1
+    
     if [ $? -eq 0 ]; then
-        echo -e "${GREEN}✓ CloudFormation stack update completed successfully${NC}"
+        echo -e "${GREEN}✓ CloudFormation stack completed successfully${NC}"
     else
-        echo -e "${RED}✗ CloudFormation stack update failed or timed out${NC}"
+        echo -e "${RED}✗ CloudFormation stack failed or timed out${NC}"
         echo -e "${YELLOW}You can check the status with:${NC}"
         echo "  aws cloudformation describe-stacks --stack-name fiscalshield-idp-dev --region eu-central-1"
         exit 1
@@ -124,6 +128,67 @@ echo "Deployment Summary:"
 echo "  ✓ Artifacts built and published to S3"
 echo "  ✓ CloudFormation stack deployed/updated"
 echo "  ✓ Lambda functions force-updated with latest code"
+echo ""
+
+# ============================================================================
+# VERIFICATION: EU MODELS CHECK
+# ============================================================================
+echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${BLUE}Verifying EU Model Configuration${NC}"
+echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+
+STACK_NAME="fiscalshield-idp-dev"
+REGION="eu-central-1"
+
+# Get Configuration Table name from stack
+CONFIG_TABLE=$(aws cloudformation list-stack-resources \
+  --stack-name "$STACK_NAME" \
+  --region "$REGION" \
+  --query 'StackResourceSummaries[?LogicalResourceId==`ConfigurationTable`].PhysicalResourceId' \
+  --output text 2>/dev/null)
+
+if [ ! -z "$CONFIG_TABLE" ]; then
+  echo "📥 Checking model configuration in DynamoDB..."
+  
+  # Get current configuration
+  MODELS=$(aws dynamodb get-item \
+    --table-name "$CONFIG_TABLE" \
+    --key '{"Configuration": {"S": "Default"}}' \
+    --region "$REGION" \
+    --query 'Item.{classification: classification.M.model.S, extraction: extraction.M.model.S, summarization: summarization.M.model.S}' \
+    --output json 2>/dev/null)
+  
+  if [ ! -z "$MODELS" ] && [ "$MODELS" != "null" ]; then
+    # Parse and check models
+    CLASSIFICATION=$(echo "$MODELS" | python3 -c "import sys, json; data=json.load(sys.stdin); print(data.get('classification', ''))" 2>/dev/null)
+    EXTRACTION=$(echo "$MODELS" | python3 -c "import sys, json; data=json.load(sys.stdin); print(data.get('extraction', ''))" 2>/dev/null)
+    SUMMARIZATION=$(echo "$MODELS" | python3 -c "import sys, json; data=json.load(sys.stdin); print(data.get('summarization', ''))" 2>/dev/null)
+    
+    ALL_EU=true
+    if [[ ! $CLASSIFICATION == eu.* ]]; then ALL_EU=false; fi
+    if [[ ! $EXTRACTION == eu.* ]]; then ALL_EU=false; fi
+    if [[ ! $SUMMARIZATION == eu.* ]]; then ALL_EU=false; fi
+    
+    if [ "$ALL_EU" = true ]; then
+      echo -e "${GREEN}✓ All models are EU-based:${NC}"
+      echo "  - Classification: $CLASSIFICATION"
+      echo "  - Extraction: $EXTRACTION"
+      echo "  - Summarization: $SUMMARIZATION"
+    else
+      echo -e "${YELLOW}⚠ Non-EU models detected!${NC}"
+      echo "  - Classification: $CLASSIFICATION"
+      echo "  - Extraction: $EXTRACTION"
+      echo "  - Summarization: $SUMMARIZATION"
+      echo -e "${YELLOW}  To fix: python3 reload_config_from_s3.py${NC}"
+    fi
+  else
+    echo -e "${YELLOW}⚠ Could not retrieve model configuration${NC}"
+  fi
+else
+  echo -e "${YELLOW}⚠ ConfigurationTable not found, skipping verification${NC}"
+fi
+
 echo ""
 echo "Next Steps:"
 echo "  1. Test document upload via Web UI"

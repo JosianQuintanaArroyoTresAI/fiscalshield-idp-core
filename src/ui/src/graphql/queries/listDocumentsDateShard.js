@@ -3,8 +3,8 @@
 import gql from 'graphql-tag';
 
 export default gql`
-  query Query($date: AWSDate, $shard: Int) {
-    listDocumentsDateShard(date: $date, shard: $shard) {
+  query Query($date: AWSDate, $shard: Int, $companyNumber: String) {
+    listDocumentsDateShard(date: $date, shard: $shard, companyNumber: $companyNumber) {
       Documents {
         ObjectKey
         PK

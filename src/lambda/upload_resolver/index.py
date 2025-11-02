@@ -99,6 +99,8 @@ def handler(event, context):
         user_prefix = arguments.get(
             "prefix", ""
         )  # User-provided subdirectory (optional)
+        company_number = arguments.get("companyNumber")  # Company isolation
+        company_name = arguments.get("companyName")  # Company name for metadata
 
         if not file_name:
             raise ValueError("fileName is required")
@@ -129,6 +131,26 @@ def handler(event, context):
 
         logger.info(f"User-scoped upload path: {object_key}")
 
+        # Prepare metadata fields for S3 object
+        metadata_fields = {"Content-Type": content_type}
+        metadata_conditions = [
+            ["content-length-range", 1, 104857600],  # 1 Byte to 100 MB
+            {"Content-Type": content_type},
+        ]
+
+        # Add company metadata if provided (for company isolation)
+        if company_number:
+            metadata_fields["x-amz-meta-company-number"] = company_number
+            metadata_conditions.append(
+                {"x-amz-meta-company-number": company_number}
+            )
+            logger.info(f"Adding company number metadata: {company_number}")
+
+        if company_name:
+            metadata_fields["x-amz-meta-company-name"] = company_name
+            metadata_conditions.append({"x-amz-meta-company-name": company_name})
+            logger.info(f"Adding company name metadata: {company_name}")
+
         # Generate a presigned POST URL for uploading
         logger.info(
             f"Generating presigned POST data for: {object_key} with content type: {content_type}"
@@ -137,11 +159,8 @@ def handler(event, context):
         presigned_post = s3_client.generate_presigned_post(
             Bucket=bucket_name,
             Key=object_key,
-            Fields={"Content-Type": content_type},
-            Conditions=[
-                ["content-length-range", 1, 104857600],  # 1 Byte to 100 MB
-                {"Content-Type": content_type},
-            ],
+            Fields=metadata_fields,
+            Conditions=metadata_conditions,
             ExpiresIn=900,  # 15 minutes
         )
 

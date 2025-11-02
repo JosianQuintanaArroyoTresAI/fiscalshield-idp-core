@@ -67,6 +67,10 @@ class DocumentAppSyncService:
         if document.user_id:
             input_data["UserId"] = document.user_id
 
+        # Add CompanyNumber for company-based isolation
+        if document.company_number:
+            input_data["CompanyNumber"] = document.company_number
+
         return input_data
 
     def _document_to_update_input(self, document: Document) -> Dict[str, Any]:

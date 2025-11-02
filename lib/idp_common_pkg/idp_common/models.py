@@ -221,6 +221,8 @@ class Document:
     input_key: Optional[str] = None  # S3 key of the input document
     output_bucket: Optional[str] = None  # S3 bucket for processing outputs
     user_id: Optional[str] = None  # Cognito user ID for multi-tenant isolation
+    company_number: Optional[str] = None  # Company number for company-based isolation
+    company_name: Optional[str] = None  # Company name for display purposes
 
     # Processing state and timing
     status: Status = Status.QUEUED

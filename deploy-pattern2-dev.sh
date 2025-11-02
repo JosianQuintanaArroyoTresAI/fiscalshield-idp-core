@@ -72,7 +72,7 @@ if [[ "$STACK_EXISTS" == "DOES_NOT_EXIST" ]]; then
         ParameterKey=DocumentKnowledgeBase,ParameterValue="DISABLED" \
         ParameterKey=MaxConcurrentWorkflows,ParameterValue="10" \
         ParameterKey=DataRetentionInDays,ParameterValue="30" \
-        ParameterKey=EnableHITL,ParameterValue="true" \
+        ParameterKey=EnableHITL,ParameterValue="false" \
         ParameterKey=EvaluationAutoEnabled,ParameterValue="true" \
         ParameterKey=LogLevel,ParameterValue="INFO" \
         ParameterKey=ErrorThreshold,ParameterValue="5" \
@@ -113,7 +113,7 @@ else
         ParameterKey=DocumentKnowledgeBase,ParameterValue="DISABLED" \
         ParameterKey=MaxConcurrentWorkflows,ParameterValue="10" \
         ParameterKey=DataRetentionInDays,ParameterValue="30" \
-        ParameterKey=EnableHITL,ParameterValue="true" \
+        ParameterKey=EnableHITL,ParameterValue="false" \
         ParameterKey=EvaluationAutoEnabled,ParameterValue="true" \
         ParameterKey=LogLevel,ParameterValue="INFO" \
         ParameterKey=ErrorThreshold,ParameterValue="5" \

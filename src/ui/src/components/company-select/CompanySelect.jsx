@@ -17,18 +17,15 @@ import {
   ExpandableSection,
   Badge,
   Table,
+  Grid,
 } from '@awsui/components-react';
 import { Logger } from 'aws-amplify';
 
-import {
-  checkDataCollectionHealth,
-  lookupCompany,
-  triggerBackgroundResearch,
-  lookupOfficers,
-  checkFilingHistory,
-} from '../../services/dataCollection';
+import { checkDataCollectionHealth, lookupCompany, triggerBackgroundResearch } from '../../services/dataCollection';
+import { fetchUserCompanies, registerCompany, deleteCompany } from '../../services/userCompanies';
+import CompanyCard from '../company-card/CompanyCard';
 import useAppContext from '../../contexts/app';
-import { DOCUMENTS_PATH } from '../../routes/constants';
+import { DOCUMENTS_PATH, COMPANY_INTELLIGENCE_PATH } from '../../routes/constants';
 
 import '@awsui/global-styles/index.css';
 
@@ -46,15 +43,14 @@ const CompanySelect = () => {
   const [isDataCollectionAvailable, setIsDataCollectionAvailable] = useState(null);
   const [healthCheckComplete, setHealthCheckComplete] = useState(false);
 
-  // Officers state
-  const [officersData, setOfficersData] = useState(null);
-  const [officersLoading, setOfficersLoading] = useState(false);
-  const [officersError, setOfficersError] = useState(null);
+  // User companies state
+  const [userCompanies, setUserCompanies] = useState([]);
+  const [loadingCompanies, setLoadingCompanies] = useState(true);
+  const [companiesError, setCompaniesError] = useState(null);
 
-  // Filing history state
-  const [filingHistory, setFilingHistory] = useState(null);
-  const [filingLoading, setFilingLoading] = useState(false);
-  const [showFilingHistory, setShowFilingHistory] = useState(false);
+  // Officers state
+  // Research status message state
+  const [researchStatusMessage, setResearchStatusMessage] = useState('');
 
   // Check if Data Collection Stack is available on mount
   useEffect(() => {
@@ -74,6 +70,26 @@ const CompanySelect = () => {
     checkHealth();
   }, []);
 
+  // Load user's registered companies on mount
+  useEffect(() => {
+    const loadUserCompanies = async () => {
+      try {
+        setLoadingCompanies(true);
+        setCompaniesError(null);
+        const companies = await fetchUserCompanies();
+        setUserCompanies(companies);
+        logger.debug(`Loaded ${companies.length} companies for user`);
+      } catch (err) {
+        logger.error('Error loading user companies:', err);
+        setCompaniesError('Failed to load your registered companies');
+      } finally {
+        setLoadingCompanies(false);
+      }
+    };
+
+    loadUserCompanies();
+  }, []);
+
   const handleCompanyNumberChange = (event) => {
     const { value } = event.detail;
     // Clean the input (remove spaces, ensure uppercase)
@@ -83,8 +99,6 @@ const CompanySelect = () => {
     setCompanyNumber(sanitized);
     setCompanyData(null);
     setError('');
-    setOfficersData(null);
-    setFilingHistory(null);
   };
 
   const handleSearch = async () => {
@@ -96,8 +110,6 @@ const CompanySelect = () => {
     setIsLoading(true);
     setError('');
     setCompanyData(null);
-    setOfficersData(null);
-    setFilingHistory(null);
 
     try {
       const data = await lookupCompany(companyNumber);
@@ -115,72 +127,29 @@ const CompanySelect = () => {
     }
   };
 
-  const handleCheckOfficers = async () => {
-    if (!companyNumber) {
-      setOfficersError('No company number available');
-      return;
-    }
-
-    setOfficersLoading(true);
-    setOfficersError(null);
-    setOfficersData(null);
-
-    try {
-      const result = await lookupOfficers(companyNumber);
-      logger.debug('Officers data:', result);
-
-      if (result.total_officers !== undefined) {
-        setOfficersData(result);
-      } else {
-        setOfficersError('Failed to fetch officers data');
-      }
-    } catch (err) {
-      logger.error('Officers check failed:', err);
-
-      if (err.message.includes('404')) {
-        setOfficersError('No officers found for this company');
-      } else {
-        setOfficersError('Failed to check officers');
-      }
-    } finally {
-      setOfficersLoading(false);
-    }
-  };
-
-  const handleCheckFilingHistory = async () => {
-    if (!companyNumber) {
-      setError('No company number available');
-      return;
-    }
-
-    // Validate company number format
-    const cleanCompanyNumber = companyNumber.trim();
-    if (cleanCompanyNumber.includes(' ') || !/^[A-Z0-9]+$/.test(cleanCompanyNumber)) {
-      setError(`Invalid company number format: ${cleanCompanyNumber}. Expected alphanumeric ID.`);
-      return;
-    }
-
-    setFilingLoading(true);
-    setError(null);
-
-    try {
-      const response = await checkFilingHistory(cleanCompanyNumber);
-      logger.debug('Filing history response:', response);
-      setFilingHistory(response);
-      setShowFilingHistory(true);
-    } catch (err) {
-      logger.error('Filing history check failed:', err);
-      setError('Failed to fetch filing history');
-    } finally {
-      setFilingLoading(false);
-    }
-  };
-
   const handleConfirmAndResearch = async () => {
     if (!companyData) return;
 
-    // Store company selection (would be saved to DynamoDB via API)
-    // For now, we'll store in localStorage as temporary solution
+    setIsResearching(true);
+
+    // Cycling status messages for elegant loading experience
+    const statusMessages = [
+      'Verifying company information...',
+      'Analyzing corporate structure...',
+      'Running compliance checks...',
+      'Preparing your workspace...',
+    ];
+
+    let messageIndex = 0;
+    setResearchStatusMessage(statusMessages[0]);
+
+    // Cycle through messages every 700ms
+    const messageInterval = setInterval(() => {
+      messageIndex = (messageIndex + 1) % statusMessages.length;
+      setResearchStatusMessage(statusMessages[messageIndex]);
+    }, 700);
+
+    // Store company selection
     const companyContext = {
       company_number: companyData.company_number,
       company_name: companyData.company_name,
@@ -191,15 +160,23 @@ const CompanySelect = () => {
     localStorage.setItem('active_company', JSON.stringify(companyContext));
     logger.debug('Company context saved:', companyContext);
 
+    // Register company in UserProfileTable for persistent storage
+    try {
+      await registerCompany(companyData.company_number, companyData.company_name);
+      logger.debug('Company registered in user profile');
+    } catch (err) {
+      logger.error('Failed to register company:', err);
+      // Non-blocking error - still proceed with localStorage fallback
+    }
+
     // If Data Collection Stack is available, trigger background research
     if (isDataCollectionAvailable) {
-      setIsResearching(true);
       try {
         await triggerBackgroundResearch({
           company_number: companyData.company_number,
           company_name: companyData.company_name,
           user_id: user?.username || 'unknown',
-          client_id: user?.username || 'unknown', // TODO: Replace with actual client_id
+          client_id: user?.username || 'unknown',
         });
         logger.debug('Background research initiated');
       } catch (err) {
@@ -208,10 +185,11 @@ const CompanySelect = () => {
       }
     }
 
-    // Redirect to documents page
+    // Redirect after 2.5 seconds of elegant loading
     setTimeout(() => {
+      clearInterval(messageInterval);
       history.push(DOCUMENTS_PATH);
-    }, 1000);
+    }, 2500);
   };
 
   const handleKeyPress = (event) => {
@@ -332,175 +310,6 @@ const CompanySelect = () => {
     );
   };
 
-  const renderOfficersAnalysis = () => {
-    if (!officersData) return null;
-
-    let alertType = 'success';
-    if (officersData.risk_level === 'HIGH') {
-      alertType = 'error';
-    } else if (officersData.risk_level === 'MEDIUM') {
-      alertType = 'warning';
-    }
-
-    return (
-      <SpaceBetween size="m">
-        <Alert type={alertType} header={`${officersData.risk_level} RISK (Score: ${officersData.risk_score})`}>
-          <SpaceBetween size="xs">
-            <div>
-              <strong>Total Directors:</strong> {officersData.total_officers} ({officersData.active_officers} active)
-            </div>
-
-            {officersData.risk_indicators && officersData.risk_indicators.length > 0 && (
-              <div>
-                <strong>Risk Factors:</strong>
-                <ul style={{ marginTop: '5px', marginBottom: '0', paddingLeft: '20px' }}>
-                  {officersData.risk_indicators.map((indicator) => (
-                    <li key={indicator}>{indicator}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </SpaceBetween>
-        </Alert>
-
-        {officersData.officers && officersData.officers.length > 0 && (
-          <ExpandableSection
-            headerText={`Directors Details (${officersData.officers.length})`}
-            defaultExpanded={officersData.risk_level === 'HIGH'}
-          >
-            {/* eslint-disable react/no-unstable-nested-components */}
-            <Table
-              columnDefinitions={[
-                {
-                  id: 'name',
-                  header: 'Name',
-                  cell: (officer) => (
-                    <>
-                      {officer.name}
-                      {officer.risk_flag && <span style={{ color: '#d13212', marginLeft: '5px' }}>⚠️</span>}
-                    </>
-                  ),
-                },
-                {
-                  id: 'role',
-                  header: 'Role',
-                  cell: (officer) => officer.officer_role,
-                },
-                {
-                  id: 'appointed',
-                  header: 'Appointed',
-                  cell: (officer) => officer.appointed_on || '-',
-                },
-                {
-                  id: 'status',
-                  header: 'Status',
-                  cell: (officer) => (
-                    <StatusIndicator type={officer.is_active ? 'success' : 'stopped'}>
-                      {officer.is_active ? 'Active' : 'Resigned'}
-                    </StatusIndicator>
-                  ),
-                },
-                {
-                  id: 'nationality',
-                  header: 'Nationality',
-                  cell: (officer) => officer.nationality || '-',
-                },
-              ]}
-              items={officersData.officers}
-              loadingText="Loading officers..."
-              sortingDisabled
-              empty={
-                <Box textAlign="center" color="inherit">
-                  <b>No officers</b>
-                </Box>
-              }
-            />
-            {/* eslint-enable react/no-unstable-nested-components */}
-          </ExpandableSection>
-        )}
-      </SpaceBetween>
-    );
-  };
-
-  const renderFilingHistory = () => {
-    if (!filingHistory) return null;
-
-    return (
-      <Container header={<Header variant="h3">Filing History Analysis</Header>}>
-        <SpaceBetween size="m">
-          <ColumnLayout columns={3}>
-            <Box>
-              <Box variant="awsui-key-label">Compliance Score</Box>
-              <StatusIndicator type={getScoreType(filingHistory.compliance_score)}>
-                {filingHistory.compliance_score}/10
-              </StatusIndicator>
-            </Box>
-            <Box>
-              <Box variant="awsui-key-label">Total Filings</Box>
-              <div>{filingHistory.total_filings}</div>
-            </Box>
-            <Box>
-              <Box variant="awsui-key-label">Overdue Filings</Box>
-              <div>{filingHistory.overdue_filings}</div>
-            </Box>
-          </ColumnLayout>
-
-          {filingHistory.risk_indicators?.length > 0 && (
-            <Alert type="warning" header="Risk Indicators">
-              <ul style={{ margin: 0, paddingLeft: '20px' }}>
-                {filingHistory.risk_indicators.map((indicator) => (
-                  <li key={indicator}>{indicator}</li>
-                ))}
-              </ul>
-            </Alert>
-          )}
-
-          {filingHistory.recent_filings?.length > 0 && (
-            /* eslint-disable react/no-unstable-nested-components */
-            <Table
-              columnDefinitions={[
-                {
-                  id: 'filing_type',
-                  header: 'Filing Type',
-                  cell: (item) => item.filing_type || 'N/A',
-                },
-                {
-                  id: 'filing_date',
-                  header: 'Filed Date',
-                  cell: (item) => item.filing_date || 'N/A',
-                },
-                {
-                  id: 'status',
-                  header: 'Status',
-                  cell: (item) => item.status || 'Filed',
-                },
-              ]}
-              items={filingHistory.recent_filings}
-              loadingText="Loading filings..."
-              sortingDisabled
-              empty={
-                <Box textAlign="center" color="inherit">
-                  <b>No filings</b>
-                  <Box padding={{ bottom: 's' }} variant="p" color="inherit">
-                    No filing history available for this company.
-                  </Box>
-                </Box>
-              }
-            />
-            /* eslint-enable react/no-unstable-nested-components */
-          )}
-
-          {filingHistory.next_due_date && (
-            <Box>
-              <Box variant="awsui-key-label">Next Filing Due</Box>
-              <div>{new Date(filingHistory.next_due_date).toLocaleDateString('en-GB')}</div>
-            </Box>
-          )}
-        </SpaceBetween>
-      </Container>
-    );
-  };
-
   // Admin bypass function
   const handleAdminBypass = () => {
     logger.info('Admin bypass: Skipping company selection');
@@ -517,9 +326,109 @@ const CompanySelect = () => {
     history.push(DOCUMENTS_PATH);
   };
 
+  // Handle viewing documents for a registered company
+  const handleViewCompanyDocuments = (company) => {
+    logger.info(`Viewing documents for company: ${company.company_number}`);
+
+    // Store company context
+    const companyContext = {
+      company_number: company.company_number,
+      company_name: company.company_name,
+      selected_at: new Date().toISOString(),
+      user_id: user?.username || 'unknown',
+      from_registered: true,
+    };
+
+    localStorage.setItem('active_company', JSON.stringify(companyContext));
+    logger.debug('Company context saved:', companyContext);
+
+    // Navigate to documents page
+    history.push(DOCUMENTS_PATH);
+  };
+
+  // Handle viewing intelligence for a registered company
+  const handleViewCompanyIntelligence = (company) => {
+    logger.info(`Viewing intelligence for company: ${company.company_number}`);
+
+    // Store company context
+    const companyContext = {
+      company_number: company.company_number,
+      company_name: company.company_name,
+      selected_at: new Date().toISOString(),
+      user_id: user?.username || 'unknown',
+      from_registered: true,
+    };
+
+    localStorage.setItem('active_company', JSON.stringify(companyContext));
+    logger.debug('Company context saved:', companyContext);
+
+    // Navigate to intelligence page
+    const intelligencePath = COMPANY_INTELLIGENCE_PATH.replace(':companyNumber', company.company_number);
+    history.push(intelligencePath);
+  };
+
+  // Handle deleting a company
+  const handleDeleteCompany = async (company) => {
+    logger.info(`Deleting company: ${company.company_number}`);
+
+    try {
+      setLoadingCompanies(true);
+      await deleteCompany(company.company_number);
+
+      // Refresh companies list
+      const companies = await fetchUserCompanies();
+      setUserCompanies(companies);
+
+      logger.debug('Company deleted and list refreshed');
+    } catch (error) {
+      logger.error('Error deleting company:', error);
+      setCompaniesError(`Failed to delete company: ${error.message}`);
+    } finally {
+      setLoadingCompanies(false);
+    }
+  };
+
   return (
     <Box padding={{ top: 'xxxl' }}>
       <SpaceBetween size="l">
+        {/* Registered Companies Section */}
+        {userCompanies && userCompanies.length > 0 && (
+          <Container
+            header={
+              <Header variant="h2" description="Companies you have registered documents for">
+                Your Registered Companies
+              </Header>
+            }
+          >
+            {loadingCompanies && (
+              <Box textAlign="center" padding={{ vertical: 'l' }}>
+                <Spinner size="large" />
+                <Box variant="p" padding={{ top: 's' }}>
+                  Loading your companies...
+                </Box>
+              </Box>
+            )}
+            {!loadingCompanies && companiesError && (
+              <Alert type="error" header="Failed to load companies">
+                {companiesError}
+              </Alert>
+            )}
+            {!loadingCompanies && !companiesError && (
+              <Grid gridDefinition={[{ colspan: 4 }, { colspan: 4 }, { colspan: 4 }]}>
+                {userCompanies.map((company) => (
+                  <CompanyCard
+                    key={company.company_number}
+                    company={company}
+                    onViewDocuments={handleViewCompanyDocuments}
+                    onViewIntelligence={handleViewCompanyIntelligence}
+                    onDelete={handleDeleteCompany}
+                  />
+                ))}
+              </Grid>
+            )}
+          </Container>
+        )}
+
         <Container
           header={
             <Header
@@ -531,7 +440,7 @@ const CompanySelect = () => {
                 </Button>
               }
             >
-              Select Your Company
+              {userCompanies && userCompanies.length > 0 ? 'Register Another Company' : 'Select Your Company'}
             </Header>
           }
         >
@@ -623,70 +532,13 @@ const CompanySelect = () => {
                   {/* Risk Analysis Section */}
                   {renderRiskAnalysis()}
 
-                  {/* Directors Risk Analysis Section */}
-                  {isDataCollectionAvailable && (
-                    <div style={{ borderTop: '1px solid #eee', paddingTop: '16px' }}>
-                      <Header
-                        variant="h3"
-                        description="Check company directors and risk indicators"
-                        actions={
-                          <Button
-                            variant="primary"
-                            loading={officersLoading}
-                            onClick={handleCheckOfficers}
-                            disabled={officersLoading}
-                            iconName="search"
-                          >
-                            {officersData ? 'Refresh Directors' : 'Check Directors'}
-                          </Button>
-                        }
-                      >
-                        Directors Risk Analysis
-                      </Header>
-
-                      {officersError && (
-                        <Alert type="warning" header="Directors Check">
-                          {officersError}
-                        </Alert>
-                      )}
-
-                      {officersData && renderOfficersAnalysis()}
-                    </div>
-                  )}
-
-                  {/* Filing History Section */}
-                  {isDataCollectionAvailable && (
-                    <div style={{ borderTop: '1px solid #eee', paddingTop: '16px' }}>
-                      <SpaceBetween size="s">
-                        <SpaceBetween direction="horizontal" size="s">
-                          <Button
-                            variant="normal"
-                            loading={filingLoading}
-                            onClick={handleCheckFilingHistory}
-                            iconName="search"
-                          >
-                            {filingLoading ? 'Analyzing Filing History...' : 'Check Filing History'}
-                          </Button>
-
-                          {showFilingHistory && filingHistory && (
-                            <Button variant="link" onClick={() => setShowFilingHistory(!showFilingHistory)}>
-                              {showFilingHistory ? 'Hide' : 'Show'} Filing Analysis
-                            </Button>
-                          )}
-                        </SpaceBetween>
-
-                        {showFilingHistory && renderFilingHistory()}
-                      </SpaceBetween>
-                    </div>
-                  )}
-
-                  <Box textAlign="center" padding={{ top: 'm' }}>
-                    <SpaceBetween size="xs" direction="vertical">
+                  <Box textAlign="center" padding={{ top: 'l' }}>
+                    <SpaceBetween size="m" direction="vertical">
                       {isResearching ? (
                         <Box>
                           <Spinner size="large" />
-                          <Box variant="p" padding={{ top: 's' }}>
-                            Initiating background research...
+                          <Box variant="p" padding={{ top: 's' }} fontSize="body-m" fontWeight="normal">
+                            {researchStatusMessage}
                           </Box>
                         </Box>
                       ) : (
@@ -697,13 +549,19 @@ const CompanySelect = () => {
                             iconAlign="right"
                             iconName="arrow-right"
                           >
-                            {isDataCollectionAvailable
-                              ? 'Confirm and research company background'
-                              : 'Confirm and continue'}
+                            Begin Background Research
                           </Button>
-                          <Box variant="small" color="text-status-inactive">
-                            By confirming, you agree this is the correct company
-                          </Box>
+                          {isDataCollectionAvailable && (
+                            <Box variant="small" color="text-status-inactive">
+                              Our comprehensive verification includes: Corporate structure · Compliance screening ·
+                              Officer verification · Risk assessment
+                            </Box>
+                          )}
+                          {!isDataCollectionAvailable && (
+                            <Box variant="small" color="text-status-warning">
+                              Background research currently unavailable - you can still proceed
+                            </Box>
+                          )}
                         </>
                       )}
                     </SpaceBetween>

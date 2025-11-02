@@ -1,0 +1,528 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  FiscalShield Analysis Stack
+  
+  Provides company intelligence and risk assessment services.
+  Analyzes data from Data Collection Stack to generate comprehensive
+  company risk profiles, governance insights, and compliance assessments.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Environment Configuration"
+        Parameters:
+          - Environment
+      - Label:
+          default: "Cache Configuration"
+        Parameters:
+          - AnalysisCacheTTLHours
+      - Label:
+          default: "Monitoring Configuration"
+        Parameters:
+          - EnableXRayTracing
+          - LogRetentionDays
+
+Parameters:
+  Environment:
+    Type: String
+    Description: Deployment environment (dev, staging, prod)
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+    Default: dev
+
+  AnalysisCacheTTLHours:
+    Type: Number
+    Description: Cache TTL for analysis results in hours
+    Default: 24
+    MinValue: 1
+    MaxValue: 168
+
+  EnableXRayTracing:
+    Type: String
+    Description: Enable AWS X-Ray tracing for Lambda functions
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Default: 'true'
+
+  LogRetentionDays:
+    Type: Number
+    Description: CloudWatch Logs retention period in days
+    AllowedValues: [1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1827, 3653]
+    Default: 7
+
+Conditions:
+  IsProduction: !Equals [!Ref Environment, 'prod']
+  EnableTracing: !Equals [!Ref EnableXRayTracing, 'true']
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Timeout: 30
+    MemorySize: 256
+    Tracing: !If [EnableTracing, Active, PassThrough]
+    Environment:
+      Variables:
+        ENVIRONMENT: !Ref Environment
+        ANALYSIS_CACHE_TTL_HOURS: !Ref AnalysisCacheTTLHours
+        LOG_LEVEL: !If [IsProduction, 'INFO', 'DEBUG']
+    Tags:
+      Environment: !Ref Environment
+      Stack: fiscalshield-analysis
+      ManagedBy: CloudFormation
+
+Resources:
+  # ========================================================================
+  # S3 BUCKET - AML REPORTS
+  # ========================================================================
+
+  AMLReportsBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub 'fiscalshield-analysis-${Environment}-aml-reports-${AWS::AccountId}'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: !If [IsProduction, Enabled, Suspended]
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldReports
+            Status: Enabled
+            ExpirationInDays: 90  # Keep reports for 90 days
+            NoncurrentVersionExpirationInDays: 30
+      Tags:
+        - Key: Name
+          Value: !Sub 'fiscalshield-analysis-${Environment}-aml-reports'
+        - Key: Purpose
+          Value: Store generated AML compliance reports
+
+  # ========================================================================
+  # DYNAMODB TABLE - COMPANY INTELLIGENCE
+  # ========================================================================
+
+  CompanyIntelligenceTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Sub 'fiscalshield-analysis-${Environment}-CompanyIntelligence'
+      BillingMode: PAY_PER_REQUEST
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !If [IsProduction, true, false]
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      AttributeDefinitions:
+        - AttributeName: company_number
+          AttributeType: S
+        - AttributeName: intelligence_type_timestamp
+          AttributeType: S
+        - AttributeName: risk_level
+          AttributeType: S
+        - AttributeName: analysis_timestamp
+          AttributeType: N
+      KeySchema:
+        - AttributeName: company_number
+          KeyType: HASH
+        - AttributeName: intelligence_type_timestamp
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: risk-level-index
+          KeySchema:
+            - AttributeName: risk_level
+              KeyType: HASH
+            - AttributeName: analysis_timestamp
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: Name
+          Value: !Sub 'fiscalshield-analysis-${Environment}-CompanyIntelligence'
+        - Key: Purpose
+          Value: Store company intelligence and risk assessments
+        - Key: DataType
+          Value: Public company analysis data
+
+  # ========================================================================
+  # IAM ROLE - LAMBDA EXECUTION
+  # ========================================================================
+
+  AnalysisLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'fiscalshield-analysis-${Environment}-LambdaExecutionRole'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - !If 
+          - EnableTracing
+          - arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess
+          - !Ref AWS::NoValue
+      Policies:
+        - PolicyName: DynamoDBAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: WriteToCompanyIntelligenceTable
+                Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                Resource:
+                  - !GetAtt CompanyIntelligenceTable.Arn
+                  - !Sub '${CompanyIntelligenceTable.Arn}/index/*'
+              - Sid: ReadDataCollectionTables
+                Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                Resource:
+                  - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/fiscalshield-dc-${Environment}-CompanyEvents'
+                  - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/fiscalshield-dc-${Environment}-CompanyEvents/index/*'
+                  - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/fiscalshield-dc-${Environment}-FilingEvents'
+                  - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/fiscalshield-dc-${Environment}-FilingEvents/index/*'
+                  - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/fiscalshield-dc-${Environment}-HMRCGuidance'
+                  - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/fiscalshield-dc-${Environment}-HMRCGuidance/index/*'
+        - PolicyName: CloudWatchMetrics
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: PutMetricData
+                Effect: Allow
+                Action:
+                  - cloudwatch:PutMetricData
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    cloudwatch:namespace: FiscalShield/Analysis
+        - PolicyName: S3ReportsAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: WriteReportsToS3
+                Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:DeleteObject
+                Resource:
+                  - !Sub '${AMLReportsBucket.Arn}/*'
+              - Sid: ListReportsBucket
+                Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt AMLReportsBucket.Arn
+        - PolicyName: BedrockInvokeModel
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: InvokeClaudeForReports
+                Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                Resource:
+                  # EU Cross-region inference profile (can route to any EU region)
+                  - !Sub 'arn:aws:bedrock:*:${AWS::AccountId}:inference-profile/eu.anthropic.claude-*'
+                  # Foundation models in all EU regions (for cross-region routing)
+                  - 'arn:aws:bedrock:eu-central-1::foundation-model/anthropic.claude-*'
+                  - 'arn:aws:bedrock:eu-west-1::foundation-model/anthropic.claude-*'
+                  - 'arn:aws:bedrock:eu-west-2::foundation-model/anthropic.claude-*'
+                  - 'arn:aws:bedrock:eu-west-3::foundation-model/anthropic.claude-*'
+                  - 'arn:aws:bedrock:eu-north-1::foundation-model/anthropic.claude-*'
+                  - 'arn:aws:bedrock:eu-south-1::foundation-model/anthropic.claude-*'
+                  - 'arn:aws:bedrock:eu-south-2::foundation-model/anthropic.claude-*'
+      Tags:
+        - Key: Name
+          Value: !Sub 'fiscalshield-analysis-${Environment}-LambdaExecutionRole'
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ========================================================================
+  # CLOUDWATCH LOG GROUPS
+  # ========================================================================
+
+  AnalysisLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/fiscalshield-analysis-${Environment}'
+      RetentionInDays: !Ref LogRetentionDays
+      KmsKeyId: !If [IsProduction, !GetAtt LogsKMSKey.Arn, !Ref AWS::NoValue]
+
+  LogsKMSKey:
+    Type: AWS::KMS::Key
+    Condition: IsProduction
+    Properties:
+      Description: !Sub 'KMS key for CloudWatch Logs encryption - ${Environment}'
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: Enable IAM User Permissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action: 'kms:*'
+            Resource: '*'
+          - Sid: Allow CloudWatch Logs
+            Effect: Allow
+            Principal:
+              Service: !Sub 'logs.${AWS::Region}.amazonaws.com'
+            Action:
+              - 'kms:Encrypt'
+              - 'kms:Decrypt'
+              - 'kms:ReEncrypt*'
+              - 'kms:GenerateDataKey*'
+              - 'kms:CreateGrant'
+              - 'kms:DescribeKey'
+            Resource: '*'
+            Condition:
+              ArnLike:
+                'kms:EncryptionContext:aws:logs:arn':
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/fiscalshield-analysis-${Environment}*'
+
+  LogsKMSKeyAlias:
+    Type: AWS::KMS::Alias
+    Condition: IsProduction
+    Properties:
+      AliasName: !Sub 'alias/fiscalshield-analysis-${Environment}-logs'
+      TargetKeyId: !Ref LogsKMSKey
+
+  # ========================================================================
+  # LAMBDA FUNCTIONS
+  # ========================================================================
+
+  AssessCompanyFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'fiscalshield-analysis-${Environment}-AssessCompany'
+      Description: Assess company and generate intelligence report with risk calculation
+      CodeUri: ../../src/analysis/company_intelligence/assess_company/
+      Handler: handler.lambda_handler
+      Role: !GetAtt AnalysisLambdaRole.Arn
+      Environment:
+        Variables:
+          COMPANY_INTELLIGENCE_TABLE: !Ref CompanyIntelligenceTable
+          DATA_COLLECTION_PREFIX: !Sub 'fiscalshield-dc-${Environment}'
+      Events:
+        GetAssessment:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AnalysisApi
+            Path: /company/{company_number}/intelligence
+            Method: GET
+
+  GenerateReportFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'fiscalshield-analysis-${Environment}-GenerateReport'
+      Description: Generate professional AML CDD report using Claude via Amazon Bedrock
+      CodeUri: ../../src/analysis/company_intelligence/generate_report/
+      Handler: handler.lambda_handler
+      Role: !GetAtt AnalysisLambdaRole.Arn
+      Timeout: 120  # 2 minutes for Bedrock API calls
+      MemorySize: 512
+      Environment:
+        Variables:
+          ENVIRONMENT: !Ref Environment
+          REPORTS_BUCKET: !Ref AMLReportsBucket
+      Events:
+        GenerateReport:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AnalysisApi
+            Path: /company/{company_number}/report
+            Method: POST
+        GenerateReportOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AnalysisApi
+            Path: /company/{company_number}/report
+            Method: OPTIONS
+        DownloadReport:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AnalysisApi
+            Path: /company/{company_number}/report/{report_id}
+            Method: GET
+        DownloadReportOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AnalysisApi
+            Path: /company/{company_number}/report/{report_id}
+            Method: OPTIONS
+
+  HealthCheckFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'fiscalshield-analysis-${Environment}-HealthCheck'
+      Description: Health check endpoint for stack availability detection
+      CodeUri: ../../src/analysis/common/
+      Handler: health.lambda_handler
+      Role: !GetAtt AnalysisLambdaRole.Arn
+      Timeout: 10
+      MemorySize: 128
+      Environment:
+        Variables:
+          ENVIRONMENT: !Ref Environment
+      Events:
+        HealthCheck:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AnalysisApi
+            Path: /health
+            Method: GET
+
+  # ========================================================================
+  # API GATEWAY
+  # ========================================================================
+
+  AnalysisApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub 'fiscalshield-analysis-${Environment}-api'
+      StageName: !Ref Environment
+      Cors:
+        AllowMethods: "'GET,POST,OPTIONS'"
+        AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+        AllowOrigin: "'*'"
+      TracingEnabled: !If [EnableTracing, true, false]
+      Tags:
+        Environment: !Ref Environment
+        Stack: fiscalshield-analysis
+
+  # ========================================================================
+  # SSM PARAMETER STORE - API URL
+  # ========================================================================
+
+  ApiUrlParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub '/fiscalshield/analysis/${Environment}/api-url'
+      Description: Analysis Stack API Gateway URL for cross-stack integration
+      Type: String
+      Value: !Sub 'https://${AnalysisApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+      Tags:
+        Environment: !Ref Environment
+        Stack: fiscalshield-analysis
+        Purpose: Cross-stack integration
+
+  # ========================================================================
+  # CLOUDWATCH ALARMS
+  # ========================================================================
+
+  HighErrorRateAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'fiscalshield-analysis-${Environment}-HighErrorRate'
+      AlarmDescription: Alert when error rate exceeds threshold
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 10
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Sub 'fiscalshield-analysis-${Environment}'
+      TreatMissingData: notBreaching
+
+  # ========================================================================
+  # OUTPUTS
+  # ========================================================================
+
+Outputs:
+  CompanyIntelligenceTableName:
+    Description: DynamoDB table for company intelligence data
+    Value: !Ref CompanyIntelligenceTable
+    Export:
+      Name: !Sub '${AWS::StackName}-CompanyIntelligenceTable'
+
+  LambdaExecutionRoleArn:
+    Description: ARN of Lambda execution role
+    Value: !GetAtt AnalysisLambdaRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-LambdaExecutionRole'
+
+  StackEnvironment:
+    Description: Deployment environment
+    Value: !Ref Environment
+
+  StackRegion:
+    Description: AWS Region
+    Value: !Ref AWS::Region
+
+  ConventionBasedNaming:
+    Description: Resource naming convention for cross-stack access
+    Value: !Sub 'fiscalshield-analysis-${Environment}-{ResourceName}'
+
+  ApiGatewayUrl:
+    Description: Base URL for Analysis Stack API Gateway
+    Value: !Sub 'https://${AnalysisApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+    Export:
+      Name: !Sub '${AWS::StackName}-ApiUrl'
+
+  AssessCompanyFunctionArn:
+    Description: ARN of AssessCompany Lambda function
+    Value: !GetAtt AssessCompanyFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-AssessCompanyFunction'
+
+  HealthCheckFunctionArn:
+    Description: ARN of Health Check Lambda function
+    Value: !GetAtt HealthCheckFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-HealthCheckFunction'
+
+  ApiUrlParameterName:
+    Description: SSM Parameter Store path for API URL (for Core Stack integration)
+    Value: !Sub '/fiscalshield/analysis/${Environment}/api-url'
+    Export:
+      Name: !Sub '${AWS::StackName}-ApiUrlParameter'
+
+  AMLReportsBucketName:
+    Description: S3 bucket for storing generated AML reports
+    Value: !Ref AMLReportsBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-AMLReportsBucket'
+
+  GenerateReportFunctionArn:
+    Description: ARN of Generate AML Report Lambda function
+    Value: !GetAtt GenerateReportFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-GenerateReportFunction'
+
+  AllApiEndpoints:
+    Description: All available API endpoints
+    Value: !Sub |
+      Health Check: GET https://${AnalysisApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/health
+      Company Intelligence: GET https://${AnalysisApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/company/{company_number}/intelligence
+      Generate AML Report: POST https://${AnalysisApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/company/{company_number}/report

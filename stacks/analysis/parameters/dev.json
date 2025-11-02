@@ -1,0 +1,6 @@
+{
+  "Environment": "dev",
+  "AnalysisCacheTTLHours": "24",
+  "EnableXRayTracing": "true",
+  "LogRetentionDays": "7"
+}

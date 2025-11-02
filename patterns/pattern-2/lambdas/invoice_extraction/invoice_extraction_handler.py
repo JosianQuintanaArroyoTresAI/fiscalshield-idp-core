@@ -232,7 +232,9 @@ def write_invoices_to_dynamodb(
     document_id: str,
     section_id: str,
     user_id: str,
-    client_id: str
+    client_id: str,
+    company_number: str = None,
+    company_name: str = None
 ) -> int:
     """
     Write individual invoice records to ExtractionResultsTable
@@ -265,6 +267,8 @@ def write_invoices_to_dynamodb(
                 'InvoiceId': invoice_id,
                 'SectionId': section_id,
                 'ClientId': client_id,
+                'CompanyNumber': company_number or 'unknown',
+                'CompanyName': company_name or 'Unknown Company',
                 'DocumentType': 'INVOICE',
 
                 # Invoice-specific fields
@@ -392,9 +396,11 @@ def lambda_handler(event, context):
         # Extract metadata from document dict
         document_id = document_dict.get('id')
         user_id = document_dict.get('user_id')
-        client_id = document_dict.get('client_id') or 'default-client'  # Use placeholder if None
+        company_number = document_dict.get('company_number')  # Extract company_number
+        company_name = document_dict.get('company_name')      # Extract company_name
+        client_id = company_number or document_dict.get('client_id') or 'default-client'  # Use company_number as client_id
 
-        log_with_timestamp(f"🔍 Extracted metadata - ID: {document_id}, User: {user_id}, Client: {client_id}")
+        log_with_timestamp(f"🔍 Extracted metadata - ID: {document_id}, User: {user_id}, Client: {client_id}, Company: {company_name} ({company_number})")
 
         # Find the section in the document
         sections = document_dict.get('sections', [])
@@ -462,6 +468,14 @@ def lambda_handler(event, context):
                         # rawText.json contains the extracted text - try different field names
                         page_text = raw_text_data.get('text', '') or raw_text_data.get('Text', '') or raw_text_data.get('content', '')
 
+                        # Try Bedrock Nova response format: output.message.content[0].text
+                        if not page_text and 'output' in raw_text_data:
+                            try:
+                                page_text = raw_text_data['output']['message']['content'][0]['text']
+                                log_with_timestamp(f"📝 Extracted text from Bedrock response format")
+                            except (KeyError, IndexError, TypeError):
+                                pass
+
                         # If still empty, try to extract from blocks or lines
                         if not page_text and 'Blocks' in raw_text_data:
                             # Textract format - extract text from LINE blocks
@@ -525,7 +539,7 @@ def lambda_handler(event, context):
         # Write invoices to DynamoDB
         log_with_timestamp(f"💾 Writing {len(invoices)} invoices to DynamoDB...")
         inserted_count = write_invoices_to_dynamodb(
-            invoices, document_id, section_id, user_id, client_id
+            invoices, document_id, section_id, user_id, client_id, company_number, company_name
         )
 
         processing_time = time.time() - start_time

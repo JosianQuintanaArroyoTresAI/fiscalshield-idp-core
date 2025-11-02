@@ -2041,6 +2041,50 @@ Resources:
         SSEType: KMS
         KMSMasterKeyId: !Ref CustomerManagedEncryptionKey
 
+  ##########################################################################
+  # UserProfile table for storing user-specific data with GDPR compliance
+  # Structure: PK=UserId, SK=DataType#Identifier
+  # Examples:
+  #   - PK=user-123, SK=COMPANY#12345678 (company relationship)
+  #   - PK=user-123, SK=PREFERENCE#theme (user preference)
+  #   - PK=user-123, SK=NOTE#note-id (user note)
+  # This allows easy deletion of all user data for GDPR compliance
+  ##########################################################################
+
+  UserProfileTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: DataType
+          AttributeType: S
+        - AttributeName: CreatedAt
+          AttributeType: N
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: GSI1-DataType
+          KeySchema:
+            - AttributeName: DataType
+              KeyType: HASH
+            - AttributeName: CreatedAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+        KMSMasterKeyId: !Ref CustomerManagedEncryptionKey
+
   ##############################################################################
   # DynamoDB table and initialization function for workflow concurrency counter
   ##############################################################################
@@ -2642,6 +2686,13 @@ Resources:
                 - kms:GenerateDataKey*
                 - kms:DescribeKey
               Resource: !GetAtt CustomerManagedEncryptionKey.Arn
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:GetObjectMetadata
+                - s3:HeadObject
+              Resource:
+                - !Sub "${InputBucket.Arn}/*"
       Events:
         S3Event:
           Type: CloudWatchEvent
@@ -5418,6 +5469,7 @@ Resources:
                   - !Sub "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TrackingTable}"
                   - !Sub "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AgentTable}"
                   - !Sub "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${DiscoveryTrackingTable}"
+                  - !Sub "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${UserProfileTable}"
               - Effect: Allow
                 Action:
                   - kms:Encrypt
@@ -5444,6 +5496,9 @@ Resources:
                   - !GetAtt ListAvailableAgentsFunction.Arn
                   - !GetAtt ChatWithDocumentResolverFunction.Arn
                   - !GetAtt DiscoveryUploadResolverFunction.Arn
+                  - !GetAtt RegisterUserCompanyFunction.Arn
+                  - !GetAtt ListUserCompaniesFunction.Arn
+                  - !GetAtt DeleteUserCompanyFunction.Arn
 
   # Lambda function for Create Document resolver
   CreateDocumentResolverFunction:
@@ -5615,28 +5670,42 @@ Resources:
       FieldName: listDocuments
       DataSourceName: !GetAtt TrackingTableDataSource.Name
       RequestMappingTemplate: |
+        ## Build filter expression dynamically
+        #set( $filterExpression = "" )
+        #set( $filterValues = {} )
+        
+        ## Add date filtering if provided
+        #if($context.arguments.startDateTime && $context.arguments.endDateTime)
+            #set( $filterExpression = "InitialEventTime BETWEEN :startDateTime AND :endDateTime" )
+            #set( $dummy = $filterValues.put("startDateTime", { "S": "$context.arguments.startDateTime" }) )
+            #set( $dummy = $filterValues.put("endDateTime", { "S": "$context.arguments.endDateTime" }) )
+        #elseif($context.arguments.startDateTime)
+            #set( $filterExpression = "InitialEventTime >= :startDateTime" )
+            #set( $dummy = $filterValues.put("startDateTime", { "S": "$context.arguments.startDateTime" }) )
+        #elseif($context.arguments.endDateTime)
+            #set( $filterExpression = "InitialEventTime <= :endDateTime" )
+            #set( $dummy = $filterValues.put("endDateTime", { "S": "$context.arguments.endDateTime" }) )
+        #end
+        
+        ## Add company filtering if provided
+        #if($context.arguments.companyNumber)
+            #if($filterExpression != "")
+                #set( $filterExpression = "${filterExpression} AND CompanyNumber = :companyNumber" )
+            #else
+                #set( $filterExpression = "CompanyNumber = :companyNumber" )
+            #end
+            #set( $dummy = $filterValues.put("companyNumber", { "S": "$context.arguments.companyNumber" }) )
+        #end
+        
         {
             "version": "2018-05-29",
             "operation": "Scan",
+            #if($filterExpression != "")
             "filter": {
-                #if($context.arguments.startDateTime && $context.arguments.endDateTime)
-                    "expression": "InitialEventTime BETWEEN :startDateTime AND :endDateTime",
-                    "expressionValues": {
-                        ":startDateTime": { "S": "$context.arguments.startDateTime" },
-                        ":endDateTime": { "S": "$context.arguments.endDateTime" }
-                    }
-                #elseif($context.arguments.startDateTime)
-                    "expression": "InitialEventTime >= :startDateTime",
-                    "expressionValues": {
-                        ":startDateTime": { "S": "$context.arguments.startDateTime" }
-                    }
-                #elseif($context.arguments.endDateTime)
-                    "expression": "InitialEventTime <= :endDateTime",
-                    "expressionValues": {
-                        ":endDateTime": { "S": "$context.arguments.endDateTime" }
-                    }
-                #end
+                "expression": "$filterExpression",
+                "expressionValues": $util.toJson($filterValues)
             },
+            #end
             #if($context.prev.result)
                 "nextToken": "$context.prev.result.nextToken",
             #end
@@ -5688,9 +5757,16 @@ Resources:
             },
           },
           "filter": {
-            "expression": "UserId = :userId",
+            #set( $filterExpression = "UserId = :userId" )
+            #if($ctx.args.companyNumber)
+              #set( $filterExpression = "${filterExpression} AND CompanyNumber = :companyNumber" )
+            #end
+            "expression": "$filterExpression",
             "expressionValues": {
               ":userId": $util.dynamodb.toDynamoDBJson($userId)
+              #if($ctx.args.companyNumber)
+              ,":companyNumber": $util.dynamodb.toDynamoDBJson($ctx.args.companyNumber)
+              #end
             }
           }
         }
@@ -5736,9 +5812,16 @@ Resources:
             }
           },
           "filter": {
-            "expression": "UserId = :userId",
+            #set( $filterExpression = "UserId = :userId" )
+            #if($ctx.args.companyNumber)
+              #set( $filterExpression = "${filterExpression} AND CompanyNumber = :companyNumber" )
+            #end
+            "expression": "$filterExpression",
             "expressionValues": {
               ":userId": $util.dynamodb.toDynamoDBJson($userId)
+              #if($ctx.args.companyNumber)
+              ,":companyNumber": $util.dynamodb.toDynamoDBJson($ctx.args.companyNumber)
+              #end
             }
           }
         }
@@ -6926,6 +7009,233 @@ Resources:
       FieldName: chatWithDocument
 
   ##########################################################################
+  # Register User Company - Mutation resolver
+  ##########################################################################
+
+  RegisterUserCompanyFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access as it only interacts with AWS services via APIs"
+          - id: W92
+            reason: "Function does not require reserved concurrency as it scales based on demand"
+    # checkov:skip=CKV_AWS_116: "DLQ not required for AppSync resolver function"
+    # checkov:skip=CKV_AWS_117: "Function does not require VPC access as it only interacts with AWS services via APIs"
+    # checkov:skip=CKV_AWS_115: "Function does not require reserved concurrency as it scales based on demand"
+    # checkov:skip=CKV_AWS_173: "Environment variables do not contain sensitive data - only configuration values"
+    Properties:
+      PermissionsBoundary:
+        !If [
+          HasPermissionsBoundary,
+          !Ref PermissionsBoundaryArn,
+          !Ref AWS::NoValue,
+        ]
+      Handler: index.handler
+      Runtime: python3.12
+      CodeUri: ./src/lambda/register_user_company
+      Description: Lambda function to register a company for a user
+      MemorySize: 256
+      Timeout: 10
+      Environment:
+        Variables:
+          LOG_LEVEL: !Ref LogLevel
+          USER_PROFILE_TABLE: !Ref UserProfileTable
+      LoggingConfig:
+        LogGroup: !Ref RegisterUserCompanyFunctionLogGroup
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UserProfileTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - kms:Encrypt
+                - kms:Decrypt
+                - kms:ReEncrypt*
+                - kms:GenerateDataKey*
+                - kms:DescribeKey
+              Resource: !GetAtt CustomerManagedEncryptionKey.Arn
+
+  RegisterUserCompanyFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !GetAtt CustomerManagedEncryptionKey.Arn
+      RetentionInDays: !Ref LogRetentionDays
+
+  RegisterUserCompanyDataSource:
+    Type: AWS::AppSync::DataSource
+    Properties:
+      ApiId: !GetAtt GraphQLApi.ApiId
+      Name: RegisterUserCompanyDataSource
+      Description: Lambda function for registering user companies
+      Type: AWS_LAMBDA
+      ServiceRoleArn: !GetAtt AppSyncServiceRole.Arn
+      LambdaConfig:
+        LambdaFunctionArn: !GetAtt RegisterUserCompanyFunction.Arn
+
+  RegisterUserCompanyResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn: GraphQLSchema
+    Properties:
+      ApiId: !GetAtt GraphQLApi.ApiId
+      DataSourceName: !GetAtt RegisterUserCompanyDataSource.Name
+      TypeName: Mutation
+      FieldName: registerUserCompany
+
+  ##########################################################################
+  # User Companies Query Lambda
+  ##########################################################################
+
+  ListUserCompaniesFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access as it only interacts with AWS services via APIs"
+          - id: W92
+            reason: "Function does not require reserved concurrency as it scales based on demand"
+    # checkov:skip=CKV_AWS_116: "DLQ not required for AppSync resolver function"
+    # checkov:skip=CKV_AWS_117: "Function does not require VPC access as it only interacts with AWS services via APIs"
+    # checkov:skip=CKV_AWS_115: "Function does not require reserved concurrency as it scales based on demand"
+    # checkov:skip=CKV_AWS_173: "Environment variables do not contain sensitive data - only configuration values"
+    Properties:
+      PermissionsBoundary:
+        !If [
+          HasPermissionsBoundary,
+          !Ref PermissionsBoundaryArn,
+          !Ref AWS::NoValue,
+        ]
+      Handler: lambda_function.handler
+      Runtime: python3.12
+      CodeUri: ./src/lambda/list_user_companies
+      Description: Lambda function to list all companies registered under a user
+      MemorySize: 512
+      Timeout: 30
+      Environment:
+        Variables:
+          LOG_LEVEL: !Ref LogLevel
+          USER_PROFILE_TABLE: !Ref UserProfileTable
+          TRACKING_TABLE: !Ref TrackingTable
+      LoggingConfig:
+        LogGroup: !Ref ListUserCompaniesFunctionLogGroup
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref UserProfileTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref TrackingTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+              Resource:
+                - !Sub "${TrackingTable.Arn}/index/GSI1"
+            - Effect: Allow
+              Action:
+                - kms:Decrypt
+                - kms:DescribeKey
+              Resource: !GetAtt CustomerManagedEncryptionKey.Arn
+
+  ListUserCompaniesFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !GetAtt CustomerManagedEncryptionKey.Arn
+      RetentionInDays: !Ref LogRetentionDays
+
+  ListUserCompaniesDataSource:
+    Type: AWS::AppSync::DataSource
+    Properties:
+      ApiId: !GetAtt GraphQLApi.ApiId
+      Name: ListUserCompaniesDataSource
+      Description: Lambda function for listing user companies
+      Type: AWS_LAMBDA
+      ServiceRoleArn: !GetAtt AppSyncServiceRole.Arn
+      LambdaConfig:
+        LambdaFunctionArn: !GetAtt ListUserCompaniesFunction.Arn
+
+  ListUserCompaniesResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn: GraphQLSchema
+    Properties:
+      ApiId: !GetAtt GraphQLApi.ApiId
+      DataSourceName: !GetAtt ListUserCompaniesDataSource.Name
+      TypeName: Query
+      FieldName: getUserCompanies
+
+  ##########################################################################
+  # Delete User Company Lambda
+  ##########################################################################
+
+  DeleteUserCompanyFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access as it only interacts with AWS services via APIs"
+          - id: W92
+            reason: "Function does not require reserved concurrency as it scales based on demand"
+    # checkov:skip=CKV_AWS_116: "DLQ not required for AppSync resolver function"
+    # checkov:skip=CKV_AWS_117: "Function does not require VPC access as it only interacts with AWS services via APIs"
+    # checkov:skip=CKV_AWS_115: "Function does not require reserved concurrency as it scales based on demand"
+    # checkov:skip=CKV_AWS_173: "Environment variables do not contain sensitive data - only configuration values"
+    Properties:
+      PermissionsBoundary:
+        !If [
+          HasPermissionsBoundary,
+          !Ref PermissionsBoundaryArn,
+          !Ref AWS::NoValue,
+        ]
+      Handler: index.handler
+      Runtime: python3.12
+      CodeUri: ./src/lambda/delete_user_company
+      Description: Lambda function to delete a company association from user profile
+      MemorySize: 256
+      Timeout: 30
+      Environment:
+        Variables:
+          LOG_LEVEL: !Ref LogLevel
+          USER_PROFILE_TABLE: !Ref UserProfileTable
+      LoggingConfig:
+        LogGroup: !Ref DeleteUserCompanyFunctionLogGroup
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UserProfileTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - kms:Decrypt
+                - kms:DescribeKey
+              Resource: !GetAtt CustomerManagedEncryptionKey.Arn
+
+  DeleteUserCompanyFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !GetAtt CustomerManagedEncryptionKey.Arn
+      RetentionInDays: !Ref LogRetentionDays
+
+  DeleteUserCompanyDataSource:
+    Type: AWS::AppSync::DataSource
+    Properties:
+      ApiId: !GetAtt GraphQLApi.ApiId
+      Name: DeleteUserCompanyDataSource
+      Description: Lambda function for deleting user company associations
+      Type: AWS_LAMBDA
+      ServiceRoleArn: !GetAtt AppSyncServiceRole.Arn
+      LambdaConfig:
+        LambdaFunctionArn: !GetAtt DeleteUserCompanyFunction.Arn
+
+  DeleteUserCompanyResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn: GraphQLSchema
+    Properties:
+      ApiId: !GetAtt GraphQLApi.ApiId
+      DataSourceName: !GetAtt DeleteUserCompanyDataSource.Name
+      TypeName: Mutation
+      FieldName: deleteUserCompany
+
+  ##########################################################################
   # WebUI build and deployment
   ##########################################################################
 
@@ -7136,6 +7446,8 @@ Resources:
         Type: LINUX_CONTAINER
         PrivilegedMode: true
         EnvironmentVariables:
+          - Name: DISABLE_ESLINT_PLUGIN
+            Value: 'true'
           - Name: AWS_DEFAULT_REGION
             Value: !Ref AWS::Region
           - Name: AWS_ACCOUNT_ID
