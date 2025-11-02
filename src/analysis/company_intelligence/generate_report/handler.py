@@ -31,9 +31,9 @@ class ReportGenerator:
         self.intelligence_table = dynamodb.Table(COMPANY_INTELLIGENCE_TABLE)
         self.company_events_table = dynamodb.Table(DC_COMPANY_EVENTS_TABLE)
         
-        # Use Claude 3.7 Sonnet for best reasoning and compliance analysis
-        # Available via cross-region inference in eu-central-1
-        self.model_id = "anthropic.claude-3-7-sonnet-20250219-v1:0"
+        # Use Claude 3.7 Sonnet via EU inference profile for best reasoning and compliance analysis
+        # Cross-region inference provides high availability in eu-central-1
+        self.model_id = "eu.anthropic.claude-3-7-sonnet-20250219-v1:0"
         
         # System prompt for UK accountant context
         self.system_prompt = """You are a senior AML compliance officer and UK chartered accountant with deep expertise in Money Laundering Regulations 2017 (MLR 2017). 
