@@ -54,6 +54,7 @@ Your analysis should:
 3. Explain the "why" behind risk scores
 4. Provide specific, actionable recommendations
 5. Use clear, professional language suitable for compliance reports
+6. NEVER use emojis, icons, or informal symbols - your audience is highly educated UK accountants and compliance professionals
 
 **OUTPUT FORMAT:**
 Return a JSON object with the following structure:

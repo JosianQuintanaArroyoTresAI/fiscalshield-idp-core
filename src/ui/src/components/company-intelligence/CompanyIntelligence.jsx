@@ -361,18 +361,18 @@ const CompanyIntelligence = () => {
           </Container>
 
           {/* AML Card */}
-          <Container header={<Header variant="h2">🔍 AML Screening</Header>}>
+          <Container header={<Header variant="h2">AML Screening</Header>}>
             <ColumnLayout columns={1} variant="text-grid">
               <div>
                 <Box variant="awsui-key-label">Sanctions Screening</Box>
                 <StatusIndicator type={aml.sanctions_screening === 'clear' ? 'success' : 'error'}>
-                  {aml.sanctions_screening === 'clear' ? '✅ Clear' : '⚠️ Matches Found'}
+                  {aml.sanctions_screening === 'clear' ? 'Clear' : 'Matches Found'}
                 </StatusIndicator>
               </div>
               <div>
                 <Box variant="awsui-key-label">PEP Screening</Box>
                 <StatusIndicator type={aml.pep_screening === 'clear' ? 'success' : 'warning'}>
-                  {aml.pep_screening === 'clear' ? '✅ Clear' : '⚠️ Matches Found'}
+                  {aml.pep_screening === 'clear' ? 'Clear' : 'Matches Found'}
                 </StatusIndicator>
               </div>
               <div>
@@ -421,7 +421,7 @@ const CompanyIntelligence = () => {
           <Container
             header={
               <Header variant="h2" description="AI-powered risk analysis and compliance recommendations">
-                🤖 Intelligence Insights
+                Intelligence Insights
               </Header>
             }
           >
@@ -444,7 +444,7 @@ const CompanyIntelligence = () => {
                 {insights.governance_insight && (
                   <Box>
                     <Box variant="awsui-key-label" margin={{ bottom: 'xs' }}>
-                      🏛️ Governance Analysis
+                      Governance Analysis
                     </Box>
                     <Box variant="p" fontSize="body-s">
                       {insights.governance_insight}
@@ -456,7 +456,7 @@ const CompanyIntelligence = () => {
                 {insights.financial_insight && (
                   <Box>
                     <Box variant="awsui-key-label" margin={{ bottom: 'xs' }}>
-                      💰 Financial Analysis
+                      Financial Analysis
                     </Box>
                     <Box variant="p" fontSize="body-s">
                       {insights.financial_insight}
@@ -468,7 +468,7 @@ const CompanyIntelligence = () => {
                 {insights.aml_insight && (
                   <Box>
                     <Box variant="awsui-key-label" margin={{ bottom: 'xs' }}>
-                      🔍 AML Screening Analysis
+                      AML Screening Analysis
                     </Box>
                     <Box variant="p" fontSize="body-s">
                       {insights.aml_insight}
@@ -480,7 +480,7 @@ const CompanyIntelligence = () => {
                 {insights.reputational_insight && (
                   <Box>
                     <Box variant="awsui-key-label" margin={{ bottom: 'xs' }}>
-                      📰 Reputational Analysis
+                      Reputational Analysis
                     </Box>
                     <Box variant="p" fontSize="body-s">
                       {insights.reputational_insight}
@@ -522,7 +522,7 @@ const CompanyIntelligence = () => {
               {insights.mitigating_factors && insights.mitigating_factors.length > 0 && (
                 <Box>
                   <Box variant="awsui-key-label" margin={{ bottom: 'xs' }}>
-                    ✅ Positive Indicators
+                    Positive Indicators
                   </Box>
                   <Box variant="ul">
                     {insights.mitigating_factors.map((factor, index) => (
@@ -541,7 +541,7 @@ const CompanyIntelligence = () => {
 
         {/* Flags & Alerts */}
         {(riskAssessment.critical_flags?.length > 0 || riskAssessment.high_flags?.length > 0) && (
-          <ExpandableSection headerText="⚠️ Flags & Alerts" defaultExpanded={flagsSummary.critical > 0}>
+          <ExpandableSection headerText="Flags & Alerts" defaultExpanded={flagsSummary.critical > 0}>
             <SpaceBetween size="m">
               {riskAssessment.critical_flags?.map((flag, index) => (
                 <Alert key={`critical-${index}`} type="error" header={flag.flag_type}>
@@ -587,7 +587,11 @@ const CompanyIntelligence = () => {
               </Button>
             ) : (
               <SpaceBetween direction="horizontal" size="xs">
-                <Button variant="primary" iconName="download" href={reportData.downloadUrl} target="_blank">
+                <Button 
+                  variant="primary" 
+                  iconName="download" 
+                  onClick={() => window.open(reportData.downloadUrl, '_blank')}
+                >
                   Download Report
                 </Button>
                 <Button variant="normal" onClick={handleGenerateReport} loading={isGeneratingReport}>

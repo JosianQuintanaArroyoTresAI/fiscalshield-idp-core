@@ -415,11 +415,24 @@ Please write in a professional but accessible style suitable for UK chartered ac
             print(f"Report stored in S3: {s3_url}")
             
             # Generate presigned URL (valid for 7 days)
-            presigned_url = s3_client.generate_presigned_url(
-                'get_object',
-                Params={'Bucket': REPORTS_BUCKET, 'Key': s3_key},
-                ExpiresIn=604800  # 7 days
-            )
+            # Note: Using Lambda's temporary credentials, so signature includes session token
+            # This is the correct approach - the session token is required for the signature to work
+            try:
+                presigned_url = s3_client.generate_presigned_url(
+                    'get_object',
+                    Params={
+                        'Bucket': REPORTS_BUCKET, 
+                        'Key': s3_key,
+                        'ResponseContentDisposition': 'attachment',
+                        'ResponseContentType': 'text/markdown'
+                    },
+                    ExpiresIn=604800  # 7 days
+                )
+                print(f"Generated presigned URL (expires in 7 days)")
+            except Exception as e:
+                print(f"Warning: Failed to generate presigned URL: {str(e)}")
+                # Fallback: construct a direct S3 URL (requires bucket to be public or additional permissions)
+                presigned_url = f"https://{REPORTS_BUCKET}.s3.eu-central-1.amazonaws.com/{s3_key}"
             
             return {
                 'report_id': report_id,
