@@ -220,6 +220,7 @@ const CompanyIntelligence = () => {
   const aml = intelligence.aml || {};
   const reputational = intelligence.reputational || {};
   const flagsSummary = riskAssessment.flags_summary || {};
+  const insights = intelligence.insights || null;
 
   return (
     <Box padding="xxl">
@@ -414,6 +415,129 @@ const CompanyIntelligence = () => {
             </div>
           </ColumnLayout>
         </Container>
+
+        {/* LLM Insights Section */}
+        {insights && (
+          <Container
+            header={
+              <Header variant="h2" description="AI-powered risk analysis and compliance recommendations">
+                🤖 Intelligence Insights
+              </Header>
+            }
+          >
+            <SpaceBetween size="l">
+              {/* Overall Summary */}
+              {insights.overall_summary && (
+                <Box>
+                  <Box variant="awsui-key-label" margin={{ bottom: 'xs' }}>
+                    Overall Assessment
+                  </Box>
+                  <Box variant="p" color="text-body-secondary">
+                    {insights.overall_summary}
+                  </Box>
+                </Box>
+              )}
+
+              {/* Category Insights Grid */}
+              <Grid gridDefinition={[{ colspan: 6 }, { colspan: 6 }]}>
+                {/* Governance Insight */}
+                {insights.governance_insight && (
+                  <Box>
+                    <Box variant="awsui-key-label" margin={{ bottom: 'xs' }}>
+                      🏛️ Governance Analysis
+                    </Box>
+                    <Box variant="p" fontSize="body-s">
+                      {insights.governance_insight}
+                    </Box>
+                  </Box>
+                )}
+
+                {/* Financial Insight */}
+                {insights.financial_insight && (
+                  <Box>
+                    <Box variant="awsui-key-label" margin={{ bottom: 'xs' }}>
+                      💰 Financial Analysis
+                    </Box>
+                    <Box variant="p" fontSize="body-s">
+                      {insights.financial_insight}
+                    </Box>
+                  </Box>
+                )}
+
+                {/* AML Insight */}
+                {insights.aml_insight && (
+                  <Box>
+                    <Box variant="awsui-key-label" margin={{ bottom: 'xs' }}>
+                      🔍 AML Screening Analysis
+                    </Box>
+                    <Box variant="p" fontSize="body-s">
+                      {insights.aml_insight}
+                    </Box>
+                  </Box>
+                )}
+
+                {/* Reputational Insight */}
+                {insights.reputational_insight && (
+                  <Box>
+                    <Box variant="awsui-key-label" margin={{ bottom: 'xs' }}>
+                      📰 Reputational Analysis
+                    </Box>
+                    <Box variant="p" fontSize="body-s">
+                      {insights.reputational_insight}
+                    </Box>
+                  </Box>
+                )}
+              </Grid>
+
+              {/* Recommendations */}
+              {insights.recommendations && insights.recommendations.length > 0 && (
+                <Box>
+                  <Box variant="awsui-key-label" margin={{ bottom: 'xs' }}>
+                    💡 Recommended Actions
+                  </Box>
+                  <Box variant="ul">
+                    {insights.recommendations.map((rec, index) => (
+                      <li key={index}>
+                        <Box variant="p" fontSize="body-s">
+                          {rec}
+                        </Box>
+                      </li>
+                    ))}
+                  </Box>
+                </Box>
+              )}
+
+              {/* Red Flags */}
+              {insights.red_flags && insights.red_flags.length > 0 && (
+                <Alert type="warning" header="Areas of Concern">
+                  <Box variant="ul">
+                    {insights.red_flags.map((flag, index) => (
+                      <li key={index}>{flag}</li>
+                    ))}
+                  </Box>
+                </Alert>
+              )}
+
+              {/* Mitigating Factors */}
+              {insights.mitigating_factors && insights.mitigating_factors.length > 0 && (
+                <Box>
+                  <Box variant="awsui-key-label" margin={{ bottom: 'xs' }}>
+                    ✅ Positive Indicators
+                  </Box>
+                  <Box variant="ul">
+                    {insights.mitigating_factors.map((factor, index) => (
+                      <li key={index}>
+                        <Box variant="p" fontSize="body-s" color="text-status-success">
+                          {factor}
+                        </Box>
+                      </li>
+                    ))}
+                  </Box>
+                </Box>
+              )}
+            </SpaceBetween>
+          </Container>
+        )}
 
         {/* Flags & Alerts */}
         {(riskAssessment.critical_flags?.length > 0 || riskAssessment.high_flags?.length > 0) && (
