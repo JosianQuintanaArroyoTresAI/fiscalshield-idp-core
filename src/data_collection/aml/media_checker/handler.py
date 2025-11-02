@@ -296,6 +296,9 @@ def lambda_handler(event, context):
         # Accept both 'days_back' and 'days' for backwards compatibility
         days_back = int(body.get('days_back') or body.get('days', 30))
         
+        # Log the company_number to help debug
+        logger.info(f"Received company_number: {company_number}")
+        
         if not company_name:
             return {
                 'statusCode': 400,
@@ -308,6 +311,10 @@ def lambda_handler(event, context):
                     'error': 'Missing required parameter: company_name'
                 })
             }
+        
+        if not company_number:
+            logger.warning(f"No company_number provided for media search of: {company_name}")
+            logger.warning("This will prevent caching. Please ensure company_number is passed in the payload.")
         
         # Validate days_back
         if days_back < 1 or days_back > 365:

@@ -288,6 +288,9 @@ def lambda_handler(event, context):
         dob = body.get('date_of_birth')
         company_number = body.get('company_number')
         
+        # Log the company_number to help debug
+        logger.info(f"Received company_number: {company_number} for person: {person_name}")
+        
         if not person_name:
             return {
                 'statusCode': 400,
@@ -300,6 +303,10 @@ def lambda_handler(event, context):
                     'error': 'Missing required parameter: person_name'
                 })
             }
+        
+        if not company_number:
+            logger.warning(f"No company_number provided for sanctions check of: {person_name}")
+            logger.warning("This will prevent caching. Please ensure company_number is passed in the payload.")
         
         logger.info(f"Processing sanctions check for: {person_name}")
         
