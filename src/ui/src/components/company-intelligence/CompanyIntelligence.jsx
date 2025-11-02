@@ -587,9 +587,9 @@ const CompanyIntelligence = () => {
               </Button>
             ) : (
               <SpaceBetween direction="horizontal" size="xs">
-                <Button 
-                  variant="primary" 
-                  iconName="download" 
+                <Button
+                  variant="primary"
+                  iconName="download"
                   onClick={() => window.open(reportData.downloadUrl, '_blank')}
                 >
                   Download Report
