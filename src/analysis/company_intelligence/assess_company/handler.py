@@ -44,6 +44,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 
 from risk_calculator import RiskCalculator
+from llm_insights import LLMInsightsGenerator
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -134,8 +135,18 @@ def lambda_handler(event, context):
         calculator = RiskCalculator()
         risk_assessment = calculator.calculate_company_risk(company_data)
         
-        # Build intelligence report
-        intelligence = build_intelligence_report(company_number, company_data, risk_assessment)
+        # Generate LLM-powered insights (with prompt caching)
+        llm_insights = None
+        try:
+            logger.info(f"Generating LLM insights for {company_number}")
+            insights_generator = LLMInsightsGenerator()
+            llm_insights = insights_generator.generate_insights(company_data, risk_assessment)
+            logger.info(f"LLM insights generated successfully for {company_number}")
+        except Exception as e:
+            logger.warning(f"Failed to generate LLM insights (continuing without them): {e}")
+        
+        # Build intelligence report (includes LLM insights if available)
+        intelligence = build_intelligence_report(company_number, company_data, risk_assessment, llm_insights)
         
         # Cache results in DynamoDB
         cache_intelligence(company_number, intelligence)
@@ -384,8 +395,8 @@ def extract_companies_house_flags(ch_data: dict) -> list:
     return flags
 
 
-def build_intelligence_report(company_number: str, company_data: dict, risk_assessment: dict) -> dict:
-    """Build comprehensive intelligence report"""
+def build_intelligence_report(company_number: str, company_data: dict, risk_assessment: dict, llm_insights: dict = None) -> dict:
+    """Build comprehensive intelligence report with optional LLM insights"""
     
     ch_data = company_data.get('companies_house', {})
     sanctions_data = company_data.get('sanctions', [])
@@ -455,6 +466,19 @@ def build_intelligence_report(company_number: str, company_data: dict, risk_asse
         'data_collection_timestamp': company_data.get('collection_timestamp', ''),
         'data_age_hours': calculate_data_age_hours(company_data.get('collection_timestamp', ''))
     }
+    
+    # Add LLM insights if available
+    if llm_insights:
+        intelligence['insights'] = {
+            'governance_insight': llm_insights.get('governance_insight', ''),
+            'financial_insight': llm_insights.get('financial_insight', ''),
+            'aml_insight': llm_insights.get('aml_insight', ''),
+            'reputational_insight': llm_insights.get('reputational_insight', ''),
+            'overall_summary': llm_insights.get('overall_summary', ''),
+            'recommendations': llm_insights.get('recommendations', []),
+            'red_flags': llm_insights.get('red_flags', []),
+            'mitigating_factors': llm_insights.get('mitigating_factors', [])
+        }
     
     return intelligence
 

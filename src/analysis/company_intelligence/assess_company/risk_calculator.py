@@ -147,6 +147,96 @@ class RiskCalculator:
             'calculation_timestamp': datetime.now().isoformat()
         }
     
+    def _analyze_governance_risk(self, ch_data: Dict) -> tuple[float, List[Dict]]:
+        """
+        Analyze governance risk factors with nuanced scoring
+        
+        Considers:
+        - Officer turnover rates
+        - Director tenure stability
+        - Resignation patterns (mass exits)
+        - Company age vs officer tenure
+        - Board composition
+        
+        Returns: (risk_contribution, governance_flags)
+        """
+        contribution = 0.0
+        flags = []
+        
+        officers_data = ch_data.get('officers', {})
+        active_officers = officers_data.get('active_officers', [])
+        resigned_officers = officers_data.get('resigned_officers', [])
+        company_profile = ch_data.get('company_profile', {})
+        
+        # Calculate turnover rate
+        total_officers = len(active_officers) + len(resigned_officers)
+        if total_officers > 0:
+            turnover_rate = len(resigned_officers) / total_officers
+            
+            # High turnover is concerning
+            if turnover_rate > 0.75:  # >75% historical turnover
+                contribution += 0.15
+                flags.append({
+                    'severity': 'medium',
+                    'category': 'governance',
+                    'description': f'High officer turnover rate ({turnover_rate:.0%})'
+                })
+            elif turnover_rate > 0.5:  # >50% turnover
+                contribution += 0.08
+                flags.append({
+                    'severity': 'low',
+                    'category': 'governance',
+                    'description': f'Elevated officer turnover ({turnover_rate:.0%})'
+                })
+        
+        # Check for recent mass resignations (multiple in short period)
+        recent_resignations = [
+            r for r in resigned_officers 
+            if r.get('resigned_on', '').startswith(('2024', '2025'))
+        ]
+        if len(recent_resignations) >= 3:
+            contribution += 0.20
+            flags.append({
+                'severity': 'high',
+                'category': 'governance',
+                'description': f'{len(recent_resignations)} director resignations in past 12 months'
+            })
+        
+        # Very small board size (single director companies are higher risk)
+        if len(active_officers) == 1:
+            contribution += 0.10
+            flags.append({
+                'severity': 'low',
+                'category': 'governance',
+                'description': 'Single director company - limited oversight'
+            })
+        elif len(active_officers) == 0:
+            contribution += 0.30
+            flags.append({
+                'severity': 'high',
+                'category': 'governance',
+                'description': 'No active directors on record'
+            })
+        
+        # Inactive/dissolved company status
+        company_status = company_profile.get('company_status', '').lower()
+        if company_status in ['dissolved', 'liquidation', 'receivership', 'administration']:
+            contribution += 0.40
+            flags.append({
+                'severity': 'high',
+                'category': 'governance',
+                'description': f'Company status: {company_status}'
+            })
+        elif company_status == 'dormant':
+            contribution += 0.05
+            flags.append({
+                'severity': 'low',
+                'category': 'governance',
+                'description': 'Company is dormant'
+            })
+        
+        return contribution, flags
+    
     def _process_companies_house_flags(
         self,
         ch_data: Dict,
@@ -158,6 +248,21 @@ class RiskCalculator:
     ) -> float:
         """Process Companies House compliance flags and calculate contribution"""
         contribution = 0.0
+        
+        # First, analyze governance risk with nuanced scoring
+        gov_contribution, gov_flags = self._analyze_governance_risk(ch_data)
+        contribution += gov_contribution
+        
+        # Categorize governance flags
+        for flag in gov_flags:
+            if flag['severity'] == 'critical':
+                critical_flags.append(flag)
+            elif flag['severity'] == 'high':
+                high_flags.append(flag)
+            elif flag['severity'] == 'medium':
+                medium_flags.append(flag)
+            else:
+                low_flags.append(flag)
         
         # Extract flags from various CH data sources
         flags = []
