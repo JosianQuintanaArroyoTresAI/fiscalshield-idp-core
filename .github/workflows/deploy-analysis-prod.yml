@@ -184,8 +184,8 @@ jobs:
           echo "Stack outputs:"
           echo "$OUTPUTS" | jq -r '.[] | "\(.OutputKey) = \(.OutputValue)"'
           
-          # Extract API Gateway URL for smoke tests
-          API_URL=$(echo "$OUTPUTS" | jq -r '.[] | select(.OutputKey=="AnalysisApiUrl") | .OutputValue')
+          # Extract API Gateway URL for smoke tests (output name: ApiGatewayUrl)
+          API_URL=$(echo "$OUTPUTS" | jq -r '.[] | select(.OutputKey=="ApiGatewayUrl") | .OutputValue')
           echo "api_url=$API_URL" >> $GITHUB_OUTPUT
 
       - name: 🧪 Run smoke tests
@@ -244,7 +244,7 @@ jobs:
           BUCKET_NAME=$(aws cloudformation describe-stacks \
             --stack-name ${{ env.STACK_NAME }} \
             --region ${{ env.AWS_REGION }} \
-            --query 'Stacks[0].Outputs[?OutputKey==`ReportsBucketName`].OutputValue' \
+            --query 'Stacks[0].Outputs[?OutputKey==`AMLReportsBucketName`].OutputValue' \
             --output text)
           
           if aws s3 ls "s3://${BUCKET_NAME}" > /dev/null 2>&1; then
