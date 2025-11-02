@@ -14,7 +14,7 @@ from botocore.exceptions import ClientError
 
 # Initialize AWS clients
 dynamodb = boto3.resource('dynamodb')
-bedrock_runtime = boto3.client('bedrock-runtime', region_name='eu-central-1')
+bedrock_runtime = boto3.client('bedrock-runtime', region_name='eu-central-1')  # Use eu-central-1 for cross-region inference
 s3_client = boto3.client('s3')
 
 # Environment variables
@@ -31,8 +31,7 @@ class ReportGenerator:
         self.intelligence_table = dynamodb.Table(COMPANY_INTELLIGENCE_TABLE)
         self.company_events_table = dynamodb.Table(DC_COMPANY_EVENTS_TABLE)
         
-        # Use Claude 3.7 Sonnet via EU inference profile for best reasoning and compliance analysis
-        # Cross-region inference provides high availability in eu-central-1
+        # Use Claude 3.7 Sonnet via cross-region inference (eu. prefix for eu-central-1)
         self.model_id = "eu.anthropic.claude-3-7-sonnet-20250219-v1:0"
         
         # System prompt for UK accountant context

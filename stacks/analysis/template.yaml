@@ -245,14 +245,13 @@ Resources:
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
-              - Sid: InvokeClaudeViaInferenceProfiles
+              - Sid: InvokeClaudeForReports
                 Effect: Allow
                 Action:
                   - bedrock:InvokeModel
                 Resource:
-                  - !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/eu.anthropic.claude-3-7-sonnet-20250219-v1:0'
-                  - !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/eu.anthropic.claude-sonnet-4-5-20250929-v1:0'
-                  - !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/eu.anthropic.claude-*'
+                  - !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/anthropic.claude-*'
+                  - !Sub 'arn:aws:bedrock:eu-west-2::foundation-model/anthropic.claude-*'
       Tags:
         - Key: Name
           Value: !Sub 'fiscalshield-analysis-${Environment}-LambdaExecutionRole'
