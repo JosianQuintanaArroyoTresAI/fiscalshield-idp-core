@@ -457,9 +457,20 @@ const CompanyIntelligence = () => {
               findings, and regulatory compliance summary for client files.
             </Box>
 
-            <Button variant="primary" onClick={handleGenerateReport} loading={isGeneratingReport} iconName="download">
-              Generate AML Report
-            </Button>
+            {!reportData ? (
+              <Button variant="primary" onClick={handleGenerateReport} loading={isGeneratingReport}>
+                Generate AML Report
+              </Button>
+            ) : (
+              <SpaceBetween direction="horizontal" size="xs">
+                <Button variant="primary" iconName="download" href={reportData.downloadUrl} target="_blank">
+                  Download Report
+                </Button>
+                <Button variant="normal" onClick={handleGenerateReport} loading={isGeneratingReport}>
+                  Regenerate Report
+                </Button>
+              </SpaceBetween>
+            )}
 
             {reportMessage && (
               <Alert
@@ -473,17 +484,9 @@ const CompanyIntelligence = () => {
                 dismissible
                 onDismiss={() => {
                   setReportMessage('');
-                  setReportData(null);
                 }}
               >
                 {reportMessage}
-                {reportData?.downloadUrl && (
-                  <Box margin={{ top: 's' }}>
-                    <Button variant="primary" iconName="external" href={reportData.downloadUrl} target="_blank">
-                      Download Report (Valid for 7 days)
-                    </Button>
-                  </Box>
-                )}
               </Alert>
             )}
           </SpaceBetween>

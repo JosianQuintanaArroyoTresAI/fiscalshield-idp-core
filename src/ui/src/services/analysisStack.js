@@ -153,6 +153,7 @@ export const generateAMLReport = async (companyNumber) => {
 
     const response = await fetch(url, {
       method: 'POST',
+      mode: 'cors',
       headers: {
         'Content-Type': 'application/json',
       },
