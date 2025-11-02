@@ -446,16 +446,92 @@ Please write in a professional but accessible style suitable for UK chartered ac
             raise
 
 
+def handle_download(event):
+    """
+    Handle GET request to download a report directly from S3 through Lambda.
+    This avoids presigned URL signature issues with temporary credentials.
+    """
+    try:
+        path_params = event.get('pathParameters', {})
+        company_number = path_params.get('company_number')
+        report_id = path_params.get('report_id')
+        
+        if not company_number or not report_id:
+            return {
+                'statusCode': 400,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                },
+                'body': json.dumps({
+                    'success': False,
+                    'error': 'company_number and report_id are required'
+                })
+            }
+        
+        # Construct S3 key
+        s3_key = f"aml-reports/{company_number}/{report_id}.md"
+        
+        print(f"Downloading report: {s3_key}")
+        
+        # Get object from S3
+        try:
+            response = s3_client.get_object(
+                Bucket=REPORTS_BUCKET,
+                Key=s3_key
+            )
+            
+            # Read the content
+            content = response['Body'].read()
+            
+            # Return file content with appropriate headers
+            return {
+                'statusCode': 200,
+                'headers': {
+                    'Content-Type': 'text/markdown',
+                    'Content-Disposition': f'attachment; filename="{report_id}.md"',
+                    'Access-Control-Allow-Origin': '*',
+                    'Cache-Control': 'no-cache'
+                },
+                'body': content.decode('utf-8'),
+                'isBase64Encoded': False
+            }
+            
+        except s3_client.exceptions.NoSuchKey:
+            return {
+                'statusCode': 404,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                },
+                'body': json.dumps({
+                    'success': False,
+                    'error': 'Report not found'
+                })
+            }
+            
+    except Exception as e:
+        print(f"Error downloading report: {str(e)}")
+        return {
+            'statusCode': 500,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            },
+            'body': json.dumps({
+                'success': False,
+                'error': f'Failed to download report: {str(e)}'
+            })
+        }
+
+
 def lambda_handler(event, context):
     """
-    Main Lambda handler for AML Report Generation
+    Main Lambda handler for AML Report Generation and Download
     
-    Expected input from API Gateway:
-    {
-        "pathParameters": {
-            "company_number": "12345678"
-        }
-    }
+    Supports:
+    - POST /company/{company_number}/report - Generate new report
+    - GET /company/{company_number}/report/{report_id} - Download existing report
     """
     
     try:
@@ -468,11 +544,16 @@ def lambda_handler(event, context):
                 'headers': {
                     'Access-Control-Allow-Origin': '*',
                     'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
-                    'Access-Control-Allow-Methods': 'POST,OPTIONS'
+                    'Access-Control-Allow-Methods': 'GET,POST,OPTIONS'
                 },
                 'body': ''
             }
         
+        # Handle GET request - Download report
+        if event.get('httpMethod') == 'GET':
+            return handle_download(event)
+        
+        # Handle POST request - Generate report
         # Extract company number from path parameters
         company_number = event.get('pathParameters', {}).get('company_number')
         
@@ -502,6 +583,19 @@ def lambda_handler(event, context):
         # Step 3: Store report in S3
         storage_info = generator.store_report(company_number, report_data)
         
+        # Construct API Gateway download URL (avoid presigned URL issues)
+        # Extract API Gateway base URL from the event
+        headers = event.get('headers', {})
+        host = headers.get('Host') or headers.get('host', '')
+        stage = event.get('requestContext', {}).get('stage', 'Prod')
+        
+        # Construct the download URL through API Gateway
+        if host:
+            download_url = f"https://{host}/{stage}/company/{company_number}/report/{storage_info['report_id']}"
+        else:
+            # Fallback to presigned URL if we can't construct API URL
+            download_url = storage_info['presigned_url']
+        
         # Prepare response
         response_data = {
             'success': True,
@@ -510,7 +604,7 @@ def lambda_handler(event, context):
             'risk_level': report_data.get('risk_level', 'LOW'),
             'report_id': storage_info['report_id'],
             's3_key': storage_info['s3_key'],
-            'download_url': storage_info['presigned_url'],
+            'download_url': download_url,
             'model_used': report_data.get('model_id'),
             'tokens_used': {
                 'input': report_data.get('input_tokens', 0),

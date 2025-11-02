@@ -366,6 +366,18 @@ Resources:
             RestApiId: !Ref AnalysisApi
             Path: /company/{company_number}/report
             Method: OPTIONS
+        DownloadReport:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AnalysisApi
+            Path: /company/{company_number}/report/{report_id}
+            Method: GET
+        DownloadReportOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AnalysisApi
+            Path: /company/{company_number}/report/{report_id}
+            Method: OPTIONS
 
   HealthCheckFunction:
     Type: AWS::Serverless::Function
