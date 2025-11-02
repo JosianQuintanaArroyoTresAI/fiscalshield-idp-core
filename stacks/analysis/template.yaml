@@ -250,10 +250,16 @@ Resources:
                 Action:
                   - bedrock:InvokeModel
                 Resource:
-                  - !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/anthropic.claude-*'
-                  - !Sub 'arn:aws:bedrock:eu-west-2::foundation-model/anthropic.claude-*'
-                  - !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/eu.anthropic.claude-*'
-                  - !Sub 'arn:aws:bedrock:eu-west-2:${AWS::AccountId}:inference-profile/eu.anthropic.claude-*'
+                  # EU Cross-region inference profile (can route to any EU region)
+                  - !Sub 'arn:aws:bedrock:*:${AWS::AccountId}:inference-profile/eu.anthropic.claude-*'
+                  # Foundation models in all EU regions (for cross-region routing)
+                  - 'arn:aws:bedrock:eu-central-1::foundation-model/anthropic.claude-*'
+                  - 'arn:aws:bedrock:eu-west-1::foundation-model/anthropic.claude-*'
+                  - 'arn:aws:bedrock:eu-west-2::foundation-model/anthropic.claude-*'
+                  - 'arn:aws:bedrock:eu-west-3::foundation-model/anthropic.claude-*'
+                  - 'arn:aws:bedrock:eu-north-1::foundation-model/anthropic.claude-*'
+                  - 'arn:aws:bedrock:eu-south-1::foundation-model/anthropic.claude-*'
+                  - 'arn:aws:bedrock:eu-south-2::foundation-model/anthropic.claude-*'
       Tags:
         - Key: Name
           Value: !Sub 'fiscalshield-analysis-${Environment}-LambdaExecutionRole'
