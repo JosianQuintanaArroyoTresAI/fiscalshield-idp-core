@@ -463,7 +463,13 @@ const CompanyIntelligence = () => {
 
             {reportMessage && (
               <Alert
-                type={reportMessage.includes('successfully') ? 'success' : reportMessage.includes('Failed') ? 'error' : 'info'}
+                type={
+                  reportMessage.includes('successfully')
+                    ? 'success'
+                    : reportMessage.includes('Failed')
+                    ? 'error'
+                    : 'info'
+                }
                 dismissible
                 onDismiss={() => {
                   setReportMessage('');
@@ -473,12 +479,7 @@ const CompanyIntelligence = () => {
                 {reportMessage}
                 {reportData?.downloadUrl && (
                   <Box margin={{ top: 's' }}>
-                    <Button
-                      variant="primary"
-                      iconName="external"
-                      href={reportData.downloadUrl}
-                      target="_blank"
-                    >
+                    <Button variant="primary" iconName="external" href={reportData.downloadUrl} target="_blank">
                       Download Report (Valid for 7 days)
                     </Button>
                   </Box>
