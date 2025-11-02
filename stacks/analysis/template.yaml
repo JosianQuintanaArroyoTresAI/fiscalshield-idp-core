@@ -252,6 +252,8 @@ Resources:
                 Resource:
                   - !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/anthropic.claude-*'
                   - !Sub 'arn:aws:bedrock:eu-west-2::foundation-model/anthropic.claude-*'
+                  - !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/eu.anthropic.claude-*'
+                  - !Sub 'arn:aws:bedrock:eu-west-2:${AWS::AccountId}:inference-profile/eu.anthropic.claude-*'
       Tags:
         - Key: Name
           Value: !Sub 'fiscalshield-analysis-${Environment}-LambdaExecutionRole'
