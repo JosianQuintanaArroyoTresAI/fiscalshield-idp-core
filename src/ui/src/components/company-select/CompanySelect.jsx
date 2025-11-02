@@ -22,7 +22,7 @@ import {
 import { Logger } from 'aws-amplify';
 
 import { checkDataCollectionHealth, lookupCompany, triggerBackgroundResearch } from '../../services/dataCollection';
-import { fetchUserCompanies, registerCompany } from '../../services/userCompanies';
+import { fetchUserCompanies, registerCompany, deleteCompany } from '../../services/userCompanies';
 import CompanyCard from '../company-card/CompanyCard';
 import useAppContext from '../../contexts/app';
 import { DOCUMENTS_PATH, COMPANY_INTELLIGENCE_PATH } from '../../routes/constants';
@@ -367,6 +367,27 @@ const CompanySelect = () => {
     history.push(intelligencePath);
   };
 
+  // Handle deleting a company
+  const handleDeleteCompany = async (company) => {
+    logger.info(`Deleting company: ${company.company_number}`);
+
+    try {
+      setLoadingCompanies(true);
+      await deleteCompany(company.company_number);
+      
+      // Refresh companies list
+      const companies = await fetchUserCompanies();
+      setUserCompanies(companies);
+      
+      logger.debug('Company deleted and list refreshed');
+    } catch (error) {
+      logger.error('Error deleting company:', error);
+      setCompaniesError(`Failed to delete company: ${error.message}`);
+    } finally {
+      setLoadingCompanies(false);
+    }
+  };
+
   return (
     <Box padding={{ top: 'xxxl' }}>
       <SpaceBetween size="l">
@@ -400,6 +421,7 @@ const CompanySelect = () => {
                     company={company}
                     onViewDocuments={handleViewCompanyDocuments}
                     onViewIntelligence={handleViewCompanyIntelligence}
+                    onDelete={handleDeleteCompany}
                   />
                 ))}
               </Grid>

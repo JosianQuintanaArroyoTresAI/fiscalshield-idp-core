@@ -1,9 +1,9 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import React from 'react';
+import React, { useState } from 'react';
 import PropTypes from 'prop-types';
-import { Container, Box, Badge, Button, ColumnLayout, SpaceBetween } from '@awsui/components-react';
+import { Container, Box, Badge, Button, ColumnLayout, SpaceBetween, Modal, ButtonDropdown } from '@awsui/components-react';
 import { formatCompanyDate, formatRelativeTime } from '../../services/userCompanies';
 
 /**
@@ -12,8 +12,10 @@ import { formatCompanyDate, formatRelativeTime } from '../../services/userCompan
  * @param {Object} props.company - Company data object
  * @param {Function} props.onViewDocuments - Callback when "View Documents" is clicked
  * @param {Function} props.onViewIntelligence - Callback when "View Intelligence" is clicked
+ * @param {Function} props.onDelete - Callback when "Delete" is clicked
  */
-const CompanyCard = ({ company, onViewDocuments, onViewIntelligence }) => {
+const CompanyCard = ({ company, onViewDocuments, onViewIntelligence, onDelete }) => {
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const {
     company_number: companyNumber,
     company_name: companyName,
@@ -35,21 +37,54 @@ const CompanyCard = ({ company, onViewDocuments, onViewIntelligence }) => {
     }
   };
 
+  const handleDeleteClick = () => {
+    setShowDeleteModal(true);
+  };
+
+  const handleDeleteConfirm = () => {
+    setShowDeleteModal(false);
+    if (onDelete) {
+      onDelete(company);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setShowDeleteModal(false);
+  };
+
   return (
-    <Container
-      footer={
-        <Box float="right">
-          <SpaceBetween direction="horizontal" size="xs">
-            <Button onClick={handleViewIntelligence} iconAlign="right" iconName="status-info">
-              View Intelligence
-            </Button>
-            <Button variant="primary" onClick={handleViewDocuments} iconAlign="right" iconName="arrow-right">
-              View Documents
-            </Button>
-          </SpaceBetween>
-        </Box>
-      }
-    >
+    <>
+      <Container
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <ButtonDropdown
+                items={[
+                  {
+                    id: 'delete',
+                    text: 'Delete Company',
+                    iconName: 'remove',
+                    disabled: !onDelete,
+                  },
+                ]}
+                onItemClick={({ detail }) => {
+                  if (detail.id === 'delete') {
+                    handleDeleteClick();
+                  }
+                }}
+                variant="icon"
+                ariaLabel="Company actions"
+              />
+              <Button onClick={handleViewIntelligence} iconAlign="right" iconName="status-info">
+                View Intelligence
+              </Button>
+              <Button variant="primary" onClick={handleViewDocuments} iconAlign="right" iconName="arrow-right">
+                View Documents
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
       <SpaceBetween size="m">
         <div>
           <Box variant="h3" margin={{ bottom: 'xxs' }}>
@@ -98,6 +133,36 @@ const CompanyCard = ({ company, onViewDocuments, onViewIntelligence }) => {
         )}
       </SpaceBetween>
     </Container>
+
+    {/* Delete Confirmation Modal */}
+    <Modal
+      visible={showDeleteModal}
+      onDismiss={handleDeleteCancel}
+      header="Delete Company"
+      closeAriaLabel="Close"
+      footer={
+        <Box float="right">
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button variant="link" onClick={handleDeleteCancel}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={handleDeleteConfirm}>
+              Delete
+            </Button>
+          </SpaceBetween>
+        </Box>
+      }
+    >
+      <SpaceBetween size="m">
+        <Box variant="p">
+          Are you sure you want to delete <strong>{companyName}</strong> (#{companyNumber}) from your registered companies?
+        </Box>
+        <Box variant="p" color="text-status-warning">
+          This will remove the company from your list, but any cached data and documents will remain in the system.
+        </Box>
+      </SpaceBetween>
+    </Modal>
+    </>
   );
 };
 
@@ -112,6 +177,7 @@ CompanyCard.propTypes = {
   }).isRequired,
   onViewDocuments: PropTypes.func,
   onViewIntelligence: PropTypes.func,
+  onDelete: PropTypes.func,
 };
 
 CompanyCard.defaultProps = {

@@ -8,6 +8,7 @@
 import { API, graphqlOperation, Logger } from 'aws-amplify';
 import getUserCompaniesQuery from '../graphql/queries/getUserCompanies';
 import registerUserCompanyMutation from '../graphql/queries/registerUserCompany';
+import deleteUserCompanyMutation from '../graphql/queries/deleteUserCompany';
 
 const logger = new Logger('UserCompaniesService');
 
@@ -37,6 +38,34 @@ export const registerCompany = async (companyNumber, companyName) => {
     return success;
   } catch (error) {
     logger.error('Error registering company:', error);
+    throw error;
+  }
+};
+
+/**
+ * Delete a company from user's registered companies
+ * @param {string} companyNumber - UK Companies House number
+ * @returns {Promise<boolean>} Deletion success
+ */
+export const deleteCompany = async (companyNumber) => {
+  try {
+    logger.debug(`Deleting company ${companyNumber}`);
+
+    const response = await API.graphql(
+      graphqlOperation(deleteUserCompanyMutation, {
+        companyNumber,
+      }),
+    );
+
+    const success = response?.data?.deleteUserCompany;
+
+    if (success) {
+      logger.debug('Company deleted successfully');
+    }
+
+    return success;
+  } catch (error) {
+    logger.error('Error deleting company:', error);
     throw error;
   }
 };

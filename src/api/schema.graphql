@@ -259,6 +259,7 @@ type Mutation  {
   updateDiscoveryJobStatus(jobId: ID!, status: String!, errorMessage: String): DiscoveryJob @aws_iam
   deleteAgentJob(jobId: ID!): Boolean @aws_cognito_user_pools
   registerUserCompany(companyNumber: String!, companyName: String!): Boolean! @aws_cognito_user_pools
+  deleteUserCompany(companyNumber: String!): Boolean! @aws_cognito_user_pools
 }
 
 type Query @aws_cognito_user_pools @aws_iam {
