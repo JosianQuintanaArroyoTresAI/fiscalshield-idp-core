@@ -97,14 +97,18 @@ const CompanyIntelligence = () => {
     }
   };
 
+  const [reportData, setReportData] = useState(null);
+
   const handleGenerateReport = async () => {
     try {
       setIsGeneratingReport(true);
       setReportMessage('');
+      setReportData(null);
       const result = await generateAMLReport(companyNumber);
 
       if (result.success) {
-        setReportMessage('Report generated successfully!');
+        setReportMessage(`Report generated successfully for ${result.companyName}!`);
+        setReportData(result);
       } else {
         setReportMessage(result.message);
       }
@@ -459,11 +463,26 @@ const CompanyIntelligence = () => {
 
             {reportMessage && (
               <Alert
-                type={reportMessage.includes('not yet available') ? 'info' : 'success'}
+                type={reportMessage.includes('successfully') ? 'success' : reportMessage.includes('Failed') ? 'error' : 'info'}
                 dismissible
-                onDismiss={() => setReportMessage('')}
+                onDismiss={() => {
+                  setReportMessage('');
+                  setReportData(null);
+                }}
               >
                 {reportMessage}
+                {reportData?.downloadUrl && (
+                  <Box margin={{ top: 's' }}>
+                    <Button
+                      variant="primary"
+                      iconName="external"
+                      href={reportData.downloadUrl}
+                      target="_blank"
+                    >
+                      Download Report (Valid for 7 days)
+                    </Button>
+                  </Box>
+                )}
               </Alert>
             )}
           </SpaceBetween>

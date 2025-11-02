@@ -134,27 +134,50 @@ export const fetchCompanyIntelligence = async (companyNumber, forceRefresh = fal
 };
 
 /**
- * Generate AML report for a company (placeholder for future implementation)
+ * Generate AML report for a company
  * @param {string} companyNumber - UK company number
  */
 export const generateAMLReport = async (companyNumber) => {
   logger.debug(`AML report generation requested for ${companyNumber}`);
 
-  // Placeholder: Check if Analysis Stack has report generation capability
   try {
     const available = await checkAnalysisStackHealth();
     if (!available) {
       throw new Error('Analysis Stack is not available');
     }
 
-    // TODO: Implement actual report generation endpoint
-    // For now, return a placeholder response
+    const apiUrl = await getAnalysisApiUrl();
+    const url = `${apiUrl}/company/${companyNumber}/report`;
+
+    logger.debug(`Generating AML report for ${companyNumber}`);
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('No intelligence data found for this company. Please gather company intelligence first.');
+      }
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `Failed to generate AML report: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    logger.debug('AML report generated successfully:', data);
+
     return {
-      success: false,
-      message:
-        'AML report generation is not yet available. This feature requires the Analysis Stack to be fully deployed with AI report generation capability.',
-      companyNumber,
-      timestamp: new Date().toISOString(),
+      success: data.success,
+      reportId: data.report_id,
+      downloadUrl: data.download_url,
+      companyName: data.company_name,
+      riskLevel: data.risk_level,
+      generatedAt: data.generated_at,
+      message: `AML report generated successfully for ${data.company_name}. Click the download link to view.`,
+      ...data,
     };
   } catch (error) {
     logger.error('Error generating AML report:', error);

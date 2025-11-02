@@ -210,7 +210,7 @@ describe('Analysis Stack Service', () => {
     });
   });
 
-  describe('generateAMLReport() - Placeholder', () => {
+  describe('generateAMLReport()', () => {
     const TEST_COMPANY_NUMBER = '04409952';
 
     beforeEach(() => {
@@ -226,18 +226,52 @@ describe('Analysis Stack Service', () => {
       }));
     });
 
-    test('should return placeholder message when Analysis Stack available', async () => {
+    test('should generate report successfully', async () => {
       // Mock health check success
-      global.fetch.mockResolvedValue({
-        ok: true,
-        json: async () => ({ status: 'available' }),
-      });
+      global.fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ status: 'available' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            success: true,
+            report_id: 'report_20251102_120000',
+            download_url: 'https://s3.amazonaws.com/bucket/report.md',
+            company_name: 'Test Company Ltd',
+            company_number: TEST_COMPANY_NUMBER,
+            risk_level: 'LOW',
+            generated_at: '2025-11-02T12:00:00Z',
+          }),
+        });
 
       const result = await generateAMLReport(TEST_COMPANY_NUMBER);
 
-      expect(result.success).toBe(false);
-      expect(result.message).toContain('not yet available');
-      expect(result.companyNumber).toBe(TEST_COMPANY_NUMBER);
+      expect(result.success).toBe(true);
+      expect(result.reportId).toBe('report_20251102_120000');
+      expect(result.downloadUrl).toContain('s3.amazonaws.com');
+      expect(result.message).toContain('generated successfully');
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/company/04409952/report'),
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+
+    test('should throw error for 404 response', async () => {
+      global.fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ status: 'available' }),
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 404,
+          statusText: 'Not Found',
+          json: async () => ({ error: 'No data found' }),
+        });
+
+      await expect(generateAMLReport(TEST_COMPANY_NUMBER)).rejects.toThrow('No intelligence data found');
     });
 
     test('should throw error when Analysis Stack unavailable', async () => {

@@ -77,6 +77,39 @@ Globals:
 
 Resources:
   # ========================================================================
+  # S3 BUCKET - AML REPORTS
+  # ========================================================================
+
+  AMLReportsBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub 'fiscalshield-analysis-${Environment}-aml-reports-${AWS::AccountId}'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: !If [IsProduction, Enabled, Suspended]
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldReports
+            Status: Enabled
+            ExpirationInDays: 90  # Keep reports for 90 days
+            NoncurrentVersionExpirationInDays: 30
+      Tags:
+        - Key: Name
+          Value: !Sub 'fiscalshield-analysis-${Environment}-aml-reports'
+        - Key: Purpose
+          Value: Store generated AML compliance reports
+
+  # ========================================================================
   # DYNAMODB TABLE - COMPANY INTELLIGENCE
   # ========================================================================
 
@@ -190,6 +223,35 @@ Resources:
                 Condition:
                   StringEquals:
                     cloudwatch:namespace: FiscalShield/Analysis
+        - PolicyName: S3ReportsAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: WriteReportsToS3
+                Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:DeleteObject
+                Resource:
+                  - !Sub '${AMLReportsBucket.Arn}/*'
+              - Sid: ListReportsBucket
+                Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt AMLReportsBucket.Arn
+        - PolicyName: BedrockInvokeModel
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: InvokeClaudeForReports
+                Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                Resource:
+                  - !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0'
+                  - !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/anthropic.claude-*'
       Tags:
         - Key: Name
           Value: !Sub 'fiscalshield-analysis-${Environment}-LambdaExecutionRole'
@@ -268,6 +330,28 @@ Resources:
             RestApiId: !Ref AnalysisApi
             Path: /company/{company_number}/intelligence
             Method: GET
+
+  GenerateReportFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'fiscalshield-analysis-${Environment}-GenerateReport'
+      Description: Generate professional AML CDD report using Claude via Amazon Bedrock
+      CodeUri: ../../src/analysis/company_intelligence/generate_report/
+      Handler: handler.lambda_handler
+      Role: !GetAtt AnalysisLambdaRole.Arn
+      Timeout: 120  # 2 minutes for Bedrock API calls
+      MemorySize: 512
+      Environment:
+        Variables:
+          ENVIRONMENT: !Ref Environment
+          REPORTS_BUCKET: !Ref AMLReportsBucket
+      Events:
+        GenerateReport:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AnalysisApi
+            Path: /company/{company_number}/report
+            Method: POST
 
   HealthCheckFunction:
     Type: AWS::Serverless::Function
@@ -398,8 +482,21 @@ Outputs:
     Export:
       Name: !Sub '${AWS::StackName}-ApiUrlParameter'
 
+  AMLReportsBucketName:
+    Description: S3 bucket for storing generated AML reports
+    Value: !Ref AMLReportsBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-AMLReportsBucket'
+
+  GenerateReportFunctionArn:
+    Description: ARN of Generate AML Report Lambda function
+    Value: !GetAtt GenerateReportFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-GenerateReportFunction'
+
   AllApiEndpoints:
     Description: All available API endpoints
     Value: !Sub |
       Health Check: GET https://${AnalysisApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/health
       Company Intelligence: GET https://${AnalysisApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/company/{company_number}/intelligence
+      Generate AML Report: POST https://${AnalysisApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/company/{company_number}/report
