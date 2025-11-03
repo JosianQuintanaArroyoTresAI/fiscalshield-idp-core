@@ -606,8 +606,8 @@ const CompanyIntelligence = () => {
                   reportMessage.includes('successfully')
                     ? 'success'
                     : reportMessage.includes('Failed')
-                    ? 'error'
-                    : 'info'
+                      ? 'error'
+                      : 'info'
                 }
                 dismissible
                 onDismiss={() => {

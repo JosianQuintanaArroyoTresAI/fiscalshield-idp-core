@@ -111,10 +111,7 @@ const Navigation = ({ header = documentsNavHeader, items = null, onFollowHandler
   const navigationItems = [...(items || getDocumentsNavItems(isAdmin))];
 
   // Show deployment info only to administrators
-  if (
-    isAdmin &&
-    (settings?.Version || settings?.StackName || settings?.BuildDateTime || settings?.IDPPattern)
-  ) {
+  if (isAdmin && (settings?.Version || settings?.StackName || settings?.BuildDateTime || settings?.IDPPattern)) {
     const deploymentInfoItems = [];
 
     if (settings?.StackName) {
