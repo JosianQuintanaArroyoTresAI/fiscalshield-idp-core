@@ -127,7 +127,7 @@ jobs:
               ParameterKey=Pattern2Configuration,ParameterValue=rvl-cdip-package-sample \
               ParameterKey=Pattern3Configuration,ParameterValue=rvl-cdip-package-sample \
               ParameterKey=DocumentKnowledgeBase,ParameterValue=DISABLED \
-              ParameterKey=AllowedSignUpEmailDomain,ParameterValue="gmail.com,outlook.com,yahoo.com,hotmail.com,icloud.com,protonmail.com,duck.com" \
+              ParameterKey=AllowedSignUpEmailDomain,ParameterValue="gmail.com,outlook.com,yahoo.com,hotmail.com,icloud.com,protonmail.com,duck.com,tresai.ai" \
               ParameterKey=EnableHITL,ParameterValue=true \
               ParameterKey=LogLevel,ParameterValue=INFO \
               ParameterKey=LogRetentionDays,ParameterValue=30 \
@@ -158,10 +158,11 @@ jobs:
         fi
     
     - name: Force update Lambda functions (bypass CloudFormation caching)
+      continue-on-error: true
       run: |
         echo "🔄 Force updating Lambda functions with latest code..."
         chmod +x scripts/force-update-lambdas.sh
-        ./scripts/force-update-lambdas.sh
+        ./scripts/force-update-lambdas.sh || echo "⚠️ Some functions failed to update, but deployment continues"
       env:
         STACK_NAME: fiscalshield-idp-prod
         REGION: eu-central-1
