@@ -6,7 +6,29 @@ import awsExports from '../aws-exports';
 
 const logger = new Logger('AnalysisStackService');
 
-const SSM_PARAM_NAME = '/fiscalshield/analysis/dev/api-url';
+const SSM_PARAM_CANDIDATES = (() => {
+  const candidates = new Set([process.env.REACT_APP_ANALYSIS_PARAM_NAME]);
+
+  const environmentHints = [
+    process.env.REACT_APP_ANALYSIS_ENVIRONMENT,
+    process.env.REACT_APP_ENVIRONMENT,
+    process.env.REACT_APP_STAGE,
+    process.env.REACT_APP_DEPLOY_ENV,
+  ].filter(Boolean);
+
+  environmentHints.forEach((env) => {
+    candidates.add(`/fiscalshield/analysis/${env}/api-url`);
+
+    const normalized = env.toLowerCase();
+    candidates.add(`/fiscalshield/analysis/${normalized}/api-url`);
+  });
+
+  ['dev', 'stage', 'Stage', 'prod', 'production'].forEach((env) => {
+    candidates.add(`/fiscalshield/analysis/${env}/api-url`);
+  });
+
+  return Array.from(candidates).filter(Boolean);
+})();
 const ANALYSIS_API_FALLBACK =
   process.env.REACT_APP_ANALYSIS_API || 'https://qruy5j9952.execute-api.eu-central-1.amazonaws.com/dev';
 
@@ -44,16 +66,35 @@ const getAnalysisApiUrl = async () => {
       region: awsExports.aws_project_region,
     });
 
-    const command = new GetParameterCommand({ Name: SSM_PARAM_NAME });
-    const response = await ssmClient.send(command);
+    for (const paramName of SSM_PARAM_CANDIDATES) {
+      try {
+        const command = new GetParameterCommand({ Name: paramName });
+        const response = await ssmClient.send(command);
 
-    if (response.Parameter?.Value) {
-      cachedApiUrl = response.Parameter.Value;
-      logger.info('Analysis Stack API URL loaded from Parameter Store:', cachedApiUrl);
-      return cachedApiUrl;
+        if (response.Parameter?.Value) {
+          cachedApiUrl = response.Parameter.Value;
+          logger.info('Analysis Stack API URL loaded from Parameter Store:', cachedApiUrl);
+          return cachedApiUrl;
+        }
+
+        logger.warn(`Parameter ${paramName} exists but has no value, continuing to next candidate`);
+      } catch (paramError) {
+        if (paramError.name === 'ParameterNotFound' || paramError.code === 'ParameterNotFound') {
+          logger.debug(`Analysis Stack parameter not found: ${paramName}`);
+          continue;
+        }
+
+        if (paramError.name === 'AccessDeniedException') {
+          logger.warn(`Access denied reading Analysis Stack API URL for ${paramName}`);
+          return ANALYSIS_API_FALLBACK;
+        }
+
+        logger.error(`Error fetching Analysis Stack API URL from ${paramName}:`, paramError);
+        return ANALYSIS_API_FALLBACK;
+      }
     }
 
-    logger.warn('Parameter exists but has no value, using fallback');
+    logger.warn('No Analysis Stack API parameter found in SSM, using fallback URL');
     return ANALYSIS_API_FALLBACK;
   } catch (error) {
     // Parameter not found or access denied - Analysis Stack not deployed
