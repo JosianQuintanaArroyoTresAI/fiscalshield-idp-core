@@ -26,6 +26,22 @@ import '@awsui/global-styles/index.css';
 
 const logger = new Logger('CompanyIntelligence');
 
+const getReportAlertType = (message) => {
+  if (!message) {
+    return 'info';
+  }
+
+  if (message.includes('successfully')) {
+    return 'success';
+  }
+
+  if (message.includes('Failed')) {
+    return 'error';
+  }
+
+  return 'info';
+};
+
 const CompanyIntelligence = () => {
   const { companyNumber } = useParams();
   const history = useHistory();
@@ -602,13 +618,7 @@ const CompanyIntelligence = () => {
 
             {reportMessage && (
               <Alert
-                type={
-                  reportMessage.includes('successfully')
-                    ? 'success'
-                    : reportMessage.includes('Failed')
-                      ? 'error'
-                      : 'info'
-                }
+                type={getReportAlertType(reportMessage)}
                 dismissible
                 onDismiss={() => {
                   setReportMessage('');
