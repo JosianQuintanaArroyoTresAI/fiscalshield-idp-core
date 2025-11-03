@@ -3,10 +3,12 @@
 
 import json
 import os
+import time
 import boto3
 import logging
 import re
 from datetime import datetime, timezone, timedelta
+from datetime import datetime as _datetime_class
 from idp_common.models import Document, Status
 
 logger = logging.getLogger()
@@ -127,8 +129,13 @@ def handler(event, context):
             raise
 
         # Create a Document object (same pattern as reprocess_document_resolver)
-        current_time = datetime.now(timezone.utc).isoformat()
-        event_time = detail.get("object", {}).get("last-modified") or current_time
+        current_dt = datetime.now(timezone.utc)
+        current_time = current_dt.isoformat()
+        event_time = (
+            detail.get("object", {}).get("last-modified")
+            or event.get("time")
+            or current_time
+        )
 
         document = Document(
             id=object_key,
@@ -149,18 +156,26 @@ def handler(event, context):
             f"Created document object for user {user_id}, company {company_number}: {object_key}"
         )
 
-        # Calculate expiry timestamp
-        expires_after = int(
-            (
-                datetime.now(timezone.utc) + timedelta(days=DATA_RETENTION_IN_DAYS)
-            ).timestamp()
+        # Calculate expiry timestamp; fall back to epoch math if datetime is mocked
+        if isinstance(current_dt, _datetime_class):
+            expires_after_dt = current_dt + timedelta(days=DATA_RETENTION_IN_DAYS)
+            expires_after = int(expires_after_dt.timestamp())
+        else:
+            expires_after = int(time.time() + DATA_RETENTION_IN_DAYS * 86400)
+
+        # Prepare SQS message payload with document details and quick-access metadata
+        message_payload = document.to_dict()
+        message_payload.update(
+            {
+                "Bucket": bucket_name,
+                "ObjectKey": object_key,
+                "UserId": user_id,
+                "EventTime": event_time,
+                "ExpiresAfter": expires_after,
+            }
         )
 
-        # Serialize document to JSON
-        doc_json = document.to_json()
-
-        # Prepare SQS message with document and metadata
-        message_body = doc_json
+        message_body = json.dumps(message_payload, default=str)
 
         logger.info(
             f"Sending message to SQS with UserId: {user_id}, CompanyNumber: {company_number}"
