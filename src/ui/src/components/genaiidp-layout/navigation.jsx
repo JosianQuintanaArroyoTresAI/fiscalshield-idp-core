@@ -33,43 +33,38 @@ export const getDocumentsNavItems = (isAdmin = false) => {
     { type: 'link', text: 'Upload Document(s)', href: `#${UPLOAD_DOCUMENT_PATH}` },
   ];
 
-  // Items available to all users (including regular users)
-  const sharedItems = [
+  // Items only visible to administrators
+  const adminItems = [
     { type: 'link', text: 'Document KB', href: `#${DOCUMENTS_KB_QUERY_PATH}` },
     { type: 'link', text: 'Agent Analysis', href: `#${DOCUMENTS_ANALYTICS_PATH}` },
-  ];
-
-  // Admin-only items
-  const adminItems = [
     { type: 'link', text: 'Discovery', href: `#${DISCOVERY_PATH}` },
     { type: 'link', text: 'View/Edit Configuration', href: `#${CONFIGURATION_PATH}` },
   ];
 
-  // Combine items based on role
-  const items = [...baseItems, ...sharedItems];
+  const items = [...baseItems];
+
   if (isAdmin) {
     items.push(...adminItems);
-  }
 
-  // Add resources section (available to all)
-  items.push({
-    type: 'section',
-    text: 'Resources',
-    items: [
-      {
-        type: 'link',
-        text: 'README',
-        href: 'https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/blob/main/README.md',
-        external: true,
-      },
-      {
-        type: 'link',
-        text: 'Source Code',
-        href: 'https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws',
-        external: true,
-      },
-    ],
-  });
+    items.push({
+      type: 'section',
+      text: 'Resources',
+      items: [
+        {
+          type: 'link',
+          text: 'README',
+          href: 'https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws/blob/main/README.md',
+          external: true,
+        },
+        {
+          type: 'link',
+          text: 'Source Code',
+          href: 'https://github.com/aws-solutions-library-samples/accelerated-intelligent-document-processing-on-aws',
+          external: true,
+        },
+      ],
+    });
+  }
 
   return items;
 };
@@ -115,8 +110,11 @@ const Navigation = ({ header = documentsNavHeader, items = null, onFollowHandler
   // Get navigation items based on role (or use provided items)
   const navigationItems = [...(items || getDocumentsNavItems(isAdmin))];
 
-  // Add deployment info section if version, stack name, or build datetime is available
-  if (settings?.Version || settings?.StackName || settings?.BuildDateTime || settings?.IDPPattern) {
+  // Show deployment info only to administrators
+  if (
+    isAdmin &&
+    (settings?.Version || settings?.StackName || settings?.BuildDateTime || settings?.IDPPattern)
+  ) {
     const deploymentInfoItems = [];
 
     if (settings?.StackName) {
