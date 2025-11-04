@@ -111,7 +111,7 @@ const UploadDocumentPanel = () => {
         try {
           // Step 1: Get presigned URL data
           console.log(`Getting upload credentials for ${file.name}...`);
-          console.log(`Using prefix: ${prefix || 'none'}`);
+          console.log(`Document type: ${documentType}`);
           console.log(`Company: ${activeCompany.company_name} (${activeCompany.company_number})`);
 
           const response = await API.graphql(
