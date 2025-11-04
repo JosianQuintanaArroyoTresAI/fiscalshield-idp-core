@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: MIT-0
 
 const reprocessDocument = /* GraphQL */ `
-  mutation ReprocessDocument($objectKeys: [String!]!) {
-    reprocessDocument(objectKeys: $objectKeys)
+  mutation ReprocessDocument($objectKeys: [String!]!, $documentType: String) {
+    reprocessDocument(objectKeys: $objectKeys, documentType: $documentType)
   }
 `;
 
