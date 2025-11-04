@@ -14,12 +14,167 @@ import time
 import uuid
 from datetime import datetime
 from decimal import Decimal
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Set
+import logging
 
-# Import chunking extractor
-from idp_common.extraction import ChunkedInvoiceExtractor
+# Set up logger
+logger = logging.getLogger(__name__)
 
+
+# ==============================================================================
+# ChunkedInvoiceExtractor Class (Inlined for Lambda deployment)
+# ==============================================================================
+
+class ChunkedInvoiceExtractor:
+    """Handles chunked extraction and deduplication of invoices from large documents."""
+    
+    def __init__(self, chunk_size: int = 60000, overlap_size: int = 5000):
+        self.chunk_size = chunk_size
+        self.overlap_size = overlap_size
+    
+    def extract_page_numbers(self, text: str) -> List[int]:
+        page_pattern = r'\[PAGE:(\d+)\]'
+        matches = re.findall(page_pattern, text)
+        pages = sorted(set(int(page_num) for page_num in matches))
+        return pages if pages else [1]
+    
+    def create_chunks_with_overlap(self, text: str) -> List[Dict[str, Any]]:
+        chunks = []
+        start = 0
+        chunk_index = 0
+        
+        while start < len(text):
+            end = min(start + self.chunk_size, len(text))
+            chunk_text = text[start:end]
+            pages = self.extract_page_numbers(chunk_text)
+            
+            chunk_data = {
+                'chunk': chunk_text,
+                'start': start,
+                'end': end,
+                'pages': pages,
+                'chunk_index': chunk_index
+            }
+            
+            chunks.append(chunk_data)
+            
+            if end < len(text):
+                start = end - self.overlap_size
+            else:
+                break
+            
+            chunk_index += 1
+        
+        return chunks
+    
+    def contains_different_people(self, desc1: str, desc2: str) -> bool:
+        email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+        emails1 = set(re.findall(email_pattern, desc1))
+        emails2 = set(re.findall(email_pattern, desc2))
+        
+        if emails1 and emails2 and emails1.isdisjoint(emails2):
+            return True
+        
+        name_pattern = r'\b[A-Z][a-z]+ [A-Z][a-z]+\b'
+        names1 = set(re.findall(name_pattern, desc1))
+        names2 = set(re.findall(name_pattern, desc2))
+        
+        if names1 and names2 and len(names1) == 1 and len(names2) == 1 and names1.isdisjoint(names2):
+            return True
+        
+        return False
+    
+    def are_invoices_similar_content(self, invoice1: Dict, invoice2: Dict) -> bool:
+        vendor1 = str(invoice1.get('supplier_name', '') or invoice1.get('vendor_name', '')).strip().lower()
+        vendor2 = str(invoice2.get('supplier_name', '') or invoice2.get('vendor_name', '')).strip().lower()
+        vendor_match = vendor1 == vendor2 and vendor1 != ''
+        
+        try:
+            amount1 = float(invoice1.get('total_amount', 0) or 0)
+            amount2 = float(invoice2.get('total_amount', 0) or 0)
+            amount_match = abs(amount1 - amount2) < 0.01
+        except (ValueError, TypeError):
+            amount_match = False
+        
+        date1 = str(invoice1.get('invoice_date', '')).strip()
+        date2 = str(invoice2.get('invoice_date', '')).strip()
+        date_match = date1 == date2 and date1 != ''
+        
+        if vendor_match and amount_match and date_match:
+            desc1 = str(invoice1.get('description', '')).lower()
+            desc2 = str(invoice2.get('description', '')).lower()
+            
+            if self.contains_different_people(desc1, desc2):
+                return False
+            
+            return True
+        
+        return False
+    
+    def are_invoices_duplicate_by_pages(self, invoice1: Dict, invoice2: Dict) -> bool:
+        pages1 = set(invoice1.get('pages', []))
+        pages2 = set(invoice2.get('pages', []))
+        
+        if not pages1 or not pages2:
+            return self.are_invoices_similar_content(invoice1, invoice2)
+        
+        overlap = pages1.intersection(pages2)
+        
+        if len(overlap) > 0:
+            return self.are_invoices_similar_content(invoice1, invoice2)
+        
+        return False
+    
+    def is_more_complete_invoice(self, invoice1: Dict, invoice2: Dict) -> bool:
+        score1 = sum([
+            1 if (invoice1.get('supplier_name') or invoice1.get('vendor_name', '')).strip() else 0,
+            1 if invoice1.get('reference_number', '').strip() else 0,
+            1 if invoice1.get('description', '').strip() else 0,
+            1 if invoice1.get('supplier_address', '').strip() else 0,
+            1 if invoice1.get('invoice_number', '').strip() else 0,
+        ])
+        
+        score2 = sum([
+            1 if (invoice2.get('supplier_name') or invoice2.get('vendor_name', '')).strip() else 0,
+            1 if invoice2.get('reference_number', '').strip() else 0,
+            1 if invoice2.get('description', '').strip() else 0,
+            1 if invoice2.get('supplier_address', '').strip() else 0,
+            1 if invoice2.get('invoice_number', '').strip() else 0,
+        ])
+        
+        return score1 > score2
+    
+    def deduplicate_invoices(self, invoices: List[Dict]) -> List[Dict]:
+        if len(invoices) <= 1:
+            return invoices
+        
+        processed_invoices = []
+        
+        for current_invoice in invoices:
+            is_duplicate = False
+            
+            for existing_invoice in processed_invoices:
+                if self.are_invoices_duplicate_by_pages(current_invoice, existing_invoice):
+                    if self.is_more_complete_invoice(current_invoice, existing_invoice):
+                        processed_invoices = [
+                            inv for inv in processed_invoices 
+                            if id(inv) != id(existing_invoice)
+                        ]
+                        processed_invoices.append(current_invoice)
+                    
+                    is_duplicate = True
+                    break
+            
+            if not is_duplicate:
+                processed_invoices.append(current_invoice)
+        
+        return processed_invoices
+
+
+# ==============================================================================
 # Environment variables
+# ==============================================================================
+
 LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')
 EXTRACTION_RESULTS_TABLE = os.environ.get('EXTRACTION_RESULTS_TABLE')
 CONFIGURATION_TABLE = os.environ.get('CONFIGURATION_TABLE')
