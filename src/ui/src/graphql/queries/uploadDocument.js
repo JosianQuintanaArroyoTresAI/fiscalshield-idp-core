@@ -6,18 +6,18 @@ export default gql`
   mutation UploadDocument(
     $fileName: String!
     $contentType: String
-    $prefix: String
     $bucket: String
     $companyNumber: String
     $companyName: String
+    $documentType: String
   ) {
     uploadDocument(
       fileName: $fileName
       contentType: $contentType
-      prefix: $prefix
       bucket: $bucket
       companyNumber: $companyNumber
       companyName: $companyName
+      documentType: $documentType
     ) {
       presignedUrl
       objectKey
