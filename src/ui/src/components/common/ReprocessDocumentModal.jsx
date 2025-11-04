@@ -9,7 +9,7 @@ const logger = new Logger('ReprocessDocumentModal');
 
 const ReprocessDocumentModal = ({ visible, onDismiss, onConfirm, selectedItems = [] }) => {
   const [selectedDocumentType, setSelectedDocumentType] = useState(null);
-  
+
   let title = 'Reprocess document';
   let message = 'Are you sure you want to reprocess this document?';
 
@@ -54,7 +54,7 @@ const ReprocessDocumentModal = ({ visible, onDismiss, onConfirm, selectedItems =
     >
       <SpaceBetween size="m">
         <p>{message}</p>
-        
+
         <FormField
           label="Document Type"
           description="Select the document type to skip AI classification and improve accuracy. Choose 'Auto-detect' to let AI classify the document."
@@ -70,7 +70,8 @@ const ReprocessDocumentModal = ({ visible, onDismiss, onConfirm, selectedItems =
 
         <div>
           <p>
-            This will trigger workflow reprocessing for the following {selectedItems.length > 1 ? 'documents' : 'document'}:
+            This will trigger workflow reprocessing for the following{' '}
+            {selectedItems.length > 1 ? 'documents' : 'document'}:
           </p>
           <ul>
             {selectedItems.map((item) => (
