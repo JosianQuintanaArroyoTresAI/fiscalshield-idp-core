@@ -16,12 +16,21 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Dict, List, Any
 
+# Import chunking extractor
+from idp_common.extraction import ChunkedInvoiceExtractor
+
 # Environment variables
 LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')
 EXTRACTION_RESULTS_TABLE = os.environ.get('EXTRACTION_RESULTS_TABLE')
 CONFIGURATION_TABLE = os.environ.get('CONFIGURATION_TABLE')
 BEDROCK_MODEL_ID = os.environ.get('BEDROCK_MODEL_ID', 'anthropic.claude-3-5-sonnet-20240620-v1:0')
 AWS_REGION = os.environ.get('AWS_REGION', 'us-east-1')
+
+# Chunking configuration (Phase 3)
+USE_CHUNKED_EXTRACTION = os.environ.get('USE_CHUNKED_EXTRACTION', 'false').lower() == 'true'
+CHUNK_SIZE = int(os.environ.get('CHUNK_SIZE', '60000'))  # Optimized: ~15k tokens (vs 15k chars = 3.75k tokens)
+OVERLAP_SIZE = int(os.environ.get('OVERLAP_SIZE', '5000'))  # Covers 3-page invoices with minimal duplicates
+USE_PROMPT_CACHING = os.environ.get('USE_PROMPT_CACHING', 'true').lower() == 'true'  # 60-70% cost savings
 
 # Initialize AWS clients
 dynamodb = boto3.resource('dynamodb')
@@ -120,16 +129,55 @@ Text to extract from:
 {section_text}"""
 
 
-def invoke_bedrock(prompt: str) -> str:
-    """Invoke Bedrock Claude model for invoice extraction"""
+def invoke_bedrock(prompt: str, use_caching: bool = None) -> str:
+    """
+    Invoke Bedrock Claude model for invoice extraction
+    
+    Args:
+        prompt: Full prompt with instructions and text
+        use_caching: Enable prompt caching (saves 60-70% on multi-chunk docs)
+                     Defaults to USE_PROMPT_CACHING env var
+    
+    Returns:
+        Extracted invoice XML string
+    """
+    if use_caching is None:
+        use_caching = USE_PROMPT_CACHING
+    
     try:
-        body = {
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": 8000,
-            "messages": [
-                {"role": "user", "content": prompt}
-            ]
-        }
+        # Split prompt into cacheable instructions and variable text
+        # Assumes prompt format: "<instructions>Text to extract from:\n{text}"
+        parts = prompt.split("Text to extract from:\n", 1)
+        
+        if use_caching and len(parts) == 2:
+            # Use prompt caching: Cache the instructions, vary the text
+            instructions = parts[0] + "Text to extract from:\n"
+            text_content = parts[1]
+            
+            body = {
+                "anthropic_version": "bedrock-2023-05-31",
+                "max_tokens": 16000,  # Increased for large documents
+                "system": [
+                    {
+                        "type": "text",
+                        "text": instructions,
+                        "cache_control": {"type": "ephemeral"}  # Cache the prompt template
+                    }
+                ],
+                "messages": [
+                    {"role": "user", "content": text_content}
+                ]
+            }
+            log_with_timestamp("📌 Using prompt caching (60-70% cost savings on repeated calls)")
+        else:
+            # Standard invocation (no caching)
+            body = {
+                "anthropic_version": "bedrock-2023-05-31",
+                "max_tokens": 16000,
+                "messages": [
+                    {"role": "user", "content": prompt}
+                ]
+            }
 
         response = bedrock_runtime.invoke_model(
             modelId=BEDROCK_MODEL_ID,
@@ -137,6 +185,16 @@ def invoke_bedrock(prompt: str) -> str:
         )
 
         response_body = json.loads(response['body'].read())
+        
+        # Log cache usage if available
+        if 'usage' in response_body:
+            usage = response_body['usage']
+            if 'cache_read_input_tokens' in usage:
+                log_with_timestamp(
+                    f"💰 Cache hit: {usage.get('cache_read_input_tokens', 0)} cached tokens, "
+                    f"{usage.get('input_tokens', 0)} new tokens"
+                )
+        
         return response_body['content'][0]['text']
     except Exception as e:
         log_with_timestamp(f"❌ Error invoking Bedrock: {str(e)}")
@@ -225,6 +283,90 @@ def parse_invoices_from_xml(xml_content: str) -> List[Dict[str, Any]]:
         invoices.append(invoice_record)
 
     return invoices
+
+
+def process_section_with_chunking(
+    section_text: str,
+    prompt_template: str,
+    document_id: str,
+    section_id: str
+) -> List[Dict[str, Any]]:
+    """
+    Process large section text using chunking strategy (Phase 3)
+    
+    This function:
+    1. Splits text into overlapping chunks (default 15k chars with 3k overlap)
+    2. Processes each chunk separately with Bedrock
+    3. Deduplicates invoices using page-based algorithm
+    
+    Args:
+        section_text: Full OCR text from section
+        prompt_template: Invoice extraction prompt template
+        document_id: Document identifier
+        section_id: Section identifier
+        
+    Returns:
+        List of deduplicated invoice dictionaries
+    """
+    log_with_timestamp(f"🔄 Using CHUNKED extraction (chunk_size={CHUNK_SIZE}, overlap={OVERLAP_SIZE})")
+    
+    # Initialize chunking extractor
+    extractor = ChunkedInvoiceExtractor(chunk_size=CHUNK_SIZE, overlap_size=OVERLAP_SIZE)
+    
+    # Create chunks with overlap
+    chunks = extractor.create_chunks_with_overlap(section_text)
+    log_with_timestamp(f"📚 Created {len(chunks)} chunks from {len(section_text)} chars")
+    
+    # Process each chunk
+    all_invoices = []
+    
+    for idx, chunk_info in enumerate(chunks):
+        chunk_text = chunk_info['chunk']
+        chunk_pages = chunk_info['pages']
+        
+        log_with_timestamp(
+            f"📤 Processing chunk {idx+1}/{len(chunks)} "
+            f"(chars {chunk_info['start']}-{chunk_info['end']}, "
+            f"pages {chunk_pages})"
+        )
+        
+        try:
+            # Generate prompt for this chunk
+            prompt = prompt_template.format(section_text=chunk_text)
+            
+            # Invoke Bedrock for this chunk (with caching for chunks 2+)
+            xml_response = invoke_bedrock(prompt, use_caching=True)
+            
+            # Parse invoices from chunk response
+            chunk_invoices = parse_invoices_from_xml(xml_response)
+            
+            # Add chunk metadata to each invoice
+            for invoice in chunk_invoices:
+                invoice['chunk_index'] = idx
+                invoice['chunk_pages'] = chunk_pages
+                # If invoice doesn't have pages, use chunk pages
+                if not invoice.get('pages'):
+                    invoice['pages'] = chunk_pages
+            
+            all_invoices.extend(chunk_invoices)
+            log_with_timestamp(f"✅ Chunk {idx+1} yielded {len(chunk_invoices)} invoices")
+            
+        except Exception as e:
+            log_with_timestamp(f"❌ Error processing chunk {idx+1}: {str(e)}")
+            # Continue with other chunks even if one fails
+            continue
+    
+    log_with_timestamp(f"📊 Total invoices before deduplication: {len(all_invoices)}")
+    
+    # Deduplicate using page-based algorithm
+    deduplicated_invoices = extractor.deduplicate_invoices(all_invoices)
+    
+    log_with_timestamp(
+        f"✅ Deduplication complete: {len(all_invoices)} → {len(deduplicated_invoices)} "
+        f"(removed {len(all_invoices) - len(deduplicated_invoices)} duplicates)"
+    )
+    
+    return deduplicated_invoices
 
 
 def write_invoices_to_dynamodb(
@@ -517,15 +659,40 @@ def lambda_handler(event, context):
 
         # Get extraction prompt (dynamic from ConfigurationTable)
         prompt_template = get_invoice_extraction_prompt()
-        prompt = prompt_template.format(section_text=section_text)
-
-        # Invoke Bedrock to extract invoices
-        log_with_timestamp("📤 Calling Bedrock for invoice extraction...")
-        xml_response = invoke_bedrock(prompt)
-
-        # Parse invoices from XML (hardcoded logic)
-        log_with_timestamp("🔍 Parsing invoices from XML response...")
-        invoices = parse_invoices_from_xml(xml_response)
+        
+        # PHASE 3: Choose extraction strategy based on feature flag and section size
+        if USE_CHUNKED_EXTRACTION and len(section_text) > CHUNK_SIZE:
+            log_with_timestamp(
+                f"🔄 Section text ({len(section_text)} chars) exceeds chunk size ({CHUNK_SIZE})"
+            )
+            log_with_timestamp("   Using CHUNKED extraction strategy...")
+            
+            invoices = process_section_with_chunking(
+                section_text=section_text,
+                prompt_template=prompt_template,
+                document_id=document_id,
+                section_id=section_id
+            )
+        else:
+            # Original non-chunked flow (default/fallback)
+            if USE_CHUNKED_EXTRACTION:
+                log_with_timestamp(
+                    f"ℹ️  Section text ({len(section_text)} chars) fits in single chunk"
+                )
+                log_with_timestamp("   Using standard extraction (no chunking needed)")
+            else:
+                log_with_timestamp("ℹ️  Chunked extraction DISABLED (USE_CHUNKED_EXTRACTION=false)")
+                log_with_timestamp("   Using standard extraction")
+            
+            prompt = prompt_template.format(section_text=section_text)
+            
+            # Invoke Bedrock to extract invoices
+            log_with_timestamp("📤 Calling Bedrock for invoice extraction...")
+            xml_response = invoke_bedrock(prompt)
+            
+            # Parse invoices from XML (hardcoded logic)
+            log_with_timestamp("🔍 Parsing invoices from XML response...")
+            invoices = parse_invoices_from_xml(xml_response)
 
         if not invoices:
             log_with_timestamp("⚠️ No valid invoices found in section")
