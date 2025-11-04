@@ -58,7 +58,7 @@ const UploadDocumentPanel = () => {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-    
+
     if (!documentType) {
       setError('Please select a document type first');
       return;
@@ -202,10 +202,7 @@ const UploadDocumentPanel = () => {
       <SpaceBetween size="l">
         {/* Document Type Selection Buttons */}
         <Box>
-          <FormField 
-            label="Select Document Type" 
-            description="Choose the type of documents you want to upload"
-          >
+          <FormField label="Select Document Type" description="Choose the type of documents you want to upload">
             <SpaceBetween direction="horizontal" size="m">
               <Button
                 variant={documentType === 'invoice' ? 'primary' : 'normal'}
@@ -220,7 +217,7 @@ const UploadDocumentPanel = () => {
               >
                 📄 Invoices
               </Button>
-              
+
               <Button
                 variant={documentType === 'bank-statement' ? 'primary' : 'normal'}
                 onClick={() => {
@@ -239,7 +236,7 @@ const UploadDocumentPanel = () => {
               <ButtonDropdown
                 items={[
                   { id: 'payslip', text: '💰 Payslip' },
-                  { id: 'drivers-license', text: '🪪 Driver\'s License' },
+                  { id: 'drivers-license', text: "🪪 Driver's License" },
                   { id: 'w2', text: '📋 W2 Tax Form' },
                   { id: 'check', text: '✅ Check' },
                   { id: 'homeowners-insurance', text: '🏠 Homeowners Insurance' },
@@ -253,8 +250,8 @@ const UploadDocumentPanel = () => {
                 disabled={isUploading}
                 variant={documentType && !['invoice', 'bank-statement'].includes(documentType) ? 'primary' : 'normal'}
               >
-                {documentType && !['invoice', 'bank-statement'].includes(documentType) 
-                  ? `✓ ${documentType.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}`
+                {documentType && !['invoice', 'bank-statement'].includes(documentType)
+                  ? `✓ ${documentType.replace(/-/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())}`
                   : 'Other Document Types'}
               </ButtonDropdown>
             </SpaceBetween>
@@ -269,15 +266,11 @@ const UploadDocumentPanel = () => {
             onDragOver={handleDrag}
             onDrop={handleDrop}
             style={{
-              border: documentType 
-                ? (dragActive ? '3px dashed #0972d3' : '2px dashed #aab7b8')
-                : '2px dashed #d5dbdb',
+              border: documentType ? (dragActive ? '3px dashed #0972d3' : '2px dashed #aab7b8') : '2px dashed #d5dbdb',
               borderRadius: '8px',
               padding: '60px 20px',
               textAlign: 'center',
-              backgroundColor: documentType 
-                ? (dragActive ? '#f0f8ff' : '#fafafa')
-                : '#f5f5f5',
+              backgroundColor: documentType ? (dragActive ? '#f0f8ff' : '#fafafa') : '#f5f5f5',
               cursor: documentType ? 'pointer' : 'not-allowed',
               transition: 'all 0.3s ease',
               opacity: documentType ? 1 : 0.5,
@@ -289,8 +282,10 @@ const UploadDocumentPanel = () => {
                 📁
               </Box>
               <Box fontSize="heading-m" color={documentType ? 'text-label' : 'text-status-inactive'}>
-                {documentType 
-                  ? (dragActive ? 'Drop files here' : 'Drag and drop files here')
+                {documentType
+                  ? dragActive
+                    ? 'Drop files here'
+                    : 'Drag and drop files here'
                   : 'Select a document type to enable upload'}
               </Box>
               {documentType && (
@@ -314,7 +309,7 @@ const UploadDocumentPanel = () => {
               )}
             </SpaceBetween>
           </div>
-          
+
           {/* Hidden file input */}
           <input
             ref={fileInputRef}
@@ -350,10 +345,11 @@ const UploadDocumentPanel = () => {
           disabled={selectedFiles.length === 0 || isUploading || !documentType}
           iconName="upload"
         >
-          {isUploading 
+          {isUploading
             ? `Uploading... (${uploadStatus.length}/${selectedFiles.length})`
-            : `Upload ${selectedFiles.length > 0 ? `${selectedFiles.length} ${documentType?.replace(/-/g, ' ')}(s)` : 'Files'}`
-          }
+            : `Upload ${
+                selectedFiles.length > 0 ? `${selectedFiles.length} ${documentType?.replace(/-/g, ' ')}(s)` : 'Files'
+              }`}
         </Button>
 
         {/* Upload Results */}
