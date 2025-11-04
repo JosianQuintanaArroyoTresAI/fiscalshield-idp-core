@@ -20,12 +20,12 @@ const ReprocessDocumentModal = ({ visible, onDismiss, onConfirm, selectedItems =
 
   const documentTypeOptions = [
     { label: 'Auto-detect (use AI)', value: '' },
-    { label: 'Invoice', value: 'Invoice' },
-    { label: 'Bank Statement', value: 'Bank-Statement' },
-    { label: 'Payslip', value: 'Payslip' },
-    { label: 'Receipt', value: 'Receipt' },
-    { label: 'Contract', value: 'Contract' },
-    { label: 'Other', value: 'Other' },
+    { label: 'Invoice', value: 'invoice' },
+    { label: 'Bank Statement', value: 'bank-statement' },
+    { label: 'Payslip', value: 'payslip' },
+    { label: 'Receipt', value: 'receipt' },
+    { label: 'Contract', value: 'contract' },
+    { label: 'Other', value: 'other' },
   ];
 
   const handleConfirm = () => {
