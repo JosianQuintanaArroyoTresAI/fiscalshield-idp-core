@@ -1723,6 +1723,11 @@ Resources:
           EXTRACTION_RESULTS_TABLE: !Ref ExtractionResultsTable
           CONFIGURATION_TABLE: !Ref ConfigurationTable
           BEDROCK_MODEL_ID: "anthropic.claude-3-5-sonnet-20240620-v1:0"
+          # Phase 3: Chunked extraction configuration
+          USE_CHUNKED_EXTRACTION: "false"  # Start disabled for safety - enable after validation
+          CHUNK_SIZE: "60000"              # 60k chars = ~15k tokens (optimized for Claude 3.5 context)
+          OVERLAP_SIZE: "5000"             # 5k overlap covers 3-page invoices, minimal duplicates (8%)
+          USE_PROMPT_CACHING: "true"       # Prompt caching: 60-70% savings on multi-chunk documents
       LoggingConfig:
         LogGroup: !Ref InvoiceExtractionFunctionLogGroup
       Policies:
