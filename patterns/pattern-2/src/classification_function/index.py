@@ -56,6 +56,69 @@ def handler(event, context):
     )
     logger.info(f"Full document content: {json.dumps(document.to_dict(), default=str)}")
 
+    # NEW: Check if user provided document type hint
+    user_hint = document.user_document_type
+    trust_user_hint = config.get("classification", {}).get("trust_user_hint", False)
+    
+    if user_hint and trust_user_hint:
+        logger.info(
+            f"User indicated document type: '{user_hint}'. trust_user_hint=True, using user hint for classification"
+        )
+        
+        # Apply user hint to all pages
+        from idp_common.models import Section
+        for page_id, page in document.pages.items():
+            page.classification = user_hint
+            page.confidence = 1.0  # Full confidence in user's selection
+        
+        # Create single section with all pages (user said they're all the same type)
+        section = Section(
+            section_id="1",
+            classification=user_hint,
+            confidence=1.0,
+            page_ids=list(document.pages.keys()),
+        )
+        document.sections = [section]
+        
+        logger.info(
+            f"✅ Created section with classification='{user_hint}' for {len(document.pages)} pages. "
+            f"This will route to: {'InvoiceExtraction' if user_hint == 'invoice' else 'GenericExtraction'} Lambda"
+        )
+        
+        # Store metadata about classification method for audit/drift detection
+        if not document.metadata:
+            document.metadata = {}
+        document.metadata["classification_method"] = "user_hint"
+        document.metadata["user_provided_type"] = user_hint
+        document.metadata["llm_classification_skipped"] = True
+        
+        # Update document in tracking
+        document.workflow_execution_arn = event.get("execution_arn")
+        document_service = create_document_service()
+        logger.info("Updating document with user-hinted classification")
+        document_service.update_document(document)
+        
+        # Add Lambda metering
+        try:
+            lambda_metering = calculate_lambda_metering(
+                "Classification", context, start_time
+            )
+            document.metering = merge_metering_data(document.metering, lambda_metering)
+        except Exception as e:
+            logger.warning(f"Failed to add Lambda metering: {str(e)}")
+        
+        # Prepare output
+        response = {
+            "document": document.serialize_document(
+                working_bucket, "classification_user_hint", logger
+            )
+        }
+        
+        logger.info(
+            f"Classification completed using user hint - Response: {json.dumps(response, default=str)}"
+        )
+        return response
+
     # Intelligent Classification detection: Skip if pages already have classifications
     pages_with_classification = 0
     for page in document.pages.values():
@@ -126,6 +189,15 @@ def handler(event, context):
 
     # Classify the document - the service will update the Document directly
     document = service.classify_document(document)
+    
+    # NEW: Store classification metadata for drift detection
+    if not document.metadata:
+        document.metadata = {}
+    document.metadata["classification_method"] = "llm"
+    if user_hint:
+        # Store user hint even when we ran LLM (for comparison/drift detection)
+        document.metadata["user_provided_type"] = user_hint
+        logger.info(f"Stored user hint '{user_hint}' for drift detection (LLM classification was run)")
 
     # Check if document processing failed or has pages that failed to classify
     failed_page_exceptions = None

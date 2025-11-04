@@ -223,6 +223,7 @@ class Document:
     user_id: Optional[str] = None  # Cognito user ID for multi-tenant isolation
     company_number: Optional[str] = None  # Company number for company-based isolation
     company_name: Optional[str] = None  # Company name for display purposes
+    user_document_type: Optional[str] = None  # NEW: User's document type hint from upload
 
     # Processing state and timing
     status: Status = Status.QUEUED
@@ -260,6 +261,7 @@ class Document:
             "input_key": self.input_key,
             "output_bucket": self.output_bucket,
             "user_id": self.user_id,
+            "user_document_type": self.user_document_type,  # NEW
             "status": self.status.value,
             "initial_event_time": self.initial_event_time,
             "queued_time": self.queued_time,
@@ -328,6 +330,7 @@ class Document:
             input_key=data.get("input_key"),
             output_bucket=data.get("output_bucket"),
             user_id=user_id,
+            user_document_type=data.get("user_document_type"),  # NEW
             num_pages=int(data.get("num_pages", 0)),  # Ensure num_pages is integer
             initial_event_time=data.get("initial_event_time"),
             queued_time=data.get("queued_time"),

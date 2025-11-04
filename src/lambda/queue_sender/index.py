@@ -103,6 +103,7 @@ def handler(event, context):
         # Extract company metadata from S3 object if available
         company_number = None
         company_name = None
+        user_document_type = None  # NEW: User's document type hint
         try:
             # Get object metadata to extract company information
             head_response = boto3.client("s3").head_object(
@@ -111,10 +112,14 @@ def handler(event, context):
             metadata = head_response.get("Metadata", {})
             company_number = metadata.get("company-number")
             company_name = metadata.get("company-name")
+            user_document_type = metadata.get("user-document-type")  # NEW
+            
             if company_number:
                 logger.info(
                     f"Extracted company metadata: {company_name} ({company_number})"
                 )
+            if user_document_type:
+                logger.info(f"User indicated document type: {user_document_type}")
         except Exception as e:
             logger.warning(f"Could not retrieve object metadata: {str(e)}")
             # Continue without company metadata
@@ -148,6 +153,7 @@ def handler(event, context):
             user_id=user_id,
             company_number=company_number,
             company_name=company_name,
+            user_document_type=user_document_type,  # NEW: Pass user's hint
             pages={},
             sections=[],
         )
