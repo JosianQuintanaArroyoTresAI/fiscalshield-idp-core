@@ -134,7 +134,36 @@
                                 "BackoffRate": 2
                             }
                         ],
+                        "Catch": [
+                            {
+                                "ErrorEquals": [
+                                    "States.ALL"
+                                ],
+                                "ResultPath": "$.InvoiceExtractionError",
+                                "Next": "SendInvoiceToDLQ"
+                            }
+                        ],
                         "Next": "AssessmentStep"
+                    },
+                    "SendInvoiceToDLQ": {
+                        "Type": "Task",
+                        "Resource": "arn:aws:states:::sqs:sendMessage",
+                        "Parameters": {
+                            "QueueUrl": "${InvoiceExtractionDLQUrl}",
+                            "MessageBody.$": "States.JsonToString({\"error\": $.InvoiceExtractionError, \"documentId\": $.document.id, \"userId\": $.document.user_id, \"clientId\": $.document.client_id, \"sectionId\": $.section.section_id, \"sectionClassification\": $.section.classification, \"executionArn\": $$.Execution.Arn, \"timestamp\": $$.State.EnteredTime})"
+                        },
+                        "ResultPath": "$.DLQDispatchResult",
+                        "Next": "SectionFailed"
+                    },
+                    "SectionFailed": {
+                        "Type": "Pass",
+                        "Parameters": {
+                            "status": "FAILED",
+                            "sectionId.$": "$.section.section_id",
+                            "documentId.$": "$.document.id",
+                            "executionArn.$": "$$.Execution.Arn"
+                        },
+                        "End": true
                     },
                     "AssessmentStep": {
                         "Type": "Task",

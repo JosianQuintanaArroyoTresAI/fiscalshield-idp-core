@@ -1722,7 +1722,14 @@ Resources:
           LOG_LEVEL: !Ref LogLevel
           EXTRACTION_RESULTS_TABLE: !Ref ExtractionResultsTable
           CONFIGURATION_TABLE: !Ref ConfigurationTable
-          BEDROCK_MODEL_ID: "anthropic.claude-3-5-sonnet-20240620-v1:0"
+          BEDROCK_MODEL_ID: "anthropic.claude-3-7-sonnet-20250219-v1:0"
+          BEDROCK_INFERENCE_PROFILE_ARN: ""
+          FALLBACK_BEDROCK_MODEL_ID: "anthropic.claude-3-5-sonnet-20240620-v1:0"
+          FALLBACK_BEDROCK_INFERENCE_PROFILE_ARN: ""
+          BEDROCK_MAX_RETRIES: "6"
+          BEDROCK_BACKOFF_BASE_SECONDS: "2.0"
+          BEDROCK_BACKOFF_MAX_SECONDS: "45.0"
+          BEDROCK_FALLBACK_AFTER_ATTEMPT: "3"
           # Phase 3: Chunked extraction configuration
           USE_CHUNKED_EXTRACTION: "true"   # Enabled - chunking working correctly
           CHUNK_SIZE: "60000"              # 60k chars = ~15k tokens (optimized for Claude 3.5 context)
@@ -2342,6 +2349,14 @@ Resources:
       LogGroupName: !Sub "/${AWS::StackName}/lambda/SummarizationFunction"
       RetentionInDays: !Ref LogRetentionDays
 
+  InvoiceExtractionDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${AWS::StackName}-invoice-extraction-dlq"
+      VisibilityTimeout: 300
+      MessageRetentionPeriod: 1209600 # 14 days
+      SqsManagedSseEnabled: true
+
   DocumentProcessingStateMachine:
     Type: AWS::Serverless::StateMachine
     Properties:
@@ -2364,6 +2379,7 @@ Resources:
         HITLStatusUpdateFunctionArn: !GetAtt HITLStatusUpdateFunction.Arn
         SummarizationLambdaArn: !GetAtt SummarizationFunction.Arn
         OutputBucket: !Ref OutputBucket
+        InvoiceExtractionDLQUrl: !Ref InvoiceExtractionDeadLetterQueue
       Logging:
         Level: ALL
         IncludeExecutionData: true
@@ -2389,6 +2405,8 @@ Resources:
         - LambdaInvokePolicy:
             FunctionName: !Ref SummarizationFunction
         - CloudWatchLogsFullAccess
+    - SQSSendMessagePolicy:
+      QueueName: !GetAtt InvoiceExtractionDeadLetterQueue.QueueName
 
   StateMachineLogGroup:
     Type: AWS::Logs::LogGroup
