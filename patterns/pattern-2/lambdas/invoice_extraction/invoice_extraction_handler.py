@@ -178,8 +178,12 @@ class ChunkedInvoiceExtractor:
 LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')
 EXTRACTION_RESULTS_TABLE = os.environ.get('EXTRACTION_RESULTS_TABLE')
 CONFIGURATION_TABLE = os.environ.get('CONFIGURATION_TABLE')
-BEDROCK_MODEL_ID = os.environ.get('BEDROCK_MODEL_ID', 'anthropic.claude-3-5-sonnet-20240620-v1:0')
-AWS_REGION = os.environ.get('AWS_REGION', 'us-east-1')
+BEDROCK_MODEL_ID = os.environ.get('BEDROCK_MODEL_ID', 'anthropic.claude-3-7-sonnet-20250219-v1:0')
+AWS_REGION = os.environ.get('AWS_REGION', 'eu-central-1')
+BEDROCK_INFERENCE_PROFILE_ARN = os.environ.get(
+    'BEDROCK_INFERENCE_PROFILE_ARN',
+    'arn:aws:bedrock:eu-central-1:864899848062:inference-profile/eu.anthropic.claude-3-7-sonnet-20250219-v1:0'
+)
 
 # Chunking configuration (Phase 3)
 USE_CHUNKED_EXTRACTION = os.environ.get('USE_CHUNKED_EXTRACTION', 'false').lower() == 'true'
@@ -334,10 +338,18 @@ def invoke_bedrock(prompt: str, use_caching: bool = None) -> str:
                 ]
             }
 
-        response = bedrock_runtime.invoke_model(
-            modelId=BEDROCK_MODEL_ID,
-            body=json.dumps(body)
-        )
+        invoke_kwargs = {
+            'body': json.dumps(body)
+        }
+
+        if BEDROCK_INFERENCE_PROFILE_ARN:
+            invoke_kwargs['inferenceProfileArn'] = BEDROCK_INFERENCE_PROFILE_ARN
+            log_with_timestamp(f"🌍 Using Bedrock inference profile: {BEDROCK_INFERENCE_PROFILE_ARN}")
+        else:
+            invoke_kwargs['modelId'] = BEDROCK_MODEL_ID
+            log_with_timestamp(f"🌍 Using Bedrock model ID: {BEDROCK_MODEL_ID}")
+
+        response = bedrock_runtime.invoke_model(**invoke_kwargs)
 
         response_body = json.loads(response['body'].read())
         
@@ -489,8 +501,10 @@ def process_section_with_chunking(
             # Generate prompt for this chunk
             prompt = prompt_template.format(section_text=chunk_text)
             
-            # Invoke Bedrock for this chunk (with caching for chunks 2+)
-            xml_response = invoke_bedrock(prompt, use_caching=True)
+            # Invoke Bedrock for this chunk
+            # Enable prompt caching only if the feature is configured and this is not the first chunk
+            chunk_use_caching = USE_PROMPT_CACHING and idx > 0
+            xml_response = invoke_bedrock(prompt, use_caching=chunk_use_caching)
             
             # Parse invoices from chunk response
             chunk_invoices = parse_invoices_from_xml(xml_response)
