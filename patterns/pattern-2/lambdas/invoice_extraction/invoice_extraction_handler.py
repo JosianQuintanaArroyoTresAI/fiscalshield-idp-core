@@ -12,10 +12,12 @@ import re
 import os
 import time
 import uuid
+import random
 from datetime import datetime
 from decimal import Decimal
 from typing import Dict, List, Any, Set
 import logging
+from botocore.exceptions import ClientError, ParamValidationError
 
 # Set up logger
 logger = logging.getLogger(__name__)
@@ -180,10 +182,13 @@ EXTRACTION_RESULTS_TABLE = os.environ.get('EXTRACTION_RESULTS_TABLE')
 CONFIGURATION_TABLE = os.environ.get('CONFIGURATION_TABLE')
 BEDROCK_MODEL_ID = os.environ.get('BEDROCK_MODEL_ID', 'anthropic.claude-3-7-sonnet-20250219-v1:0')
 AWS_REGION = os.environ.get('AWS_REGION', 'eu-central-1')
-BEDROCK_INFERENCE_PROFILE_ARN = os.environ.get(
-    'BEDROCK_INFERENCE_PROFILE_ARN',
-    'arn:aws:bedrock:eu-central-1:864899848062:inference-profile/eu.anthropic.claude-3-7-sonnet-20250219-v1:0'
-)
+BEDROCK_INFERENCE_PROFILE_ARN = os.environ.get('BEDROCK_INFERENCE_PROFILE_ARN', '').strip()
+FALLBACK_BEDROCK_MODEL_ID = os.environ.get('FALLBACK_BEDROCK_MODEL_ID', '').strip()
+FALLBACK_BEDROCK_INFERENCE_PROFILE_ARN = os.environ.get('FALLBACK_BEDROCK_INFERENCE_PROFILE_ARN', '').strip()
+BEDROCK_MAX_RETRIES = int(os.environ.get('BEDROCK_MAX_RETRIES', '6'))
+BEDROCK_BACKOFF_BASE_SECONDS = float(os.environ.get('BEDROCK_BACKOFF_BASE_SECONDS', '2.0'))
+BEDROCK_BACKOFF_MAX_SECONDS = float(os.environ.get('BEDROCK_BACKOFF_MAX_SECONDS', '45.0'))
+BEDROCK_FALLBACK_AFTER_ATTEMPT = int(os.environ.get('BEDROCK_FALLBACK_AFTER_ATTEMPT', '3'))
 
 # Chunking configuration (Phase 3)
 USE_CHUNKED_EXTRACTION = os.environ.get('USE_CHUNKED_EXTRACTION', 'false').lower() == 'true'
@@ -198,10 +203,35 @@ extraction_table = dynamodb.Table(EXTRACTION_RESULTS_TABLE)
 config_table = dynamodb.Table(CONFIGURATION_TABLE)
 
 
+THROTTLING_ERROR_CODES = {"ThrottlingException", "TooManyRequestsException"}
+
+
 def log_with_timestamp(message: str):
     """Helper function to log messages with timestamps"""
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
     print(f"[{timestamp}] {message}")
+
+
+def _invoke_bedrock_runtime(model_id: str, profile_arn: str, body_json: str):
+    """Invoke Bedrock runtime, handling inference profile compatibility."""
+    invoke_kwargs = {
+        'modelId': model_id,
+        'body': body_json
+    }
+
+    if profile_arn:
+        log_with_timestamp(f"🌍 Using Bedrock inference profile: {profile_arn}")
+        invoke_kwargs['inferenceProfileArn'] = profile_arn
+    else:
+        log_with_timestamp(f"🌍 Using Bedrock model ID: {model_id}")
+
+    try:
+        return bedrock_runtime.invoke_model(**invoke_kwargs)
+    except ParamValidationError as param_error:
+        if profile_arn and 'inferenceProfileArn' in str(param_error):
+            log_with_timestamp("⚠️ Inference profile unsupported, retrying with direct modelId")
+            return bedrock_runtime.invoke_model(modelId=model_id, body=body_json)
+        raise
 
 
 def get_invoice_extraction_prompt() -> str:
@@ -338,31 +368,85 @@ def invoke_bedrock(prompt: str, use_caching: bool = None) -> str:
                 ]
             }
 
-        invoke_kwargs = {
-            'body': json.dumps(body)
-        }
+        body_json = json.dumps(body)
 
-        if BEDROCK_INFERENCE_PROFILE_ARN:
-            invoke_kwargs['inferenceProfileArn'] = BEDROCK_INFERENCE_PROFILE_ARN
-            log_with_timestamp(f"🌍 Using Bedrock inference profile: {BEDROCK_INFERENCE_PROFILE_ARN}")
-        else:
-            invoke_kwargs['modelId'] = BEDROCK_MODEL_ID
-            log_with_timestamp(f"🌍 Using Bedrock model ID: {BEDROCK_MODEL_ID}")
+        active_model_id = BEDROCK_MODEL_ID
+        active_profile_arn = BEDROCK_INFERENCE_PROFILE_ARN
+        used_fallback_model = False
+        fallback_trigger = max(1, min(BEDROCK_FALLBACK_AFTER_ATTEMPT, BEDROCK_MAX_RETRIES))
 
-        response = bedrock_runtime.invoke_model(**invoke_kwargs)
+        for attempt in range(1, BEDROCK_MAX_RETRIES + 1):
+            try:
+                response = _invoke_bedrock_runtime(active_model_id, active_profile_arn, body_json)
+                response_body = json.loads(response['body'].read())
 
-        response_body = json.loads(response['body'].read())
-        
-        # Log cache usage if available
-        if 'usage' in response_body:
-            usage = response_body['usage']
-            if 'cache_read_input_tokens' in usage:
-                log_with_timestamp(
-                    f"💰 Cache hit: {usage.get('cache_read_input_tokens', 0)} cached tokens, "
-                    f"{usage.get('input_tokens', 0)} new tokens"
+                if 'usage' in response_body:
+                    usage = response_body['usage']
+                    if 'cache_read_input_tokens' in usage:
+                        log_with_timestamp(
+                            f"💰 Cache hit: {usage.get('cache_read_input_tokens', 0)} cached tokens, "
+                            f"{usage.get('input_tokens', 0)} new tokens"
+                        )
+
+                return response_body['content'][0]['text']
+
+            except ClientError as client_error:
+                error_code = client_error.response.get('Error', {}).get('Code', '')
+                error_message = client_error.response.get('Error', {}).get('Message', str(client_error))
+                message_lower = error_message.lower()
+                is_throttle = (
+                    error_code in THROTTLING_ERROR_CODES or
+                    'too many tokens' in message_lower or
+                    'please wait before trying again' in message_lower or
+                    'throttl' in error_code.lower()
                 )
-        
-        return response_body['content'][0]['text']
+
+                if is_throttle:
+                    if not used_fallback_model and FALLBACK_BEDROCK_MODEL_ID and attempt >= fallback_trigger:
+                        log_with_timestamp(
+                            f"🔁 Switching to fallback model {FALLBACK_BEDROCK_MODEL_ID} after {attempt} attempts"
+                        )
+                        active_model_id = FALLBACK_BEDROCK_MODEL_ID
+                        active_profile_arn = FALLBACK_BEDROCK_INFERENCE_PROFILE_ARN
+                        used_fallback_model = True
+                        continue
+
+                    if attempt == BEDROCK_MAX_RETRIES:
+                        raise
+
+                    backoff_seconds = min(
+                        BEDROCK_BACKOFF_BASE_SECONDS * (2 ** (attempt - 1)),
+                        BEDROCK_BACKOFF_MAX_SECONDS
+                    )
+                    jitter_multiplier = random.uniform(0.8, 1.2)
+                    wait_time = backoff_seconds * jitter_multiplier
+                    log_with_timestamp(
+                        f"⏳ Bedrock throttled (attempt {attempt}/{BEDROCK_MAX_RETRIES}). "
+                        f"Retrying in {wait_time:.2f}s"
+                    )
+                    time.sleep(wait_time)
+                    continue
+
+                raise
+
+            except Exception as e:
+                if ('too many tokens' in str(e).lower() or 'please wait before trying again' in str(e).lower()) and attempt < BEDROCK_MAX_RETRIES:
+                    backoff_seconds = min(
+                        BEDROCK_BACKOFF_BASE_SECONDS * (2 ** (attempt - 1)),
+                        BEDROCK_BACKOFF_MAX_SECONDS
+                    )
+                    jitter_multiplier = random.uniform(0.8, 1.2)
+                    wait_time = backoff_seconds * jitter_multiplier
+                    log_with_timestamp(
+                        f"⏳ Bedrock throttled (attempt {attempt}/{BEDROCK_MAX_RETRIES}). "
+                        f"Retrying in {wait_time:.2f}s"
+                    )
+                    time.sleep(wait_time)
+                    continue
+
+                raise
+
+        raise RuntimeError("Bedrock invocation exhausted retry attempts")
     except Exception as e:
         log_with_timestamp(f"❌ Error invoking Bedrock: {str(e)}")
         raise
