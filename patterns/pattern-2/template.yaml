@@ -2384,7 +2384,8 @@ Resources:
         Level: ALL
         IncludeExecutionData: true
         Destinations:
-          - CloudWatchLogsLogGroup: !GetAtt StateMachineLogGroup.Arn
+          - CloudWatchLogsLogGroup:
+              LogGroupArn: !GetAtt StateMachineLogGroup.Arn
       Policies:
         - LambdaInvokePolicy:
             FunctionName: !Ref OCRFunction

@@ -150,7 +150,7 @@
                         "Resource": "arn:aws:states:::sqs:sendMessage",
                         "Parameters": {
                             "QueueUrl": "${InvoiceExtractionDLQUrl}",
-                            "MessageBody.$": "States.JsonToString({\"error.$\": \"$.InvoiceExtractionError\", \"documentId.$\": \"$.document.id\", \"userId.$\": \"$.document.user_id\", \"clientId.$\": \"$.document.client_id\", \"sectionId.$\": \"$.section.section_id\", \"sectionClassification.$\": \"$.section.classification\", \"executionArn.$\": \"$$.Execution.Arn\", \"timestamp.$\": \"$$.State.EnteredTime\"})"
+                            "MessageBody.$": "States.JsonToString({\"error\": $.InvoiceExtractionError, \"documentId\": $.document.id, \"userId\": $.document.user_id, \"clientId\": $.document.client_id, \"sectionId\": $.section.section_id, \"sectionClassification\": $.section.classification, \"executionArn\": $$.Execution.Arn, \"timestamp\": $$.State.EnteredTime})"
                         },
                         "ResultPath": "$.DLQDispatchResult",
                         "Next": "SectionFailed"
