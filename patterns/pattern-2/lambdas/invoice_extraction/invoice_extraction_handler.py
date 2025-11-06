@@ -898,7 +898,11 @@ def lambda_handler(event, context):
         log_with_timestamp(f"🔍 Full document structure (first 2000 chars): {json.dumps(document_dict, default=str)[:2000]}")
 
         # Extract metadata from document dict
-        document_id = document_dict.get('id')
+        document_id = (
+            document_dict.get('id')
+            or document_dict.get('document_id')
+            or document_dict.get('documentId')
+        )
         user_id = document_dict.get('user_id')
         company_number = document_dict.get('company_number')  # Extract company_number
         company_name = document_dict.get('company_name')      # Extract company_name

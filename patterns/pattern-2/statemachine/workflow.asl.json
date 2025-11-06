@@ -152,7 +152,7 @@
                             "QueueUrl": "${InvoiceExtractionDLQUrl}",
                             "MessageBody": {
                                 "error.$": "$.InvoiceExtractionError",
-                                "documentId.$": "$.document.id",
+                                "documentId.$": "$.document.document_id",
                                 "userId.$": "$.document.user_id",
                                 "clientId.$": "$.document.client_id",
                                 "sectionId.$": "$.section.section_id",
