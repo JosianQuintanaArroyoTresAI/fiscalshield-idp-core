@@ -27,6 +27,10 @@ logger = logging.getLogger(__name__)
 # ChunkedInvoiceExtractor Class (Inlined for Lambda deployment)
 # ==============================================================================
 
+class ChunkProcessingError(Exception):
+    """Raised when a chunk fails to process."""
+
+
 class ChunkedInvoiceExtractor:
     """Handles chunked extraction and deduplication of invoices from large documents."""
     
@@ -606,8 +610,9 @@ def process_section_with_chunking(
             
         except Exception as e:
             log_with_timestamp(f"❌ Error processing chunk {idx+1}: {str(e)}")
-            # Continue with other chunks even if one fails
-            continue
+            raise ChunkProcessingError(
+                f"Chunk {idx+1}/{len(chunks)} failed for document {document_id}, section {section_id}: {str(e)}"
+            ) from e
     
     log_with_timestamp(f"📊 Total invoices before deduplication: {len(all_invoices)}")
     
@@ -979,6 +984,10 @@ def lambda_handler(event, context):
             'processing_time_seconds': processing_time,
             'message': f'Successfully extracted {len(invoices)} invoices'
         }
+
+    except ChunkProcessingError as e:
+        log_with_timestamp(f"💥 Chunk processing error: {str(e)}")
+        raise
 
     except Exception as e:
         log_with_timestamp(f"💥 Error in invoice extraction: {str(e)}")
