@@ -194,6 +194,42 @@ BEDROCK_BACKOFF_BASE_SECONDS = float(os.environ.get('BEDROCK_BACKOFF_BASE_SECOND
 BEDROCK_BACKOFF_MAX_SECONDS = float(os.environ.get('BEDROCK_BACKOFF_MAX_SECONDS', '45.0'))
 BEDROCK_FALLBACK_AFTER_ATTEMPT = int(os.environ.get('BEDROCK_FALLBACK_AFTER_ATTEMPT', '3'))
 
+
+def _parse_csv(value: str) -> List[str]:
+    """Parse a comma-separated string into a list, trimming whitespace."""
+    if not value:
+        return []
+    return [part.strip() for part in value.split(',') if part is not None]
+
+
+def _build_model_chain() -> List[Dict[str, str]]:
+    """Build an ordered list of Bedrock models with optional inference profiles."""
+    chain: List[Dict[str, str]] = []
+
+    primary_model_id = (BEDROCK_MODEL_ID or '').strip()
+    if primary_model_id:
+        chain.append({
+            'model_id': primary_model_id,
+            'inference_profile_arn': BEDROCK_INFERENCE_PROFILE_ARN
+        })
+
+    fallback_model_ids = [model_id for model_id in _parse_csv(FALLBACK_BEDROCK_MODEL_ID) if model_id]
+    fallback_profile_arns = _parse_csv(FALLBACK_BEDROCK_INFERENCE_PROFILE_ARN)
+
+    for index, fallback_model_id in enumerate(fallback_model_ids):
+        profile_arn = fallback_profile_arns[index] if index < len(fallback_profile_arns) else ''
+        chain.append({
+            'model_id': fallback_model_id,
+            'inference_profile_arn': profile_arn
+        })
+
+    return chain
+
+
+BEDROCK_MODEL_CHAIN = _build_model_chain()
+if not BEDROCK_MODEL_CHAIN:
+    raise ValueError("At least one Bedrock model must be configured via BEDROCK_MODEL_ID")
+
 # Chunking configuration (Phase 3)
 USE_CHUNKED_EXTRACTION = os.environ.get('USE_CHUNKED_EXTRACTION', 'false').lower() == 'true'
 CHUNK_SIZE = int(os.environ.get('CHUNK_SIZE', '60000'))  # Optimized: ~15k tokens (vs 15k chars = 3.75k tokens)
@@ -374,12 +410,31 @@ def invoke_bedrock(prompt: str, use_caching: bool = None) -> str:
 
         body_json = json.dumps(body)
 
-        active_model_id = BEDROCK_MODEL_ID
-        active_profile_arn = BEDROCK_INFERENCE_PROFILE_ARN
-        used_fallback_model = False
         fallback_trigger = max(1, min(BEDROCK_FALLBACK_AFTER_ATTEMPT, BEDROCK_MAX_RETRIES))
+        model_chain = BEDROCK_MODEL_CHAIN
+        model_attempt_counters = [0] * len(model_chain)
+        current_model_index = 0
+        total_attempts = 0
+        max_total_attempts = max(1, BEDROCK_MAX_RETRIES) * len(model_chain)
+        chain_logged = False
 
-        for attempt in range(1, BEDROCK_MAX_RETRIES + 1):
+        def describe_model(entry: Dict[str, str]) -> str:
+            profile_arn = (entry.get('inference_profile_arn') or '').strip()
+            if profile_arn:
+                profile_suffix = profile_arn.split('/')[-1]
+                return f"{entry['model_id']} [{profile_suffix}]"
+            return entry['model_id']
+
+        while current_model_index < len(model_chain):
+            active_entry = model_chain[current_model_index]
+            active_model_id = active_entry['model_id']
+            active_profile_arn = active_entry.get('inference_profile_arn', '') or ''
+
+            if not chain_logged:
+                chain_summary = " → ".join(describe_model(entry) for entry in model_chain)
+                log_with_timestamp(f"🧭 Bedrock model priority: {chain_summary}")
+                chain_logged = True
+
             try:
                 response = _invoke_bedrock_runtime(active_model_id, active_profile_arn, body_json)
                 response_body = json.loads(response['body'].read())
@@ -406,27 +461,44 @@ def invoke_bedrock(prompt: str, use_caching: bool = None) -> str:
                 )
 
                 if is_throttle:
-                    if not used_fallback_model and FALLBACK_BEDROCK_MODEL_ID and attempt >= fallback_trigger:
+                    model_attempt_counters[current_model_index] += 1
+                    total_attempts += 1
+                    attempts_for_model = model_attempt_counters[current_model_index]
+
+                    if attempts_for_model >= fallback_trigger and current_model_index < len(model_chain) - 1:
+                        next_index = current_model_index + 1
+                        next_entry = model_chain[next_index]
                         log_with_timestamp(
-                            f"🔁 Switching to fallback model {FALLBACK_BEDROCK_MODEL_ID} after {attempt} attempts"
+                            f"🔁 Switching to fallback model {describe_model(next_entry)} "
+                            f"after {attempts_for_model} throttled attempts"
                         )
-                        active_model_id = FALLBACK_BEDROCK_MODEL_ID
-                        active_profile_arn = FALLBACK_BEDROCK_INFERENCE_PROFILE_ARN
-                        used_fallback_model = True
+                        current_model_index = next_index
                         continue
 
-                    if attempt == BEDROCK_MAX_RETRIES:
+                    if attempts_for_model >= BEDROCK_MAX_RETRIES:
+                        if current_model_index < len(model_chain) - 1:
+                            next_index = current_model_index + 1
+                            next_entry = model_chain[next_index]
+                            log_with_timestamp(
+                                f"⚠️ Max attempts reached for {describe_model(active_entry)}. "
+                                f"Escalating to {describe_model(next_entry)}"
+                            )
+                            current_model_index = next_index
+                            continue
+                        raise
+
+                    if total_attempts >= max_total_attempts and current_model_index >= len(model_chain) - 1:
                         raise
 
                     backoff_seconds = min(
-                        BEDROCK_BACKOFF_BASE_SECONDS * (2 ** (attempt - 1)),
+                        BEDROCK_BACKOFF_BASE_SECONDS * (2 ** max(0, attempts_for_model - 1)),
                         BEDROCK_BACKOFF_MAX_SECONDS
                     )
                     jitter_multiplier = random.uniform(0.8, 1.2)
                     wait_time = backoff_seconds * jitter_multiplier
                     log_with_timestamp(
-                        f"⏳ Bedrock throttled (attempt {attempt}/{BEDROCK_MAX_RETRIES}). "
-                        f"Retrying in {wait_time:.2f}s"
+                        f"⏳ Bedrock throttled on {describe_model(active_entry)} "
+                        f"(attempt {attempts_for_model}/{BEDROCK_MAX_RETRIES}). Retrying in {wait_time:.2f}s"
                     )
                     time.sleep(wait_time)
                     continue
@@ -434,23 +506,55 @@ def invoke_bedrock(prompt: str, use_caching: bool = None) -> str:
                 raise
 
             except Exception as e:
-                if ('too many tokens' in str(e).lower() or 'please wait before trying again' in str(e).lower()) and attempt < BEDROCK_MAX_RETRIES:
+                message_lower = str(e).lower()
+                is_throttle = 'too many tokens' in message_lower or 'please wait before trying again' in message_lower
+
+                if is_throttle:
+                    model_attempt_counters[current_model_index] += 1
+                    total_attempts += 1
+                    attempts_for_model = model_attempt_counters[current_model_index]
+
+                    if attempts_for_model >= fallback_trigger and current_model_index < len(model_chain) - 1:
+                        next_index = current_model_index + 1
+                        next_entry = model_chain[next_index]
+                        log_with_timestamp(
+                            f"🔁 Switching to fallback model {describe_model(next_entry)} "
+                            f"after {attempts_for_model} throttled attempts"
+                        )
+                        current_model_index = next_index
+                        continue
+
+                    if attempts_for_model >= BEDROCK_MAX_RETRIES:
+                        if current_model_index < len(model_chain) - 1:
+                            next_index = current_model_index + 1
+                            next_entry = model_chain[next_index]
+                            log_with_timestamp(
+                                f"⚠️ Max attempts reached for {describe_model(active_entry)}. "
+                                f"Escalating to {describe_model(next_entry)}"
+                            )
+                            current_model_index = next_index
+                            continue
+                        raise
+
+                    if total_attempts >= max_total_attempts and current_model_index >= len(model_chain) - 1:
+                        raise
+
                     backoff_seconds = min(
-                        BEDROCK_BACKOFF_BASE_SECONDS * (2 ** (attempt - 1)),
+                        BEDROCK_BACKOFF_BASE_SECONDS * (2 ** max(0, attempts_for_model - 1)),
                         BEDROCK_BACKOFF_MAX_SECONDS
                     )
                     jitter_multiplier = random.uniform(0.8, 1.2)
                     wait_time = backoff_seconds * jitter_multiplier
                     log_with_timestamp(
-                        f"⏳ Bedrock throttled (attempt {attempt}/{BEDROCK_MAX_RETRIES}). "
-                        f"Retrying in {wait_time:.2f}s"
+                        f"⏳ Bedrock throttled on {describe_model(active_entry)} "
+                        f"(attempt {attempts_for_model}/{BEDROCK_MAX_RETRIES}). Retrying in {wait_time:.2f}s"
                     )
                     time.sleep(wait_time)
                     continue
 
                 raise
 
-        raise RuntimeError("Bedrock invocation exhausted retry attempts")
+        raise RuntimeError("Bedrock invocation exhausted retry attempts across all configured models")
     except Exception as e:
         log_with_timestamp(f"❌ Error invoking Bedrock: {str(e)}")
         raise
