@@ -2405,8 +2405,8 @@ Resources:
         - LambdaInvokePolicy:
             FunctionName: !Ref SummarizationFunction
         - CloudWatchLogsFullAccess
-    - SQSSendMessagePolicy:
-      QueueName: !GetAtt InvoiceExtractionDeadLetterQueue.QueueName
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt InvoiceExtractionDeadLetterQueue.QueueName
 
   StateMachineLogGroup:
     Type: AWS::Logs::LogGroup
