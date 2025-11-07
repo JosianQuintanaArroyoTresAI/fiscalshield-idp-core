@@ -157,7 +157,7 @@
                                 "clientId.$": "$.document.client_id",
                                 "sectionId.$": "$.section.section_id",
                                 "sectionClassification.$": "$.section.classification",
-                                "executionArn.$": "$$.Execution.Arn",
+                                "executionArn.$": "$$.Execution.Id",
                                 "timestamp.$": "$$.State.EnteredTime"
                             }
                         },
@@ -170,7 +170,7 @@
                             "status": "FAILED",
                             "sectionId.$": "$.section.section_id",
                             "documentId.$": "$.document.id",
-                            "executionArn.$": "$$.Execution.Arn"
+                            "executionArn.$": "$$.Execution.Id"
                         },
                         "End": true
                     },

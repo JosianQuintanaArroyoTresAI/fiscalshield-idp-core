@@ -16,6 +16,13 @@ set -e
 # Configuration
 STACK_NAME="${STACK_NAME:-fiscalshield-idp-dev}"
 REGION="${REGION:-eu-central-1}"
+BUCKET_BASENAME="${BUCKET_BASENAME:-fiscalshield-templates}"
+
+if [ -f "VERSION" ]; then
+    ARTIFACT_VERSION=$(tr -d '\r' < VERSION)
+else
+    ARTIFACT_VERSION="latest"
+fi
 
 # Colors for output
 RED='\033[0;31m'
@@ -36,8 +43,14 @@ echo "Region: $REGION"
 echo ""
 
 # S3 bucket where SAM packages are uploaded
-S3_BUCKET="${S3_BUCKET:-fiscalshield-templates-eu-central-1}"
-S3_PREFIX="${S3_PREFIX:-fiscalshield/dev/0.3.19}"
+S3_BUCKET="${S3_BUCKET:-${BUCKET_BASENAME}-${REGION}}"
+ARTIFACT_PREFIX="${ARTIFACT_PREFIX:-fiscalshield/dev}" # reused across scripts
+S3_PREFIX="${S3_PREFIX:-${ARTIFACT_PREFIX}/${ARTIFACT_VERSION}}"
+
+echo "Artifacts Bucket: $S3_BUCKET"
+echo "Artifacts Prefix: $S3_PREFIX"
+echo "Version Source : $ARTIFACT_VERSION"
+echo ""
 
 # Functions to update (LogicalResourceId:StackName:SAM_BUILD_PATH)
 # Format: "LogicalResourceId:StackName:SAM_BUILD_PATH"

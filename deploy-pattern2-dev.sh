@@ -6,26 +6,30 @@ echo "FiscalShield IDP - Pattern 2 Deployment (DEV Environment)"
 echo "======================================================================"
 echo ""
 
-# Configuration
-STACK_NAME="fiscalshield-idp-dev"
-REGION="eu-central-1"
-BUCKET_NAME="fiscalshield-templates-eu-central-1"
-TEMPLATE_KEY="fiscalshield/dev/idp-main.yaml"
-TEMPLATE_URL="https://${BUCKET_NAME}.s3.${REGION}.amazonaws.com/${TEMPLATE_KEY}"
+# Configuration (env vars override defaults for CI / multi-account usage)
+STACK_NAME="${STACK_NAME:-fiscalshield-idp-dev}"
+REGION="${REGION:-eu-central-1}"
+BUCKET_BASENAME="${BUCKET_BASENAME:-fiscalshield-templates}"
+S3_BUCKET="${S3_BUCKET:-${BUCKET_BASENAME}-${REGION}}"
+ARTIFACT_PREFIX="${ARTIFACT_PREFIX:-fiscalshield/dev}"
+TEMPLATE_KEY="${TEMPLATE_KEY:-${ARTIFACT_PREFIX}/idp-main.yaml}"
+TEMPLATE_URL="https://${S3_BUCKET}.s3.${REGION}.amazonaws.com/${TEMPLATE_KEY}"
 
-# CHANGE THIS: Replace with your actual email
-ADMIN_EMAIL="josian@protonmail.com"
+# CHANGE THIS: Replace with your actual email or supply via ADMIN_EMAIL env var
+ADMIN_EMAIL="${ADMIN_EMAIL:-josian@protonmail.com}"
 
 # Pattern 2 Configuration Options:
 # - default
 # - few_shot_example_with_multimodal_page_classification
 # - medical_records_summarization
-PATTERN2_CONFIG="default"
+PATTERN2_CONFIG="${PATTERN2_CONFIG:-default}"
 
 echo "Deployment Configuration:"
 echo "  Stack Name: $STACK_NAME"
 echo "  Region: $REGION"
 echo "  Admin Email: $ADMIN_EMAIL"
+echo "  Artifacts Bucket: $S3_BUCKET"
+echo "  Template Key: $TEMPLATE_KEY"
 echo "  Pattern: Pattern 2 (Textract + Bedrock)"
 echo "  Pattern 2 Config: $PATTERN2_CONFIG"
 echo "  Knowledge Base: DISABLED"
@@ -56,6 +60,8 @@ STACK_EXISTS=$(aws cloudformation describe-stacks \
   --query 'Stacks[0].StackStatus' \
   --output text 2>/dev/null || echo "DOES_NOT_EXIST")
 
+STACK_CMD_EXIT=0
+
 if [[ "$STACK_EXISTS" == "DOES_NOT_EXIST" ]]; then
     echo "Stack does not exist. Creating new stack..."
     echo ""
@@ -82,8 +88,9 @@ if [[ "$STACK_EXISTS" == "DOES_NOT_EXIST" ]]; then
         Key=Pattern,Value=Pattern2 \
         Key=ManagedBy,Value=CloudFormation
 
-    OPERATION="creation"
-    WAIT_COMMAND="stack-create-complete"
+  STACK_CMD_EXIT=$?
+  OPERATION="creation"
+  WAIT_COMMAND="stack-create-complete"
     
 elif [[ "$STACK_EXISTS" == "ROLLBACK_COMPLETE" ]]; then
     echo "ERROR: Stack is in ROLLBACK_COMPLETE state and cannot be updated."
@@ -101,6 +108,7 @@ else
     echo "Updating existing stack..."
     echo ""
     
+    set +e
     aws cloudformation update-stack \
       --stack-name "$STACK_NAME" \
       --region "$REGION" \
@@ -122,21 +130,28 @@ else
         Key=Environment,Value=dev \
         Key=Pattern,Value=Pattern2 \
         Key=ManagedBy,Value=CloudFormation 2>&1 | tee /tmp/update-output.txt
+    STACK_CMD_EXIT=${PIPESTATUS[0]}
+    set -e
 
-    # Check if update failed because no changes were detected
-    if grep -q "No updates are to be performed" /tmp/update-output.txt; then
+    if [ $STACK_CMD_EXIT -ne 0 ]; then
+        if grep -q "No updates are to be performed" /tmp/update-output.txt; then
+            echo ""
+            echo "======================================================================"
+            echo "No changes detected - stack is already up to date!"
+            echo "======================================================================"
+            exit 0
+        fi
+
         echo ""
-        echo "======================================================================"
-        echo "No changes detected - stack is already up to date!"
-        echo "======================================================================"
-        exit 0
+        echo "ERROR: Stack update failed. Check the error message above."
+        exit $STACK_CMD_EXIT
     fi
 
     OPERATION="update"
     WAIT_COMMAND="stack-update-complete"
 fi
 
-if [ $? -eq 0 ]; then
+if [ $STACK_CMD_EXIT -eq 0 ]; then
     echo ""
     echo "======================================================================"
     echo "Stack $OPERATION initiated successfully!"

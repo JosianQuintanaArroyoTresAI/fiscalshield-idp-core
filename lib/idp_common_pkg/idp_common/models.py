@@ -621,7 +621,19 @@ class Document:
                 for section in self.sections
             ]
 
+            # Surface key routing metadata so downstream states (DLQ, metrics, etc.)
+            # can act without rehydrating from S3. Keep fallbacks gentle because
+            # older documents may lack certain optional fields.
+            client_id = getattr(self, "client_id", None)
+            if not client_id and self.metadata:
+                client_id = self.metadata.get("client_id")
+            if not client_id:
+                client_id = self.company_number
+            if not client_id:
+                client_id = "default-client"
+
             return {
+                "id": self.id,
                 "document_id": self.id,
                 "s3_uri": s3_uri,
                 "timestamp": timestamp,
@@ -629,6 +641,10 @@ class Document:
                 "num_pages": self.num_pages,
                 "sections": sections_for_map,  # For Step Functions Map state with routing info
                 "compressed": True,
+                "user_id": self.user_id,
+                "client_id": client_id,
+                "company_number": self.company_number,
+                "company_name": self.company_name,
             }
 
         except Exception as e:
