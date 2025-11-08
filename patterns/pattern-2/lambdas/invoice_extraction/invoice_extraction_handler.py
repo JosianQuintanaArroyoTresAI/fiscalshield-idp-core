@@ -450,8 +450,14 @@ def deduplicate_invoices_in_dynamodb(document_id: str, section_id: str, user_id:
     This runs AFTER all chunks are complete to handle duplicates from overlapping chunks.
     
     Deduplication Strategy:
-    - Two invoices are duplicates if they have the same core data (supplier, amount, date, number)
-    - AND they appear in consecutive or same chunks (chunk_index within 1 of each other)
+    - Two invoices are duplicates if they have the SAME identity:
+      (supplier_name, invoice_number, invoice_date, total_amount)
+    - Deduplication decisions:
+      1. If ALL identity fields match → TRUE duplicate, deduplicate regardless of chunk distance
+         (Invoice numbers must be unique per supplier/date/amount combination)
+      2. If chunks are consecutive (within 1) → Likely overlap region duplicate
+      3. Keeps records if same invoice# but DIFFERENT supplier/amount/date
+         (Protects against extraction errors where wrong field used as invoice#)
     - When choosing which duplicate to keep:
       1. Keep the one with MORE complete fields (non-empty values)
       2. If both equally complete, keep the EARLIER one (lower chunk_index, earlier timestamp)
@@ -546,43 +552,69 @@ def deduplicate_invoices_in_dynamodb(document_id: str, section_id: str, user_id:
             chunk_indices = [inv['chunk_index'] for inv in group if inv['chunk_index'] is not None]
             source_pages = [inv['source_page'] for inv in group if inv.get('source_page')]
             
+            # Decision logic for deduplication:
+            # 1. If ALL identity fields match (supplier, invoice#, date, amount), they're TRUE duplicates
+            #    → Deduplicate regardless of chunk distance (invoice numbers must be unique)
+            # 2. If chunks are consecutive (within 1), likely from overlap region
+            #    → Deduplicate (handles cases where invoice# might be missing/incomplete)
+            # 3. If chunks far apart AND identity differs, keep all
+            #    → Protects against extraction errors (same invoice# but different invoice)
+            
+            should_deduplicate = False
+            reason = ""
+            
             if chunk_indices:
-                # Only deduplicate if invoices are from same or consecutive chunks
                 min_chunk = min(chunk_indices)
                 max_chunk = max(chunk_indices)
                 
-                if max_chunk - min_chunk > 1:
-                    log_with_timestamp(f"   ⚠️  Chunks too far apart ({min_chunk} to {max_chunk}) - keeping all as different invoices")
-                    continue
-                
-                # Enhanced heuristic: Check if SourcePage positions suggest overlap region
-                # High risk: Last invoices in chunk N (high SourcePage) + first invoices in chunk N+1 (low SourcePage)
-                if len(group) == 2 and len(chunk_indices) == 2 and len(source_pages) == 2:
-                    chunk_diff = max(chunk_indices) - min(chunk_indices)
-                    if chunk_diff == 1:  # Consecutive chunks
-                        # Get invoices from each chunk
-                        inv_chunk_min = [inv for inv in group if inv['chunk_index'] == min_chunk][0]
-                        inv_chunk_max = [inv for inv in group if inv['chunk_index'] == max_chunk][0]
-                        
-                        sp_min_chunk = inv_chunk_min.get('source_page', 0)
-                        sp_max_chunk = inv_chunk_max.get('source_page', 0)
-                        
-                        # Pattern: chunk N has high SourcePage (near end) AND chunk N+1 has low SourcePage (near start)
-                        # This suggests they're in the overlap region (5k chars = ~2-3 invoices)
-                        is_overlap_pattern = (sp_min_chunk >= 8 and sp_max_chunk <= 3)  # Last few + First few
-                        
-                        if is_overlap_pattern:
-                            log_with_timestamp(
-                                f"   ✅ Chunks {min_chunk},{max_chunk} consecutive - "
-                                f"SourcePages {sp_min_chunk},{sp_max_chunk} suggest overlap region (HIGH confidence)"
-                            )
-                        else:
-                            log_with_timestamp(
-                                f"   ✅ Chunks {min_chunk},{max_chunk} consecutive - "
-                                f"SourcePages {sp_min_chunk},{sp_max_chunk} (pattern: {sp_min_chunk}≥8 and {sp_max_chunk}≤3)"
-                            )
+                # Case 1: Chunks are consecutive (overlap region)
+                if max_chunk - min_chunk <= 1:
+                    should_deduplicate = True
+                    reason = f"consecutive chunks ({min_chunk} to {max_chunk})"
+                # Case 2: Chunks far apart BUT all identity fields match exactly
+                # This means same supplier+number+date+amount = TRUE duplicate (extraction quality issue)
                 else:
-                    log_with_timestamp(f"   ✅ Chunks are consecutive ({min_chunk} to {max_chunk}) - likely duplicates from overlap")
+                    # Identity already matches (that's how they're grouped), so this is a true duplicate
+                    # appearing multiple times in different parts of document
+                    should_deduplicate = True
+                    reason = f"exact match across non-consecutive chunks ({min_chunk} to {max_chunk})"
+                    log_with_timestamp(f"   ⚠️  Same invoice appearing in distant chunks - likely extraction artifact")
+            else:
+                # No chunk info, deduplicate based on identity match
+                should_deduplicate = True
+                reason = "matching identity fields (no chunk info)"
+            
+            if not should_deduplicate:
+                log_with_timestamp(f"   ℹ️  Keeping all - {reason}")
+                continue
+            
+            log_with_timestamp(f"   ✅ Deduplicating: {reason}")
+            
+            # Enhanced heuristic for consecutive chunks: Check if SourcePage positions suggest overlap region
+            if chunk_indices and max(chunk_indices) - min(chunk_indices) == 1:
+                # Only apply enhanced heuristic for consecutive chunks
+                if len(group) == 2 and len(chunk_indices) == 2 and len(source_pages) == 2:
+                    min_chunk_val = min(chunk_indices)
+                    max_chunk_val = max(chunk_indices)
+                    # Get invoices from each chunk
+                    inv_chunk_min = [inv for inv in group if inv['chunk_index'] == min_chunk_val][0]
+                    inv_chunk_max = [inv for inv in group if inv['chunk_index'] == max_chunk_val][0]
+                    
+                    sp_min_chunk = inv_chunk_min.get('source_page', 0)
+                    sp_max_chunk = inv_chunk_max.get('source_page', 0)
+                    
+                    # Pattern: chunk N has high SourcePage (near end) AND chunk N+1 has low SourcePage (near start)
+                    # This suggests they're in the overlap region (5k chars = ~2-3 invoices)
+                    is_overlap_pattern = (sp_min_chunk >= 8 and sp_max_chunk <= 3)  # Last few + First few
+                    
+                    if is_overlap_pattern:
+                        log_with_timestamp(
+                            f"   📍 SourcePages {sp_min_chunk},{sp_max_chunk} suggest overlap region (HIGH confidence)"
+                        )
+                    else:
+                        log_with_timestamp(
+                            f"   📍 SourcePages {sp_min_chunk},{sp_max_chunk}"
+                        )
             
             # Sort by completeness (most complete first), then by chunk_index (earlier first), then by timestamp
             def count_non_empty_fields(inv):
@@ -701,7 +733,7 @@ def get_invoice_extraction_prompt() -> str:
 def get_default_invoice_prompt() -> str:
     """
     Default invoice extraction prompt (used as fallback)
-    This is your proven prompt from previous project
+    Enhanced with UK invoice numbering standards for accurate field extraction
     """
     return """CRITICAL: This text may contain MULTIPLE INVOICES. You must find and extract ALL of them.
 
@@ -720,6 +752,34 @@ VENDOR NAME EXTRACTION RULES:
 - If unclear, use descriptive vendor name (e.g., "Restaurant", "Transport Service", "Hotel")
 - NEVER leave supplier_name empty - always provide something meaningful
 
+INVOICE NUMBER vs REFERENCE NUMBER (UK HMRC Standards):
+🔴 INVOICE NUMBER (invoice_number field):
+   - Look for labels: "Invoice No", "Invoice Number", "Tax Invoice No", "Invoice #"
+   - Usually SHORT and SEQUENTIAL (e.g., INV-001, 2024-123, 12345)
+   - Located near the top of invoice, often with the date
+   - UNIQUE to this specific invoice
+   - Required by UK HMRC for VAT invoices
+   - If NO invoice number found, leave EMPTY (do not use other numbers)
+   
+🟡 REFERENCE NUMBER (reference_number field):
+   - Look for labels: "Reference", "PO Number", "Order Ref", "Job No", "Customer Ref"
+   - This is the BUYER'S reference (purchase order, job code, etc.)
+   - Optional field for tracking purposes
+   
+❌ DO NOT USE AS INVOICE NUMBER:
+   - VAT Registration Numbers (GB123456789) - these are company tax IDs, not invoice numbers
+   - Company Registration Numbers (12345678, SC123456) - these are Companies House IDs
+   - Customer Account Numbers or Client IDs
+   - Form template IDs or document type codes
+   - Generic labels like "Expense Claims" or "Invoice"
+   
+📋 EXAMPLES:
+   ✅ CORRECT: invoice_number="INV-2024-001", reference_number="PO-5678"
+   ✅ CORRECT: invoice_number="12345", reference_number="Job-ABC-123"
+   ✅ CORRECT: invoice_number="" (expense claim with no formal invoice)
+   ❌ WRONG: invoice_number="GB-TI2500887574" (this is a VAT/form ID, not invoice number)
+   ❌ WRONG: invoice_number="Expense Claims" (generic label, not unique number)
+
 MULTIPLE INVOICE HANDLING:
 - If you find 5 invoices → output 5 separate <invoice> blocks
 - If you find 1 invoice → output 1 <invoice> block
@@ -728,11 +788,11 @@ MULTIPLE INVOICE HANDLING:
 - NEVER merge multiple invoices into one block
 
 REQUIRED FIELDS FOR EACH INVOICE:
-- supplier_name: Company/vendor name
-- total_amount: Final total (look for "Total", "Amount Due", "Total GBP")
-- invoice_date: Date of invoice
-- invoice_number: Tax Invoice Number or unique identifier
-- reference_number: Billing Number or Invoice Reference (different from Tax Invoice Number)
+- supplier_name: Company/vendor name (ALWAYS required, never empty)
+- total_amount: Final total (look for "Total", "Amount Due", "Balance Due")
+- invoice_date: Date of invoice (DD/MM/YYYY or YYYY-MM-DD)
+- invoice_number: ONLY the actual invoice number (see rules above), leave EMPTY if not found
+- reference_number: Purchase order or customer reference (optional)
 - source_page: Page number where this invoice appears
 
 CRITICAL: Extract EVERY invoice in the text. Do not stop after finding the first one.
@@ -741,8 +801,8 @@ Required XML format (repeat <invoice> block for each invoice found):
 <invoices>
 <invoice>
 <invoice_type>SUPPLIER_INVOICE</invoice_type>
-<invoice_number>GB-TI2500887574</invoice_number>
-<reference_number>G081312896</reference_number>
+<invoice_number>INV-2024-001</invoice_number>
+<reference_number>PO-5678</reference_number>
 <invoice_date>2025-03-07</invoice_date>
 <due_date>2025-03-07</due_date>
 <supplier_name>Microsoft Limited</supplier_name>
