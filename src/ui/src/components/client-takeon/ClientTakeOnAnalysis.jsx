@@ -342,7 +342,89 @@ const ClientTakeOnAnalysis = () => {
                 {/* Additional Intelligence Insights */}
                 {intelligence.insights && (
                   <Container header={<Header variant="h2">AI-Generated Insights</Header>}>
-                    <Box variant="p">{intelligence.insights}</Box>
+                    <SpaceBetween size="m">
+                      {/* Overall Summary */}
+                      {intelligence.insights.overall_summary && (
+                        <Box>
+                          <Box variant="h3" padding={{ bottom: 'xs' }}>Overall Summary</Box>
+                          <Box variant="p">{intelligence.insights.overall_summary}</Box>
+                        </Box>
+                      )}
+
+                      {/* Governance Insight */}
+                      {intelligence.insights.governance_insight && (
+                        <Box>
+                          <Box variant="h3" padding={{ bottom: 'xs' }}>Governance Analysis</Box>
+                          <Box variant="p">{intelligence.insights.governance_insight}</Box>
+                        </Box>
+                      )}
+
+                      {/* AML Insight */}
+                      {intelligence.insights.aml_insight && (
+                        <Box>
+                          <Box variant="h3" padding={{ bottom: 'xs' }}>AML/Sanctions Analysis</Box>
+                          <Box variant="p">{intelligence.insights.aml_insight}</Box>
+                        </Box>
+                      )}
+
+                      {/* Reputational Insight */}
+                      {intelligence.insights.reputational_insight && (
+                        <Box>
+                          <Box variant="h3" padding={{ bottom: 'xs' }}>Reputational Analysis</Box>
+                          <Box variant="p">{intelligence.insights.reputational_insight}</Box>
+                        </Box>
+                      )}
+
+                      {/* Financial Insight */}
+                      {intelligence.insights.financial_insight && (
+                        <Box>
+                          <Box variant="h3" padding={{ bottom: 'xs' }}>Financial Analysis</Box>
+                          <Box variant="p">{intelligence.insights.financial_insight}</Box>
+                        </Box>
+                      )}
+
+                      {/* Red Flags */}
+                      {intelligence.insights.red_flags && intelligence.insights.red_flags.length > 0 && (
+                        <Box>
+                          <Box variant="h3" padding={{ bottom: 'xs' }}>Red Flags</Box>
+                          <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                            {intelligence.insights.red_flags.map((flag, index) => (
+                              <li key={index} style={{ marginBottom: '8px', color: '#d13212' }}>
+                                {flag}
+                              </li>
+                            ))}
+                          </ul>
+                        </Box>
+                      )}
+
+                      {/* Recommendations */}
+                      {intelligence.insights.recommendations && intelligence.insights.recommendations.length > 0 && (
+                        <Box>
+                          <Box variant="h3" padding={{ bottom: 'xs' }}>Recommendations</Box>
+                          <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                            {intelligence.insights.recommendations.map((rec, index) => (
+                              <li key={index} style={{ marginBottom: '8px', color: '#0972d3' }}>
+                                {rec}
+                              </li>
+                            ))}
+                          </ul>
+                        </Box>
+                      )}
+
+                      {/* Mitigating Factors */}
+                      {intelligence.insights.mitigating_factors && intelligence.insights.mitigating_factors.length > 0 && (
+                        <Box>
+                          <Box variant="h3" padding={{ bottom: 'xs' }}>Mitigating Factors</Box>
+                          <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                            {intelligence.insights.mitigating_factors.map((factor, index) => (
+                              <li key={index} style={{ marginBottom: '8px', color: '#037f0c' }}>
+                                {factor}
+                              </li>
+                            ))}
+                          </ul>
+                        </Box>
+                      )}
+                    </SpaceBetween>
                   </Container>
                 )}
               </SpaceBetween>
