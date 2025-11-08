@@ -346,7 +346,9 @@ const ClientTakeOnAnalysis = () => {
                       {/* Overall Summary */}
                       {intelligence.insights.overall_summary && (
                         <Box>
-                          <Box variant="h3" padding={{ bottom: 'xs' }}>Overall Summary</Box>
+                          <Box variant="h3" padding={{ bottom: 'xs' }}>
+                            Overall Summary
+                          </Box>
                           <Box variant="p">{intelligence.insights.overall_summary}</Box>
                         </Box>
                       )}
@@ -354,7 +356,9 @@ const ClientTakeOnAnalysis = () => {
                       {/* Governance Insight */}
                       {intelligence.insights.governance_insight && (
                         <Box>
-                          <Box variant="h3" padding={{ bottom: 'xs' }}>Governance Analysis</Box>
+                          <Box variant="h3" padding={{ bottom: 'xs' }}>
+                            Governance Analysis
+                          </Box>
                           <Box variant="p">{intelligence.insights.governance_insight}</Box>
                         </Box>
                       )}
@@ -362,7 +366,9 @@ const ClientTakeOnAnalysis = () => {
                       {/* AML Insight */}
                       {intelligence.insights.aml_insight && (
                         <Box>
-                          <Box variant="h3" padding={{ bottom: 'xs' }}>AML/Sanctions Analysis</Box>
+                          <Box variant="h3" padding={{ bottom: 'xs' }}>
+                            AML/Sanctions Analysis
+                          </Box>
                           <Box variant="p">{intelligence.insights.aml_insight}</Box>
                         </Box>
                       )}
@@ -370,7 +376,9 @@ const ClientTakeOnAnalysis = () => {
                       {/* Reputational Insight */}
                       {intelligence.insights.reputational_insight && (
                         <Box>
-                          <Box variant="h3" padding={{ bottom: 'xs' }}>Reputational Analysis</Box>
+                          <Box variant="h3" padding={{ bottom: 'xs' }}>
+                            Reputational Analysis
+                          </Box>
                           <Box variant="p">{intelligence.insights.reputational_insight}</Box>
                         </Box>
                       )}
@@ -378,7 +386,9 @@ const ClientTakeOnAnalysis = () => {
                       {/* Financial Insight */}
                       {intelligence.insights.financial_insight && (
                         <Box>
-                          <Box variant="h3" padding={{ bottom: 'xs' }}>Financial Analysis</Box>
+                          <Box variant="h3" padding={{ bottom: 'xs' }}>
+                            Financial Analysis
+                          </Box>
                           <Box variant="p">{intelligence.insights.financial_insight}</Box>
                         </Box>
                       )}
@@ -386,7 +396,9 @@ const ClientTakeOnAnalysis = () => {
                       {/* Red Flags */}
                       {intelligence.insights.red_flags && intelligence.insights.red_flags.length > 0 && (
                         <Box>
-                          <Box variant="h3" padding={{ bottom: 'xs' }}>Red Flags</Box>
+                          <Box variant="h3" padding={{ bottom: 'xs' }}>
+                            Red Flags
+                          </Box>
                           <ul style={{ margin: 0, paddingLeft: '20px' }}>
                             {intelligence.insights.red_flags.map((flag, index) => (
                               <li key={index} style={{ marginBottom: '8px', color: '#d13212' }}>
@@ -400,7 +412,9 @@ const ClientTakeOnAnalysis = () => {
                       {/* Recommendations */}
                       {intelligence.insights.recommendations && intelligence.insights.recommendations.length > 0 && (
                         <Box>
-                          <Box variant="h3" padding={{ bottom: 'xs' }}>Recommendations</Box>
+                          <Box variant="h3" padding={{ bottom: 'xs' }}>
+                            Recommendations
+                          </Box>
                           <ul style={{ margin: 0, paddingLeft: '20px' }}>
                             {intelligence.insights.recommendations.map((rec, index) => (
                               <li key={index} style={{ marginBottom: '8px', color: '#0972d3' }}>
@@ -412,18 +426,21 @@ const ClientTakeOnAnalysis = () => {
                       )}
 
                       {/* Mitigating Factors */}
-                      {intelligence.insights.mitigating_factors && intelligence.insights.mitigating_factors.length > 0 && (
-                        <Box>
-                          <Box variant="h3" padding={{ bottom: 'xs' }}>Mitigating Factors</Box>
-                          <ul style={{ margin: 0, paddingLeft: '20px' }}>
-                            {intelligence.insights.mitigating_factors.map((factor, index) => (
-                              <li key={index} style={{ marginBottom: '8px', color: '#037f0c' }}>
-                                {factor}
-                              </li>
-                            ))}
-                          </ul>
-                        </Box>
-                      )}
+                      {intelligence.insights.mitigating_factors &&
+                        intelligence.insights.mitigating_factors.length > 0 && (
+                          <Box>
+                            <Box variant="h3" padding={{ bottom: 'xs' }}>
+                              Mitigating Factors
+                            </Box>
+                            <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                              {intelligence.insights.mitigating_factors.map((factor, index) => (
+                                <li key={index} style={{ marginBottom: '8px', color: '#037f0c' }}>
+                                  {factor}
+                                </li>
+                              ))}
+                            </ul>
+                          </Box>
+                        )}
                     </SpaceBetween>
                   </Container>
                 )}
