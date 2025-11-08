@@ -179,10 +179,11 @@ jobs:
         
         # Trigger configuration reload
         echo "Triggering configuration reload via Lambda..."
+        PAYLOAD=$(echo -n "{\"s3_uri\": \"s3://$CONFIG_BUCKET/$S3_KEY\"}" | base64 -w 0)
         aws lambda invoke \
           --function-name "$UPDATE_FUNCTION" \
           --region eu-central-1 \
-          --payload "{\"s3_uri\": \"s3://$CONFIG_BUCKET/$S3_KEY\"}" \
+          --payload "$PAYLOAD" \
           /tmp/config-reload-response.json
         
         if [ $? -ne 0 ]; then
