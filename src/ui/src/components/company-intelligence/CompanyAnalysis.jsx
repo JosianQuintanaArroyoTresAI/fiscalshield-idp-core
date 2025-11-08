@@ -23,7 +23,7 @@ const CompanyAnalysis = () => {
   const { companyNumber } = useParams();
   const history = useHistory();
   const { activeCompany } = useCompany();
-  
+
   const [loading, setLoading] = useState(true);
   const [companyData, setCompanyData] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
@@ -35,7 +35,7 @@ const CompanyAnalysis = () => {
   const loadCompanyData = async () => {
     try {
       setLoading(true);
-      
+
       // Use CompanyProvider context first, fallback to URL param
       if (activeCompany && activeCompany.companyNumber === companyNumber) {
         setCompanyData(activeCompany);
@@ -49,7 +49,6 @@ const CompanyAnalysis = () => {
           companyName: 'Unknown Company',
         });
       }
-      
     } catch (err) {
       console.error('Failed to load company data:', err);
     } finally {
@@ -112,11 +111,8 @@ const CompanyAnalysis = () => {
         ]}
         ariaLabel="Breadcrumbs"
       />
-      
-      <Header
-        variant="h1"
-        description={`Company Number: ${companyNumber}`}
-      >
+
+      <Header variant="h1" description={`Company Number: ${companyNumber}`}>
         Company Analysis: {companyData?.companyName || 'Loading...'}
       </Header>
 

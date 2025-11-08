@@ -4,13 +4,13 @@ const CompanyContext = createContext(null);
 
 /**
  * CompanyProvider - Manages active company state across the application
- * 
+ *
  * This context provides:
  * - activeCompany: Currently selected company object with companyNumber, companyName, etc.
  * - selectCompany: Function to set the active company and persist to localStorage
  * - clearCompany: Function to clear the active company
  * - isCompanySelected: Boolean flag for conditional rendering
- * 
+ *
  * Data persists in localStorage as 'active_company' for session continuity.
  */
 export const CompanyProvider = ({ children }) => {
@@ -73,7 +73,7 @@ export const CompanyProvider = ({ children }) => {
     // TODO: Phase 3 - Add API call to refresh company data
     // const response = await API.get('DataCollectionAPI', `/companies/${activeCompany.companyNumber}`);
     // selectCompany(response);
-    
+
     console.log('refreshCompany - API integration pending');
   }, [activeCompany]);
 
@@ -83,14 +83,10 @@ export const CompanyProvider = ({ children }) => {
     clearCompany,
     refreshCompany,
     isCompanySelected: !!activeCompany,
-    loading
+    loading,
   };
 
-  return (
-    <CompanyContext.Provider value={value}>
-      {children}
-    </CompanyContext.Provider>
-  );
+  return <CompanyContext.Provider value={value}>{children}</CompanyContext.Provider>;
 };
 
 /**

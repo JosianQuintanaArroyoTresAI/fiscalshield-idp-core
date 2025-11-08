@@ -19,7 +19,7 @@ export const industryOptions = [
   { label: 'Education', value: 'education' },
   { label: 'Human Health and Social Work Activities', value: 'health' },
   { label: 'Arts, Entertainment and Recreation', value: 'arts' },
-  { label: 'Other Service Activities', value: 'other-services' }
+  { label: 'Other Service Activities', value: 'other-services' },
 ];
 
 /**
@@ -29,7 +29,7 @@ export const industryOptions = [
  */
 export const getIndustryDisplayName = (industryValue) => {
   if (!industryValue) return 'Not specified';
-  
-  const industry = industryOptions.find(option => option.value === industryValue);
+
+  const industry = industryOptions.find((option) => option.value === industryValue);
   return industry ? industry.label : industryValue.charAt(0).toUpperCase() + industryValue.slice(1);
 };

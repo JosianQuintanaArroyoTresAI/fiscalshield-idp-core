@@ -36,12 +36,12 @@ class DocumentService {
       // Call API endpoint with company_name as query parameter
       const response = await API.get(getApiName(), `/documents/${documentId}/view`, {
         queryStringParameters: {
-          company_name: companyName
+          company_name: companyName,
         },
         headers: {
           Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       });
 
       console.log('Document view URL response:', response);
@@ -58,12 +58,11 @@ class DocumentService {
         viewUrl: data.view_url,
         documentId: data.document_id,
         filename: data.original_filename,
-        expiresAt: data.expires_at
+        expiresAt: data.expires_at,
       };
-
     } catch (error) {
       console.error('Error getting document view URL:', error);
-      
+
       // Handle different error types
       if (error.response?.status === 403) {
         throw new Error('Access denied: You do not have permission to view this document');
@@ -104,12 +103,12 @@ class DocumentService {
       // Call financial records API endpoint
       const response = await API.get(getApiName(), `/financial-records/${financialRecordId}/view`, {
         queryStringParameters: {
-          company_name: companyName
+          company_name: companyName,
         },
         headers: {
           Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       });
 
       console.log('Financial record view URL response:', response);
@@ -128,12 +127,11 @@ class DocumentService {
         pageNumber: data.page_number,
         financialRecordId: data.financial_record_id,
         filename: data.original_filename,
-        expiresAt: data.expires_at
+        expiresAt: data.expires_at,
       };
-
     } catch (error) {
       console.error('Error getting financial record view URL:', error);
-      
+
       // Handle different error types
       if (error.response?.status === 403) {
         throw new Error('Access denied: You do not have permission to view this financial record');
@@ -162,10 +160,10 @@ class DocumentService {
       }
 
       const result = await this.getDocumentViewUrl(documentId, companyName);
-      
+
       // Open in new tab with meaningful title
       const newWindow = window.open(result.viewUrl, '_blank');
-      
+
       if (!newWindow) {
         // Popup blocked - fallback to direct download
         console.warn('Popup blocked, triggering download instead');
@@ -199,12 +197,12 @@ class DocumentService {
       }
 
       const result = await this.getFinancialRecordViewUrl(financialRecordId, companyName);
-      
+
       console.log(`Opening financial record ${financialRecordId} at page ${result.pageNumber}`);
-      
+
       // Open in new tab with meaningful title
       const newWindow = window.open(result.viewUrl, '_blank');
-      
+
       if (!newWindow) {
         // Popup blocked - fallback to direct download
         console.warn('Popup blocked, triggering download instead');
@@ -238,13 +236,13 @@ class DocumentService {
       }
 
       const result = await this.getDocumentViewUrl(documentId, companyName);
-      
+
       // Create temporary download link
       const link = document.createElement('a');
       link.href = result.viewUrl;
       link.download = filename;
       link.style.display = 'none';
-      
+
       // Trigger download
       document.body.appendChild(link);
       link.click();
@@ -309,7 +307,7 @@ class DocumentService {
     if (!activeCompany) {
       throw new Error('No company selected');
     }
-    
+
     // Return the company name for API calls
     // This should match what's stored in the system
     return activeCompany.companyName || activeCompany.company_name;
