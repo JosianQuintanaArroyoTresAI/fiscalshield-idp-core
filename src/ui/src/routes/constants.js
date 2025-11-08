@@ -13,3 +13,7 @@ export const UPLOAD_DOCUMENT_PATH = `${DOCUMENTS_PATH}/upload`;
 export const DISCOVERY_PATH = `${DOCUMENTS_PATH}/discovery`;
 export const COMPANY_INTELLIGENCE_PATH = '/company/:companyNumber/intelligence';
 export const COMPANY_ANALYSIS_PATH = '/company/:companyNumber/analysis';
+export const OVERVIEW_DASHBOARD_PATH = '/overview';
+export const CLIENT_TAKEON_PATH = '/client-takeon';
+export const INVOICE_INSIGHTS_PATH = '/invoice-insights';
+export const BANK_INSIGHTS_PATH = '/bank-insights';

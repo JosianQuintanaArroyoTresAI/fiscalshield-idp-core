@@ -5,6 +5,7 @@ import { Route, Switch, useLocation } from 'react-router-dom';
 import { SideNavigation } from '@awsui/components-react';
 import useSettingsContext from '../../contexts/settings';
 import useAppContext from '../../contexts/app';
+import { useCompany } from '../../contexts/company';
 
 import {
   DOCUMENTS_PATH,
@@ -16,12 +17,16 @@ import {
   DISCOVERY_PATH,
   COMPANY_SELECT_PATH,
   COMPANY_ANALYSIS_PATH,
+  OVERVIEW_DASHBOARD_PATH,
+  CLIENT_TAKEON_PATH,
+  INVOICE_INSIGHTS_PATH,
+  BANK_INSIGHTS_PATH,
 } from '../../routes/constants';
 
 export const documentsNavHeader = { text: 'Tools', href: `#${DEFAULT_PATH}` };
 
 // Function to generate navigation items based on user role
-export const getDocumentsNavItems = (isAdmin = false) => {
+export const getDocumentsNavItems = (isAdmin = false, hasActiveCompany = false) => {
   const baseItems = [
     {
       type: 'link',
@@ -30,6 +35,26 @@ export const getDocumentsNavItems = (isAdmin = false) => {
       info: 'Return to company selection',
     },
     { type: 'divider' },
+  ];
+
+  // Company-specific menu items (only show when company is selected)
+  const companyItems = hasActiveCompany
+    ? [
+        {
+          type: 'section',
+          text: 'Company',
+          items: [
+            { type: 'link', text: 'Overview Dashboard', href: `#${OVERVIEW_DASHBOARD_PATH}` },
+            { type: 'link', text: 'Client Take-On', href: `#${CLIENT_TAKEON_PATH}` },
+            { type: 'link', text: 'Invoice Insights', href: `#${INVOICE_INSIGHTS_PATH}` },
+            { type: 'link', text: 'Bank Insights', href: `#${BANK_INSIGHTS_PATH}` },
+          ],
+        },
+        { type: 'divider' },
+      ]
+    : [];
+
+  const documentItems = [
     { type: 'link', text: 'Document List', href: `#${DOCUMENTS_PATH}` },
     { type: 'link', text: 'Upload Document(s)', href: `#${UPLOAD_DOCUMENT_PATH}` },
   ];
@@ -42,7 +67,7 @@ export const getDocumentsNavItems = (isAdmin = false) => {
     { type: 'link', text: 'View/Edit Configuration', href: `#${CONFIGURATION_PATH}` },
   ];
 
-  const items = [...baseItems];
+  const items = [...baseItems, ...companyItems, ...documentItems];
 
   if (isAdmin) {
     items.push(...adminItems);
@@ -89,6 +114,7 @@ const Navigation = ({ header = documentsNavHeader, items = null, onFollowHandler
   const location = useLocation();
   const path = location.pathname;
   const { isAdmin } = useAppContext();
+  const { isCompanySelected } = useCompany();
   const { settings } = useSettingsContext() || {};
 
   let activeHref = `#${DEFAULT_PATH}`;
@@ -104,12 +130,20 @@ const Navigation = ({ header = documentsNavHeader, items = null, onFollowHandler
     activeHref = `#${UPLOAD_DOCUMENT_PATH}`;
   } else if (path.includes(DISCOVERY_PATH)) {
     activeHref = `#${DISCOVERY_PATH}`;
+  } else if (path.includes(OVERVIEW_DASHBOARD_PATH)) {
+    activeHref = `#${OVERVIEW_DASHBOARD_PATH}`;
+  } else if (path.includes(CLIENT_TAKEON_PATH)) {
+    activeHref = `#${CLIENT_TAKEON_PATH}`;
+  } else if (path.includes(INVOICE_INSIGHTS_PATH)) {
+    activeHref = `#${INVOICE_INSIGHTS_PATH}`;
+  } else if (path.includes(BANK_INSIGHTS_PATH)) {
+    activeHref = `#${BANK_INSIGHTS_PATH}`;
   } else if (path.includes(DOCUMENTS_PATH)) {
     activeHref = `#${DOCUMENTS_PATH}`;
   }
 
-  // Get navigation items based on role (or use provided items)
-  const navigationItems = [...(items || getDocumentsNavItems(isAdmin))];
+  // Get navigation items based on role and company selection (or use provided items)
+  const navigationItems = [...(items || getDocumentsNavItems(isAdmin, isCompanySelected))];
 
   // Show deployment info only to administrators
   if (isAdmin && (settings?.Version || settings?.StackName || settings?.BuildDateTime || settings?.IDPPattern)) {
