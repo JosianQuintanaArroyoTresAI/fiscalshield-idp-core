@@ -15,36 +15,41 @@ import {
 } from '@awsui/components-react';
 
 import { COMPANY_SELECT_PATH } from '../../routes/constants';
+import { useCompany } from '../../contexts/company';
 
 import '@awsui/global-styles/index.css';
 
 const CompanyAnalysis = () => {
   const { companyNumber } = useParams();
   const history = useHistory();
-
+  const { activeCompany } = useCompany();
+  
   const [loading, setLoading] = useState(true);
   const [companyData, setCompanyData] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
 
   useEffect(() => {
     loadCompanyData();
-  }, [companyNumber]);
+  }, [companyNumber, activeCompany]);
 
   const loadCompanyData = async () => {
     try {
       setLoading(true);
-
-      const storedCompany = localStorage.getItem('active_company');
-
-      if (storedCompany) {
-        const companyContext = JSON.parse(storedCompany);
-        setCompanyData(companyContext);
+      
+      // Use CompanyProvider context first, fallback to URL param
+      if (activeCompany && activeCompany.companyNumber === companyNumber) {
+        setCompanyData(activeCompany);
+      } else if (activeCompany) {
+        // Active company exists but doesn't match URL - use active company
+        setCompanyData(activeCompany);
       } else {
+        // No active company - show minimal data
         setCompanyData({
-          company_number: companyNumber,
-          company_name: 'Unknown Company',
+          companyNumber: companyNumber,
+          companyName: 'Unknown Company',
         });
       }
+      
     } catch (err) {
       console.error('Failed to load company data:', err);
     } finally {
@@ -103,13 +108,16 @@ const CompanyAnalysis = () => {
       <BreadcrumbGroup
         items={[
           { text: 'Company Select', href: `#${COMPANY_SELECT_PATH}` },
-          { text: companyData?.company_name || companyNumber, href: '#' },
+          { text: companyData?.companyName || companyNumber, href: '#' },
         ]}
         ariaLabel="Breadcrumbs"
       />
-
-      <Header variant="h1" description={`Company Number: ${companyNumber}`}>
-        Company Analysis: {companyData?.company_name || 'Loading...'}
+      
+      <Header
+        variant="h1"
+        description={`Company Number: ${companyNumber}`}
+      >
+        Company Analysis: {companyData?.companyName || 'Loading...'}
       </Header>
 
       <Tabs

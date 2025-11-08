@@ -25,6 +25,7 @@ import { checkDataCollectionHealth, lookupCompany, triggerBackgroundResearch } f
 import { fetchUserCompanies, registerCompany, deleteCompany } from '../../services/userCompanies';
 import CompanyCard from '../company-card/CompanyCard';
 import useAppContext from '../../contexts/app';
+import { useCompany } from '../../contexts/company';
 import { DOCUMENTS_PATH, COMPANY_INTELLIGENCE_PATH, COMPANY_ANALYSIS_PATH } from '../../routes/constants';
 
 import '@awsui/global-styles/index.css';
@@ -34,6 +35,7 @@ const logger = new Logger('CompanySelect');
 const CompanySelect = () => {
   const history = useHistory();
   const { user } = useAppContext();
+  const { selectCompany } = useCompany();
 
   const [companyNumber, setCompanyNumber] = useState('');
   const [companyData, setCompanyData] = useState(null);
@@ -149,16 +151,19 @@ const CompanySelect = () => {
       setResearchStatusMessage(statusMessages[messageIndex]);
     }, 700);
 
-    // Store company selection
+    // Store company selection using CompanyProvider
     const companyContext = {
-      company_number: companyData.company_number,
-      company_name: companyData.company_name,
-      selected_at: new Date().toISOString(),
-      user_id: user?.username || 'unknown',
+      companyNumber: companyData.company_number,
+      companyName: companyData.company_name,
+      companyStatus: companyData.company_status,
+      dateOfCreation: companyData.date_of_creation,
+      registeredOfficeAddress: companyData.registered_office_address,
+      selectedAt: new Date().toISOString(),
+      userId: user?.username || 'unknown',
     };
 
-    localStorage.setItem('active_company', JSON.stringify(companyContext));
-    logger.debug('Company context saved:', companyContext);
+    selectCompany(companyContext);
+    logger.debug('Company context saved via CompanyProvider:', companyContext);
 
     // Register company in UserProfileTable for persistent storage
     try {
@@ -314,17 +319,17 @@ const CompanySelect = () => {
   const handleViewCompanyDocuments = (company) => {
     logger.info(`Viewing documents for company: ${company.company_number}`);
 
-    // Store company context
+    // Store company context using CompanyProvider
     const companyContext = {
-      company_number: company.company_number,
-      company_name: company.company_name,
-      selected_at: new Date().toISOString(),
-      user_id: user?.username || 'unknown',
-      from_registered: true,
+      companyNumber: company.company_number,
+      companyName: company.company_name,
+      selectedAt: new Date().toISOString(),
+      userId: user?.username || 'unknown',
+      fromRegistered: true,
     };
 
-    localStorage.setItem('active_company', JSON.stringify(companyContext));
-    logger.debug('Company context saved:', companyContext);
+    selectCompany(companyContext);
+    logger.debug('Company context saved via CompanyProvider:', companyContext);
 
     // Navigate to documents page
     history.push(DOCUMENTS_PATH);
@@ -334,17 +339,17 @@ const CompanySelect = () => {
   const handleViewCompanyIntelligence = (company) => {
     logger.debug('Viewing intelligence for company:', company.company_number);
 
-    // Set company context in localStorage
+    // Set company context using CompanyProvider
     const companyContext = {
-      company_number: company.company_number,
-      company_name: company.company_name,
-      selected_at: new Date().toISOString(),
-      user_id: user?.username || 'unknown',
-      from_registered: true,
+      companyNumber: company.company_number,
+      companyName: company.company_name,
+      selectedAt: new Date().toISOString(),
+      userId: user?.username || 'unknown',
+      fromRegistered: true,
     };
 
-    localStorage.setItem('active_company', JSON.stringify(companyContext));
-    logger.debug('Company context saved:', companyContext);
+    selectCompany(companyContext);
+    logger.debug('Company context saved via CompanyProvider:', companyContext);
 
     // Navigate to intelligence page
     const intelligencePath = COMPANY_INTELLIGENCE_PATH.replace(':companyNumber', company.company_number);
@@ -355,17 +360,17 @@ const CompanySelect = () => {
   const handleViewCompanyAnalysis = (company) => {
     logger.debug('Viewing analysis for company:', company.company_number);
 
-    // Set company context in localStorage
+    // Set company context using CompanyProvider
     const companyContext = {
-      company_number: company.company_number,
-      company_name: company.company_name,
-      selected_at: new Date().toISOString(),
-      user_id: user?.username || 'unknown',
-      from_registered: true,
+      companyNumber: company.company_number,
+      companyName: company.company_name,
+      selectedAt: new Date().toISOString(),
+      userId: user?.username || 'unknown',
+      fromRegistered: true,
     };
 
-    localStorage.setItem('active_company', JSON.stringify(companyContext));
-    logger.debug('Company context saved:', companyContext);
+    selectCompany(companyContext);
+    logger.debug('Company context saved via CompanyProvider:', companyContext);
 
     // Navigate to analysis page
     const analysisPath = COMPANY_ANALYSIS_PATH.replace(':companyNumber', company.company_number);
