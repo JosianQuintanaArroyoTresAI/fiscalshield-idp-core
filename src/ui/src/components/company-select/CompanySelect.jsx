@@ -370,7 +370,7 @@ const CompanySelect = () => {
     // Navigate to analysis page
     const analysisPath = COMPANY_ANALYSIS_PATH.replace(':companyNumber', company.company_number);
     history.push(analysisPath);
-  };  // Handle deleting a company
+  }; // Handle deleting a company
   const handleDeleteCompany = async (company) => {
     logger.info(`Deleting company: ${company.company_number}`);
 

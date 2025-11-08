@@ -21,7 +21,7 @@ import '@awsui/global-styles/index.css';
 const CompanyAnalysis = () => {
   const { companyNumber } = useParams();
   const history = useHistory();
-  
+
   const [loading, setLoading] = useState(true);
   const [companyData, setCompanyData] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
@@ -33,9 +33,9 @@ const CompanyAnalysis = () => {
   const loadCompanyData = async () => {
     try {
       setLoading(true);
-      
+
       const storedCompany = localStorage.getItem('active_company');
-      
+
       if (storedCompany) {
         const companyContext = JSON.parse(storedCompany);
         setCompanyData(companyContext);
@@ -45,7 +45,6 @@ const CompanyAnalysis = () => {
           company_name: 'Unknown Company',
         });
       }
-      
     } catch (err) {
       console.error('Failed to load company data:', err);
     } finally {
@@ -57,12 +56,9 @@ const CompanyAnalysis = () => {
     <Container>
       <Alert type="info" header="Data Collection Not Available">
         <SpaceBetween size="s">
-          <Box>
-            Companies House data enrichment is not currently enabled.
-          </Box>
+          <Box>Companies House data enrichment is not currently enabled.</Box>
           <Box variant="small">
-            This feature requires the Data Collection stack to be deployed.
-            When available, you will see:
+            This feature requires the Data Collection stack to be deployed. When available, you will see:
           </Box>
           <ul>
             <li>Company compliance scoring</li>
@@ -78,9 +74,7 @@ const CompanyAnalysis = () => {
   const renderFilingHistory = () => (
     <Container>
       <Alert type="info" header="Filing History Not Available">
-        <Box>
-          Filing history data will be available once the Data Collection stack is deployed.
-        </Box>
+        <Box>Filing history data will be available once the Data Collection stack is deployed.</Box>
       </Alert>
     </Container>
   );
@@ -88,9 +82,7 @@ const CompanyAnalysis = () => {
   const renderOfficers = () => (
     <Container>
       <Alert type="info" header="Officers Data Not Available">
-        <Box>
-          Officers and directors information will be available once the Data Collection stack is deployed.
-        </Box>
+        <Box>Officers and directors information will be available once the Data Collection stack is deployed.</Box>
       </Alert>
     </Container>
   );
@@ -115,11 +107,8 @@ const CompanyAnalysis = () => {
         ]}
         ariaLabel="Breadcrumbs"
       />
-      
-      <Header
-        variant="h1"
-        description={`Company Number: ${companyNumber}`}
-      >
+
+      <Header variant="h1" description={`Company Number: ${companyNumber}`}>
         Company Analysis: {companyData?.company_name || 'Loading...'}
       </Header>
 
