@@ -22,7 +22,7 @@ import '@awsui/global-styles/index.css';
 const InvoiceInsights = () => {
   const history = useHistory();
   const { activeCompany, isCompanySelected } = useCompany();
-  
+
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
 
@@ -57,12 +57,8 @@ const InvoiceInsights = () => {
     <Container>
       <Alert type="info" header="Invoice Analytics Not Available">
         <SpaceBetween size="s">
-          <Box>
-            Invoice analytics will be available once invoice data is processed and aggregated.
-          </Box>
-          <Box variant="small">
-            This dashboard will show:
-          </Box>
+          <Box>Invoice analytics will be available once invoice data is processed and aggregated.</Box>
+          <Box variant="small">This dashboard will show:</Box>
           <ul>
             <li>Total invoice volume and trends</li>
             <li>Average invoice value and payment terms</li>
@@ -102,9 +98,7 @@ const InvoiceInsights = () => {
   const renderSuppliersTab = () => (
     <Container>
       <Alert type="info" header="Supplier Analysis Not Available">
-        <Box>
-          Supplier breakdown and spending analysis will be available once invoice data is processed.
-        </Box>
+        <Box>Supplier breakdown and spending analysis will be available once invoice data is processed.</Box>
       </Alert>
     </Container>
   );
@@ -129,11 +123,8 @@ const InvoiceInsights = () => {
         ]}
         ariaLabel="Breadcrumbs"
       />
-      
-      <Header
-        variant="h1"
-        description={`Company Number: ${activeCompany.companyNumber}`}
-      >
+
+      <Header variant="h1" description={`Company Number: ${activeCompany.companyNumber}`}>
         Invoice Insights: {activeCompany.companyName}
       </Header>
 

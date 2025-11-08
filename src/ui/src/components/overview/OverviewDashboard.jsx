@@ -23,7 +23,7 @@ import '@awsui/global-styles/index.css';
 const OverviewDashboard = () => {
   const history = useHistory();
   const { activeCompany, isCompanySelected } = useCompany();
-  
+
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -63,23 +63,16 @@ const OverviewDashboard = () => {
         ]}
         ariaLabel="Breadcrumbs"
       />
-      
-      <Header
-        variant="h1"
-        description={`Company Number: ${activeCompany.companyNumber}`}
-      >
+
+      <Header variant="h1" description={`Company Number: ${activeCompany.companyNumber}`}>
         Overview Dashboard: {activeCompany.companyName}
       </Header>
 
       {/* Placeholder Alert */}
       <Alert type="info" header="Dashboard Under Construction">
         <SpaceBetween size="s">
-          <Box>
-            The overview dashboard will display key company metrics and insights.
-          </Box>
-          <Box variant="small">
-            When implemented, you will see:
-          </Box>
+          <Box>The overview dashboard will display key company metrics and insights.</Box>
+          <Box variant="small">When implemented, you will see:</Box>
           <ul>
             <li>Document processing statistics</li>
             <li>Recent activity timeline</li>

@@ -22,7 +22,7 @@ import '@awsui/global-styles/index.css';
 const ClientTakeOnAnalysis = () => {
   const history = useHistory();
   const { activeCompany, isCompanySelected } = useCompany();
-  
+
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('aml');
 
@@ -57,12 +57,8 @@ const ClientTakeOnAnalysis = () => {
     <Container>
       <Alert type="info" header="AML Analysis Not Available">
         <SpaceBetween size="s">
-          <Box>
-            Anti-Money Laundering analysis will be available once integrated with the Analysis Stack.
-          </Box>
-          <Box variant="small">
-            This will include:
-          </Box>
+          <Box>Anti-Money Laundering analysis will be available once integrated with the Analysis Stack.</Box>
+          <Box variant="small">This will include:</Box>
           <ul>
             <li>Sanctions screening results</li>
             <li>PEP (Politically Exposed Persons) checks</li>
@@ -79,12 +75,8 @@ const ClientTakeOnAnalysis = () => {
     <Container>
       <Alert type="info" header="KYC Verification Not Available">
         <SpaceBetween size="s">
-          <Box>
-            Know Your Customer verification will be available once integrated with the Analysis Stack.
-          </Box>
-          <Box variant="small">
-            This will include:
-          </Box>
+          <Box>Know Your Customer verification will be available once integrated with the Analysis Stack.</Box>
+          <Box variant="small">This will include:</Box>
           <ul>
             <li>Identity verification status</li>
             <li>Document verification (ID, proof of address)</li>
@@ -101,12 +93,8 @@ const ClientTakeOnAnalysis = () => {
     <Container>
       <Alert type="info" header="Compliance Check Not Available">
         <SpaceBetween size="s">
-          <Box>
-            Compliance verification will be available once integrated with Companies House data.
-          </Box>
-          <Box variant="small">
-            This will include:
-          </Box>
+          <Box>Compliance verification will be available once integrated with Companies House data.</Box>
+          <Box variant="small">This will include:</Box>
           <ul>
             <li>Filing compliance history</li>
             <li>Director disqualifications check</li>
@@ -129,7 +117,7 @@ const ClientTakeOnAnalysis = () => {
         ]}
         ariaLabel="Breadcrumbs"
       />
-      
+
       <Header
         variant="h1"
         description={`Company Number: ${activeCompany.companyNumber}`}

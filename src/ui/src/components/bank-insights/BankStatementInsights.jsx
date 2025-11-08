@@ -22,7 +22,7 @@ import '@awsui/global-styles/index.css';
 const BankStatementInsights = () => {
   const history = useHistory();
   const { activeCompany, isCompanySelected } = useCompany();
-  
+
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('cashflow');
 
@@ -57,12 +57,8 @@ const BankStatementInsights = () => {
     <Container>
       <Alert type="info" header="Cash Flow Analysis Not Available">
         <SpaceBetween size="s">
-          <Box>
-            Cash flow analysis will be available once bank statement data is processed.
-          </Box>
-          <Box variant="small">
-            This will include:
-          </Box>
+          <Box>Cash flow analysis will be available once bank statement data is processed.</Box>
+          <Box variant="small">This will include:</Box>
           <ul>
             <li>Monthly cash flow trends and patterns</li>
             <li>Income vs expenses breakdown</li>
@@ -103,12 +99,8 @@ const BankStatementInsights = () => {
     <Container>
       <Alert type="info" header="Transaction Analysis Not Available">
         <SpaceBetween size="s">
-          <Box>
-            Transaction categorization and analysis will be available once bank statement data is processed.
-          </Box>
-          <Box variant="small">
-            This will include:
-          </Box>
+          <Box>Transaction categorization and analysis will be available once bank statement data is processed.</Box>
+          <Box variant="small">This will include:</Box>
           <ul>
             <li>Automatic transaction categorization</li>
             <li>Top payees and payment patterns</li>
@@ -125,12 +117,8 @@ const BankStatementInsights = () => {
     <Container>
       <Alert type="info" header="Expense Analysis Not Available">
         <SpaceBetween size="s">
-          <Box>
-            Expense breakdown and categorization will be available once bank statement data is processed.
-          </Box>
-          <Box variant="small">
-            This will include:
-          </Box>
+          <Box>Expense breakdown and categorization will be available once bank statement data is processed.</Box>
+          <Box variant="small">This will include:</Box>
           <ul>
             <li>Expense categories and trends</li>
             <li>Fixed vs variable costs</li>
@@ -153,11 +141,8 @@ const BankStatementInsights = () => {
         ]}
         ariaLabel="Breadcrumbs"
       />
-      
-      <Header
-        variant="h1"
-        description={`Company Number: ${activeCompany.companyNumber}`}
-      >
+
+      <Header variant="h1" description={`Company Number: ${activeCompany.companyNumber}`}>
         Bank Statement Insights: {activeCompany.companyName}
       </Header>
 
