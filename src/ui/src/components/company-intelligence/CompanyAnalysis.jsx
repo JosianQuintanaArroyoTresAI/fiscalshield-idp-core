@@ -181,7 +181,7 @@ const CompanyAnalysis = () => {
               status={intelligence.reputational?.has_adverse_media ? 'REVIEW' : 'CLEAN'}
               statusColor={getStatusColor(
                 intelligence.reputational?.has_adverse_media,
-                intelligence.reputational?.adverse_media_risk === 'high'
+                intelligence.reputational?.adverse_media_risk === 'high',
               )}
             />
             <CompactRiskCard
@@ -192,7 +192,7 @@ const CompanyAnalysis = () => {
               status={intelligence.aml?.requires_enhanced_dd ? 'ENHANCED DD' : 'CLEAN'}
               statusColor={getStatusColor(
                 intelligence.aml?.sanctioned_directors?.length > 0 || intelligence.aml?.pep_directors?.length > 0,
-                intelligence.aml?.requires_enhanced_dd
+                intelligence.aml?.requires_enhanced_dd,
               )}
             />
             <CompactRiskCard
@@ -286,7 +286,11 @@ const CompanyAnalysis = () => {
               <CompactRiskCard
                 title="Red Flags"
                 value={intelligence.insights.red_flags?.length || 0}
-                status={intelligence.insights.red_flags?.length > 0 ? `${intelligence.insights.red_flags.length} FOUND` : 'NONE'}
+                status={
+                  intelligence.insights.red_flags?.length > 0
+                    ? `${intelligence.insights.red_flags.length} FOUND`
+                    : 'NONE'
+                }
                 statusColor={intelligence.insights.red_flags?.length > 0 ? '#dc3545' : '#28a745'}
               />
               <CompactRiskCard
