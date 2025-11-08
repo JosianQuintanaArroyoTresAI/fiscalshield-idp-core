@@ -514,6 +514,7 @@ def deduplicate_invoices_in_dynamodb(document_id: str, section_id: str, user_id:
                 'description': item.get('Description', ''),
                 'supplier_address': item.get('SupplierAddress', ''),
                 'source_page': int(item.get('SourcePage', 0)) if item.get('SourcePage') else 0,
+                'extraction_confidence': item.get('ExtractionConfidence', 'high'),  # Track extraction quality
                 # Chunk metadata
                 'chunk_index': chunk_index,
                 'chunk_pages': item.get('ChunkPages', []),
@@ -618,7 +619,7 @@ def deduplicate_invoices_in_dynamodb(document_id: str, section_id: str, user_id:
             
             # Sort by completeness (most complete first), then by chunk_index (earlier first), then by timestamp
             def count_non_empty_fields(inv):
-                """Count how many fields have meaningful values"""
+                """Count how many fields have meaningful values, with confidence bonus"""
                 count = 0
                 if inv['supplier_name'] and inv['supplier_name'].strip(): count += 1
                 if inv['invoice_number'] and inv['invoice_number'].strip(): count += 1
@@ -628,6 +629,13 @@ def deduplicate_invoices_in_dynamodb(document_id: str, section_id: str, user_id:
                 if inv['supplier_address'] and inv['supplier_address'].strip(): count += 1
                 if inv['vendor_name'] and inv['vendor_name'].strip(): count += 1
                 if inv['total_amount'] > 0: count += 1
+                
+                # Add confidence bonus for prioritization
+                confidence = inv.get('extraction_confidence', 'high')
+                if confidence == 'high': count += 2  # High confidence gets bonus
+                elif confidence == 'medium': count += 1  # Medium confidence gets smaller bonus
+                # Low confidence gets no bonus
+                
                 return count
             
             sorted_group = sorted(
@@ -644,11 +652,19 @@ def deduplicate_invoices_in_dynamodb(document_id: str, section_id: str, user_id:
             to_delete = sorted_group[1:]
             
             completeness_keeper = count_non_empty_fields(keeper)
-            log_with_timestamp(f"   ✅ Keeping: chunk={keeper['chunk_index']}, completeness={completeness_keeper} fields")
+            confidence_keeper = keeper.get('extraction_confidence', 'high')
+            log_with_timestamp(
+                f"   ✅ Keeping: chunk={keeper['chunk_index']}, "
+                f"completeness={completeness_keeper} fields, confidence={confidence_keeper}"
+            )
             
             for dup in to_delete:
                 completeness_dup = count_non_empty_fields(dup)
-                log_with_timestamp(f"   🗑️  Deleting: chunk={dup['chunk_index']}, completeness={completeness_dup} fields")
+                confidence_dup = dup.get('extraction_confidence', 'high')
+                log_with_timestamp(
+                    f"   🗑️  Deleting: chunk={dup['chunk_index']}, "
+                    f"completeness={completeness_dup} fields, confidence={confidence_dup}"
+                )
                 duplicates_to_delete.append(dup)
         
         # Delete duplicate records from DynamoDB
@@ -732,10 +748,21 @@ def get_invoice_extraction_prompt() -> str:
 
 def get_default_invoice_prompt() -> str:
     """
-    Default invoice extraction prompt (used as fallback)
-    Enhanced with UK invoice numbering standards for accurate field extraction
+    Enhanced invoice extraction prompt with UK invoice numbering standards
+    Includes VAT number disambiguation, incomplete invoice detection, and confidence tracking
     """
-    return """CRITICAL: This text may contain MULTIPLE INVOICES. You must find and extract ALL of them.
+    return """DOCUMENT CONTEXT:
+This text has been intelligently chunked to contain COMPLETE invoices.
+- Each chunk should contain 1-3 full invoices
+- Invoice boundaries have been detected (starts with "To:" or supplier name, ends with "AMOUNT DUE")
+- If an invoice appears incomplete (missing header OR missing total), mark with low confidence
+
+However, occasionally an invoice MAY be split. If you detect this:
+→ Extract what you can from the partial invoice
+→ Set <extraction_confidence>low</extraction_confidence>
+→ The system will attempt reconciliation with adjacent chunks
+
+CRITICAL: This text may contain MULTIPLE INVOICES. You must find and extract ALL of them.
 
 TASK: Scan the ENTIRE text and extract EVERY invoice you find, even if there are many.
 
@@ -744,6 +771,28 @@ PAGE NUMBER EXTRACTION:
 - For each invoice, determine which page it appears on
 - Include <source_page>X</source_page> in each invoice block
 - If page number unclear, use sequential numbering starting from 1
+
+UK INVOICE LAYOUT PATTERNS (Recognition Hints):
+📄 Typical UK invoice structure:
+   TOP SECTION (first 30% of invoice):
+   - "Invoice Number" or "Reference Number" labels
+   - Invoice date
+   - Supplier details (with VAT number in this section)
+   
+   MIDDLE SECTION:
+   - "Bill To" or "To:" with customer details
+   - Line items and descriptions
+   
+   BOTTOM SECTION (last 20%):
+   - Subtotal, VAT amount, Total
+   - "AMOUNT DUE" or "TOTAL GBP"
+   - Payment terms
+   - Often ends with: "This is not a tax invoice"
+
+🔍 Invoice boundaries:
+   - New invoice typically starts with: "To:", supplier name, or page break marker
+   - Invoice ends with: "AMOUNT DUE", payment terms, or distinctive footer
+   - Look for pattern: [Invoice details] → [Line items] → [Totals] → [Next invoice starts]
 
 VENDOR NAME EXTRACTION RULES:
 - Look for company names, business names, or service providers
@@ -767,18 +816,75 @@ INVOICE NUMBER vs REFERENCE NUMBER (UK HMRC Standards):
    - Optional field for tracking purposes
    
 ❌ DO NOT USE AS INVOICE NUMBER:
-   - VAT Registration Numbers (GB123456789) - these are company tax IDs, not invoice numbers
+   - VAT Registration Numbers - CRITICAL TO AVOID:
+     * UK format: GB followed by 9 digits (e.g., GB332734807, GB721741064)
+     * UK format: 9 digits only (e.g., 201630957, 302792712)
+     * UK format: GB followed by 12 digits (e.g., GB523127284, GB123456789012)
+     * Always labeled "VAT Number:", "VAT No:", "VAT Registration:", or "VAT Reg No:"
+     * Located in supplier details section, NOT near "Invoice Number" label
+     * These are company tax IDs, NOT invoice numbers
    - Company Registration Numbers (12345678, SC123456) - these are Companies House IDs
    - Customer Account Numbers or Client IDs
-   - Form template IDs or document type codes
-   - Generic labels like "Expense Claims" or "Invoice"
+   - Form template IDs or document type codes (e.g., "Tofes 17")
+   - Generic labels like "Expense Claims" or "Invoice" without unique numbers
+   - Date-based codes that look like invoice numbers (e.g., 2006547140 - Land Registry date codes)
+   - Phone numbers (07xxx xxxxxx format)
+   - Postcodes (e.g., GU52 8BF, EC2Y 5EB)
+
+📋 UK INVOICE NUMBER EXAMPLES:
+
+✅ CORRECT invoice_number extraction:
+   Text: "Invoice Number: INV-60778" → invoice_number="INV-60778"
+   Text: "Reference Number: 45485" → invoice_number="45485"
+   Text: "Invoice: PP-13189876v1" → invoice_number="PP-13189876v1"
+   Text: "Invoice No 1919" → invoice_number="1919"
+   Text: "Ref: YEX49000800111" → invoice_number="YEX49000800111"
+   Text: "Invoice Number: INV-20153" → invoice_number="INV-20153"
+   Text: "Reference Number: 2501751" → invoice_number="2501751"
+
+❌ WRONG extractions (DO NOT USE):
+   Text: "VAT Number: GB332734807" → ❌ NOT invoice_number (this is a VAT number)
+   Text: "VAT Number: 201630957" → ❌ NOT invoice_number (this is a VAT number)
+   Text: "VAT Number: GB721741064" → ❌ NOT invoice_number (this is a VAT number)
+   Text: "Expense Claims" (with no unique number) → invoice_number="" (leave empty)
+   Text: "Invoice Date: 30 Jun 2024" → ❌ NOT invoice_number (this is a date)
+   Text: "Mobile: 07376 129933" → ❌ NOT invoice_number (this is a phone number)
+
+🔍 AMBIGUOUS CASES:
+   If you see ONLY "Reference Number: 12345" (no "Invoice Number" label):
+   → Use reference_number="12345", leave invoice_number=""
    
-📋 EXAMPLES:
-   ✅ CORRECT: invoice_number="INV-2024-001", reference_number="PO-5678"
-   ✅ CORRECT: invoice_number="12345", reference_number="Job-ABC-123"
-   ✅ CORRECT: invoice_number="" (expense claim with no formal invoice)
-   ❌ WRONG: invoice_number="GB-TI2500887574" (this is a VAT/form ID, not invoice number)
-   ❌ WRONG: invoice_number="Expense Claims" (generic label, not unique number)
+   If you see both:
+   Text: "Invoice Number: INV-001\nReference Number: PO-5678"
+   → invoice_number="INV-001", reference_number="PO-5678"
+   
+   If you see a 9-digit number near VAT section:
+   Text: "VAT Number: 201630957\nInvoice Date: 30 Jun 2024"
+   → invoice_number="" (the 9-digit number is VAT, not invoice)
+   
+   If invoice number is unclear or ambiguous:
+   → invoice_number="", extraction_confidence="low"
+
+INCOMPLETE INVOICE DETECTION:
+⚠️ If the text appears to be a partial/incomplete invoice:
+   - Missing clear "Invoice Number" or "Reference Number" label
+   - Text starts mid-sentence or ends abruptly
+   - Supplier name or total amount not clearly visible
+   - Only seeing line items without header or footer
+   → Mark as: <extraction_confidence>low</extraction_confidence>
+   → Still extract what you can, but flag uncertainty
+   → The system will attempt to reconstruct from adjacent chunks
+
+CONFIDENCE LEVELS:
+- <extraction_confidence>high</extraction_confidence>: All key fields present and clearly labeled
+- <extraction_confidence>medium</extraction_confidence>: Most fields present, some minor ambiguity
+- <extraction_confidence>low</extraction_confidence>: Missing key fields, text truncated, or ambiguous numbers
+
+Use "low" confidence when:
+  * Invoice number unclear, missing its label, or might be a VAT number
+  * Might be mixing data from multiple invoices
+  * Text appears truncated or incomplete
+  * Supplier name or total amount not clearly identifiable
 
 MULTIPLE INVOICE HANDLING:
 - If you find 5 invoices → output 5 separate <invoice> blocks
@@ -786,11 +892,13 @@ MULTIPLE INVOICE HANDLING:
 - If you find 10 invoices → output 10 separate <invoice> blocks
 - NEVER skip invoices because there are "too many"
 - NEVER merge multiple invoices into one block
+- Extract them in the order they appear in the text
 
 REQUIRED FIELDS FOR EACH INVOICE:
+- extraction_confidence: high, medium, or low (see guidelines above)
 - supplier_name: Company/vendor name (ALWAYS required, never empty)
-- total_amount: Final total (look for "Total", "Amount Due", "Balance Due")
-- invoice_date: Date of invoice (DD/MM/YYYY or YYYY-MM-DD)
+- total_amount: Final total (look for "Total", "Amount Due", "Balance Due", "TOTAL GBP")
+- invoice_date: Date of invoice (DD/MM/YYYY or YYYY-MM-DD format)
 - invoice_number: ONLY the actual invoice number (see rules above), leave EMPTY if not found
 - reference_number: Purchase order or customer reference (optional)
 - source_page: Page number where this invoice appears
@@ -800,20 +908,38 @@ CRITICAL: Extract EVERY invoice in the text. Do not stop after finding the first
 Required XML format (repeat <invoice> block for each invoice found):
 <invoices>
 <invoice>
+<extraction_confidence>high</extraction_confidence>
 <invoice_type>SUPPLIER_INVOICE</invoice_type>
-<invoice_number>INV-2024-001</invoice_number>
+<invoice_number>INV-60778</invoice_number>
 <reference_number>PO-5678</reference_number>
-<invoice_date>2025-03-07</invoice_date>
-<due_date>2025-03-07</due_date>
-<supplier_name>Microsoft Limited</supplier_name>
-<total_amount>5.88</total_amount>
+<invoice_date>2024-06-30</invoice_date>
+<due_date>2024-07-15</due_date>
+<supplier_name>Edozo</supplier_name>
+<total_amount>296.74</total_amount>
 <currency>GBP</currency>
-<vat_amount>0.98</vat_amount>
-<net_amount>4.90</net_amount>
-<description>Microsoft 365 Business Basic</description>
-<supplier_address>Microsoft Campus, Thames Valley Park, Reading</supplier_address>
-<payment_terms>Credit card on file</payment_terms>
+<vat_amount>49.46</vat_amount>
+<net_amount>247.28</net_amount>
+<description>Edozo Usage - June 2024</description>
+<supplier_address>6th Floor, 1 London Wall, London, Middlesex, EC2Y 5EB</supplier_address>
+<payment_terms>Due 15 Jul 2024</payment_terms>
 <source_page>1</source_page>
+</invoice>
+<invoice>
+<extraction_confidence>high</extraction_confidence>
+<invoice_type>SUPPLIER_INVOICE</invoice_type>
+<invoice_number>INV-0144</invoice_number>
+<reference_number></reference_number>
+<invoice_date>2024-06-30</invoice_date>
+<due_date>2024-07-30</due_date>
+<supplier_name>Ceri Evans Marketing & Communications Ltd</supplier_name>
+<total_amount>5568.00</total_amount>
+<currency>GBP</currency>
+<vat_amount>927.99</vat_amount>
+<net_amount>4640.01</net_amount>
+<description>General Marketing Support June 2024</description>
+<supplier_address>21 Greenshields Road, Bedford, MK40 3TS</supplier_address>
+<payment_terms>Due 30 Jul 2024</payment_terms>
+<source_page>2</source_page>
 </invoice>
 </invoices>
 
@@ -1125,6 +1251,7 @@ def parse_invoices_from_xml(xml_content: str) -> List[Dict[str, Any]]:
 
         # Create standardized invoice record
         invoice_record = {
+            'extraction_confidence': row_data.get('extraction_confidence', 'high'),  # Track extraction quality
             'invoice_type': row_data.get('invoice_type', 'SUPPLIER_INVOICE'),
             'invoice_number': row_data.get('invoice_number', ''),
             'reference_number': row_data.get('reference_number', ''),
@@ -1338,7 +1465,12 @@ def write_invoices_to_dynamodb(
                 'CreatedAt': current_timestamp,
                 'UpdatedAt': current_timestamp,
                 'DateExtracted': datetime.now().strftime('%Y-%m-%d'),
-                'ConfidenceScore': Decimal('0.95'),  # Placeholder - can be enhanced
+                'ExtractionConfidence': invoice_data.get('extraction_confidence', 'high'),  # Track extraction quality
+                'ConfidenceScore': (
+                    Decimal('0.95') if invoice_data.get('extraction_confidence') == 'high' else
+                    Decimal('0.75') if invoice_data.get('extraction_confidence') == 'medium' else
+                    Decimal('0.50')  # low confidence
+                ),
                 'Version': 1,
                 'ModelUsed': invoice_data.get('model_used', 'unknown'),  # Track which model extracted this
 
