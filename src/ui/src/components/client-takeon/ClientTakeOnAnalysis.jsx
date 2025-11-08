@@ -2,16 +2,16 @@
 // SPDX-License-Identifier: Apache-2.0
 import React, { useState, useEffect } from 'react';
 import { useHistory } from 'react-router-dom';
-import { 
-  Container, 
-  Header, 
-  SpaceBetween, 
-  Alert, 
-  Box, 
-  Spinner, 
-  BreadcrumbGroup, 
+import {
+  Container,
+  Header,
+  SpaceBetween,
+  Alert,
+  Box,
+  Spinner,
+  BreadcrumbGroup,
   Button,
-  ExpandableSection 
+  ExpandableSection,
 } from '@awsui/components-react';
 
 import { useCompany } from '../../contexts/company';
