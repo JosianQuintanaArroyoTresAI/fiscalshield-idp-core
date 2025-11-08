@@ -45,6 +45,7 @@ export const getDocumentsNavItems = (isAdmin = false, hasActiveCompany = false) 
           type: 'section',
           text: 'Company',
           items: [
+            { type: 'link', text: 'Company Analysis', href: `#${COMPANY_ANALYSIS_PATH}` },
             { type: 'link', text: 'Overview Dashboard', href: `#${OVERVIEW_DASHBOARD_PATH}` },
             { type: 'link', text: 'Client Take-On', href: `#${CLIENT_TAKEON_PATH}` },
             { type: 'link', text: 'Invoice Insights', href: `#${INVOICE_INSIGHTS_PATH}` },
@@ -131,6 +132,8 @@ const Navigation = ({ header = documentsNavHeader, items = null, onFollowHandler
     activeHref = `#${UPLOAD_DOCUMENT_PATH}`;
   } else if (path.includes(DISCOVERY_PATH)) {
     activeHref = `#${DISCOVERY_PATH}`;
+  } else if (path.includes(COMPANY_ANALYSIS_PATH.replace(':companyNumber', ''))) {
+    activeHref = `#${COMPANY_ANALYSIS_PATH}`;
   } else if (path.includes(OVERVIEW_DASHBOARD_PATH)) {
     activeHref = `#${OVERVIEW_DASHBOARD_PATH}`;
   } else if (path.includes(CLIENT_TAKEON_PATH)) {
@@ -196,6 +199,7 @@ const Navigation = ({ header = documentsNavHeader, items = null, onFollowHandler
         path={[
           DOCUMENTS_PATH,
           COMPANY_HUB_PATH,
+          COMPANY_ANALYSIS_PATH,
           OVERVIEW_DASHBOARD_PATH,
           CLIENT_TAKEON_PATH,
           INVOICE_INSIGHTS_PATH,

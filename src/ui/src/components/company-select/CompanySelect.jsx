@@ -27,7 +27,7 @@ import CompanyCard from '../company-card/CompanyCard';
 import GenAIIDPTopNavigation from '../genai-idp-top-navigation';
 import useAppContext from '../../contexts/app';
 import { useCompany } from '../../contexts/company';
-import { DOCUMENTS_PATH, COMPANY_HUB_PATH } from '../../routes/constants';
+import { DOCUMENTS_PATH, COMPANY_HUB_PATH, COMPANY_ANALYSIS_PATH } from '../../routes/constants';
 
 import '@awsui/global-styles/index.css';
 
@@ -194,8 +194,8 @@ const CompanySelect = () => {
     // Redirect after 2.5 seconds of elegant loading
     setTimeout(() => {
       clearInterval(messageInterval);
-      const hubPath = COMPANY_HUB_PATH.replace(':companyNumber', companyData.company_number);
-      history.push(hubPath);
+      const analysisPath = COMPANY_ANALYSIS_PATH.replace(':companyNumber', companyData.company_number);
+      history.push(analysisPath);
     }, 2500);
   };
 
@@ -319,7 +319,7 @@ const CompanySelect = () => {
 
   // Handle viewing documents for a registered company
   const handleOpenCompany = (company) => {
-    logger.info(`Opening company hub for: ${company.company_number}`);
+    logger.info(`Opening company analysis for: ${company.company_number}`);
 
     // Store company context using CompanyProvider
     const companyContext = {
@@ -333,9 +333,9 @@ const CompanySelect = () => {
     selectCompany(companyContext);
     logger.debug('Company context saved via CompanyProvider:', companyContext);
 
-    // Navigate to company hub
-    const hubPath = COMPANY_HUB_PATH.replace(':companyNumber', company.company_number);
-    history.push(hubPath);
+    // Navigate to company analysis page
+    const analysisPath = COMPANY_ANALYSIS_PATH.replace(':companyNumber', company.company_number);
+    history.push(analysisPath);
   };
 
   // Handle deleting a company
