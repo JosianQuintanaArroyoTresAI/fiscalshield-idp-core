@@ -29,7 +29,7 @@ const logger = new Logger('CompanyHub');
 
 /**
  * CompanyHub Component
- * 
+ *
  * Central hub for all company-related information with tabbed interface:
  * - Overview: Basic company info, filing history, officers
  * - Intelligence: Risk analysis, AML screening, compliance checks
@@ -65,7 +65,7 @@ const CompanyHub = () => {
 
   const handleTabChange = ({ detail }) => {
     const newTabId = detail.activeTabId;
-    
+
     // For documents tab, navigate to the documents route
     if (newTabId === 'documents') {
       history.push(DOCUMENTS_PATH);
@@ -127,24 +127,15 @@ const CompanyHub = () => {
         navigation={<Navigation />}
         navigationOpen={navigationOpen}
         onNavigationChange={({ detail }) => setNavigationOpen(detail.open)}
-        breadcrumbs={
-          <BreadcrumbGroup items={breadcrumbItems} ariaLabel="Breadcrumbs" />
-        }
+        breadcrumbs={<BreadcrumbGroup items={breadcrumbItems} ariaLabel="Breadcrumbs" />}
         notifications={<Flashbar items={notifications} />}
         content={
           <SpaceBetween size="l">
-            <Header
-              variant="h1"
-              description={`Company Number: ${companyNumber}`}
-            >
+            <Header variant="h1" description={`Company Number: ${companyNumber}`}>
               {activeCompany?.companyName || 'Company Hub'}
             </Header>
 
-            <Tabs
-              activeTabId={activeTabId}
-              onChange={handleTabChange}
-              tabs={tabs}
-            />
+            <Tabs activeTabId={activeTabId} onChange={handleTabChange} tabs={tabs} />
           </SpaceBetween>
         }
         ariaLabels={appLayoutLabels}

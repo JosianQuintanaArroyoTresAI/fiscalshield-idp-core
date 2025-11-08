@@ -139,41 +139,41 @@ const BankStatementInsights = () => {
     <>
       <GenAIIDPTopNavigation />
       <SpaceBetween size="l">
-      <BreadcrumbGroup
-        items={[
-          { text: 'Company Select', href: `#${COMPANY_SELECT_PATH}` },
-          { text: activeCompany.companyName, href: '#' },
-          { text: 'Bank Insights', href: '#' },
-        ]}
-        ariaLabel="Breadcrumbs"
-      />
+        <BreadcrumbGroup
+          items={[
+            { text: 'Company Select', href: `#${COMPANY_SELECT_PATH}` },
+            { text: activeCompany.companyName, href: '#' },
+            { text: 'Bank Insights', href: '#' },
+          ]}
+          ariaLabel="Breadcrumbs"
+        />
 
-      <Header variant="h1" description={`Company Number: ${activeCompany.companyNumber}`}>
-        Bank Statement Insights: {activeCompany.companyName}
-      </Header>
+        <Header variant="h1" description={`Company Number: ${activeCompany.companyNumber}`}>
+          Bank Statement Insights: {activeCompany.companyName}
+        </Header>
 
-      <Tabs
-        activeTabId={activeTab}
-        onChange={({ detail }) => setActiveTab(detail.activeTabId)}
-        tabs={[
-          {
-            id: 'cashflow',
-            label: 'Cash Flow',
-            content: renderCashFlowTab(),
-          },
-          {
-            id: 'transactions',
-            label: 'Transactions',
-            content: renderTransactionsTab(),
-          },
-          {
-            id: 'expenses',
-            label: 'Expenses',
-            content: renderExpensesTab(),
-          },
-        ]}
-      />
-    </SpaceBetween>
+        <Tabs
+          activeTabId={activeTab}
+          onChange={({ detail }) => setActiveTab(detail.activeTabId)}
+          tabs={[
+            {
+              id: 'cashflow',
+              label: 'Cash Flow',
+              content: renderCashFlowTab(),
+            },
+            {
+              id: 'transactions',
+              label: 'Transactions',
+              content: renderTransactionsTab(),
+            },
+            {
+              id: 'expenses',
+              label: 'Expenses',
+              content: renderExpensesTab(),
+            },
+          ]}
+        />
+      </SpaceBetween>
     </>
   );
 };

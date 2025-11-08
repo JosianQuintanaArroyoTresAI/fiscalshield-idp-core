@@ -29,7 +29,7 @@ import '@awsui/global-styles/index.css';
  * - Director sanctions and PEP screening
  * - Company status and governance checks
  * - AML report generation
- * 
+ *
  * @param {boolean} embedded - If true, hides breadcrumbs and header (for use within tabs)
  */
 const ClientTakeOnAnalysis = ({ embedded = false }) => {

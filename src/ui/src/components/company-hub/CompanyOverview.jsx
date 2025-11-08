@@ -2,19 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 import React from 'react';
 import PropTypes from 'prop-types';
-import {
-  Container,
-  Header,
-  SpaceBetween,
-  ColumnLayout,
-  Box,
-  StatusIndicator,
-  Alert,
-} from '@awsui/components-react';
+import { Container, Header, SpaceBetween, ColumnLayout, Box, StatusIndicator, Alert } from '@awsui/components-react';
 
 /**
  * CompanyOverview Component
- * 
+ *
  * Displays basic company information from Companies House
  * Placeholder for future filing history and officers data
  */

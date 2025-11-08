@@ -121,41 +121,41 @@ const InvoiceInsights = () => {
     <>
       <GenAIIDPTopNavigation />
       <SpaceBetween size="l">
-      <BreadcrumbGroup
-        items={[
-          { text: 'Company Select', href: `#${COMPANY_SELECT_PATH}` },
-          { text: activeCompany.companyName, href: '#' },
-          { text: 'Invoice Insights', href: '#' },
-        ]}
-        ariaLabel="Breadcrumbs"
-      />
+        <BreadcrumbGroup
+          items={[
+            { text: 'Company Select', href: `#${COMPANY_SELECT_PATH}` },
+            { text: activeCompany.companyName, href: '#' },
+            { text: 'Invoice Insights', href: '#' },
+          ]}
+          ariaLabel="Breadcrumbs"
+        />
 
-      <Header variant="h1" description={`Company Number: ${activeCompany.companyNumber}`}>
-        Invoice Insights: {activeCompany.companyName}
-      </Header>
+        <Header variant="h1" description={`Company Number: ${activeCompany.companyNumber}`}>
+          Invoice Insights: {activeCompany.companyName}
+        </Header>
 
-      <Tabs
-        activeTabId={activeTab}
-        onChange={({ detail }) => setActiveTab(detail.activeTabId)}
-        tabs={[
-          {
-            id: 'overview',
-            label: 'Overview',
-            content: renderOverviewTab(),
-          },
-          {
-            id: 'suppliers',
-            label: 'Suppliers',
-            content: renderSuppliersTab(),
-          },
-          {
-            id: 'vat',
-            label: 'VAT Analysis',
-            content: renderVATTab(),
-          },
-        ]}
-      />
-    </SpaceBetween>
+        <Tabs
+          activeTabId={activeTab}
+          onChange={({ detail }) => setActiveTab(detail.activeTabId)}
+          tabs={[
+            {
+              id: 'overview',
+              label: 'Overview',
+              content: renderOverviewTab(),
+            },
+            {
+              id: 'suppliers',
+              label: 'Suppliers',
+              content: renderSuppliersTab(),
+            },
+            {
+              id: 'vat',
+              label: 'VAT Analysis',
+              content: renderVATTab(),
+            },
+          ]}
+        />
+      </SpaceBetween>
     </>
   );
 };
