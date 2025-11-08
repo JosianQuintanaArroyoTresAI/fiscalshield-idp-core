@@ -21,9 +21,10 @@ import { formatCompanyDate, formatRelativeTime } from '../../services/userCompan
  * @param {Object} props.company - Company data object
  * @param {Function} props.onViewDocuments - Callback when "View Documents" is clicked
  * @param {Function} props.onViewIntelligence - Callback when "View Intelligence" is clicked
+ * @param {Function} props.onViewAnalysis - Callback when "View Analysis" is clicked
  * @param {Function} props.onDelete - Callback when "Delete" is clicked
  */
-const CompanyCard = ({ company, onViewDocuments, onViewIntelligence, onDelete }) => {
+const CompanyCard = ({ company, onViewDocuments, onViewIntelligence, onViewAnalysis, onDelete }) => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const {
     company_number: companyNumber,
@@ -43,6 +44,12 @@ const CompanyCard = ({ company, onViewDocuments, onViewIntelligence, onDelete })
   const handleViewIntelligence = () => {
     if (onViewIntelligence) {
       onViewIntelligence(company);
+    }
+  };
+
+  const handleViewAnalysis = () => {
+    if (onViewAnalysis) {
+      onViewAnalysis(company);
     }
   };
 
@@ -86,6 +93,9 @@ const CompanyCard = ({ company, onViewDocuments, onViewIntelligence, onDelete })
               />
               <Button onClick={handleViewIntelligence} iconAlign="right" iconName="status-info">
                 View Intelligence
+              </Button>
+              <Button onClick={handleViewAnalysis} iconAlign="right" iconName="view-full">
+                View Analysis
               </Button>
               <Button variant="primary" onClick={handleViewDocuments} iconAlign="right" iconName="arrow-right">
                 View Documents
@@ -187,6 +197,7 @@ CompanyCard.propTypes = {
   }).isRequired,
   onViewDocuments: PropTypes.func,
   onViewIntelligence: PropTypes.func,
+  onViewAnalysis: PropTypes.func,
   onDelete: PropTypes.func,
 };
 

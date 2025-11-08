@@ -15,6 +15,7 @@ import {
   CONFIGURATION_PATH,
   DISCOVERY_PATH,
   COMPANY_SELECT_PATH,
+  COMPANY_ANALYSIS_PATH,
 } from '../../routes/constants';
 
 export const documentsNavHeader = { text: 'Tools', href: `#${DEFAULT_PATH}` };

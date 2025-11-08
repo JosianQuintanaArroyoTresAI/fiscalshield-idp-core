@@ -25,7 +25,7 @@ import { checkDataCollectionHealth, lookupCompany, triggerBackgroundResearch } f
 import { fetchUserCompanies, registerCompany, deleteCompany } from '../../services/userCompanies';
 import CompanyCard from '../company-card/CompanyCard';
 import useAppContext from '../../contexts/app';
-import { DOCUMENTS_PATH, COMPANY_INTELLIGENCE_PATH } from '../../routes/constants';
+import { DOCUMENTS_PATH, COMPANY_INTELLIGENCE_PATH, COMPANY_ANALYSIS_PATH } from '../../routes/constants';
 
 import '@awsui/global-styles/index.css';
 
@@ -330,11 +330,11 @@ const CompanySelect = () => {
     history.push(DOCUMENTS_PATH);
   };
 
-  // Handle viewing intelligence for a registered company
+  // Handle viewing company intelligence
   const handleViewCompanyIntelligence = (company) => {
-    logger.info(`Viewing intelligence for company: ${company.company_number}`);
+    logger.debug('Viewing intelligence for company:', company.company_number);
 
-    // Store company context
+    // Set company context in localStorage
     const companyContext = {
       company_number: company.company_number,
       company_name: company.company_name,
@@ -351,7 +351,26 @@ const CompanySelect = () => {
     history.push(intelligencePath);
   };
 
-  // Handle deleting a company
+  // Handle viewing company analysis
+  const handleViewCompanyAnalysis = (company) => {
+    logger.debug('Viewing analysis for company:', company.company_number);
+
+    // Set company context in localStorage
+    const companyContext = {
+      company_number: company.company_number,
+      company_name: company.company_name,
+      selected_at: new Date().toISOString(),
+      user_id: user?.username || 'unknown',
+      from_registered: true,
+    };
+
+    localStorage.setItem('active_company', JSON.stringify(companyContext));
+    logger.debug('Company context saved:', companyContext);
+
+    // Navigate to analysis page
+    const analysisPath = COMPANY_ANALYSIS_PATH.replace(':companyNumber', company.company_number);
+    history.push(analysisPath);
+  };  // Handle deleting a company
   const handleDeleteCompany = async (company) => {
     logger.info(`Deleting company: ${company.company_number}`);
 
@@ -405,6 +424,7 @@ const CompanySelect = () => {
                     company={company}
                     onViewDocuments={handleViewCompanyDocuments}
                     onViewIntelligence={handleViewCompanyIntelligence}
+                    onViewAnalysis={handleViewCompanyAnalysis}
                     onDelete={handleDeleteCompany}
                   />
                 ))}

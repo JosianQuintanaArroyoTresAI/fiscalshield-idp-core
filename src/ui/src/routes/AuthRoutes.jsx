@@ -16,6 +16,7 @@ import DocumentsRoutes from './DocumentsRoutes';
 import DocumentsQueryRoutes from './DocumentsQueryRoutes';
 import DocumentsAnalyticsRoutes from './DocumentsAnalyticsRoutes';
 import CompanyIntelligence from '../components/company-intelligence';
+import { CompanyAnalysis } from '../components/company-intelligence';
 
 import {
   COMPANY_SELECT_PATH,
@@ -26,6 +27,7 @@ import {
   DOCUMENTS_KB_QUERY_PATH,
   DOCUMENTS_ANALYTICS_PATH,
   COMPANY_INTELLIGENCE_PATH,
+  COMPANY_ANALYSIS_PATH,
 } from './constants';
 
 const logger = new Logger('AuthRoutes');
@@ -49,6 +51,9 @@ const AuthRoutes = ({ redirectParam }) => {
         </Route>
         <Route path={COMPANY_INTELLIGENCE_PATH}>
           <CompanyIntelligence />
+        </Route>
+        <Route path={COMPANY_ANALYSIS_PATH}>
+          <CompanyAnalysis />
         </Route>
         <Route path={DOCUMENTS_PATH}>
           <DocumentsRoutes />
