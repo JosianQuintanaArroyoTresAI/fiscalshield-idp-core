@@ -180,7 +180,7 @@ jobs:
         
         # Load configuration to DynamoDB using Python (correct schema)
         echo "Loading configuration to DynamoDB..."
-        python3 << 'EOF'
+        python3 << EOF
         import boto3
         import yaml
         import sys
