@@ -17,7 +17,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Dict, List, Any, Set
 import logging
-from botocore.exceptions import ClientError, ParamValidationError
+from botocore.exceptions import ClientError, ParamValidationError, ReadTimeoutError
 
 # Set up logger
 logger = logging.getLogger(__name__)
@@ -175,6 +175,75 @@ class ChunkedInvoiceExtractor:
                 processed_invoices.append(current_invoice)
         
         return processed_invoices
+    
+    def deduplicate_chunk_boundaries(self, invoices: List[Dict], chunks: List[Dict]) -> List[Dict]:
+        """
+        OPTIMIZED deduplication for chunked extraction.
+        
+        Key insights:
+        1. Invoices within same chunk cannot be duplicates (no overlap within chunk)
+        2. Invoices on different pages cannot be duplicates
+        3. Only check invoices at chunk boundaries (overlap zones)
+        
+        This reduces complexity from O(n²) to O(k*m) where:
+        - k = number of chunk boundaries
+        - m = average invoices per overlap zone (typically 1-3)
+        """
+        if len(invoices) <= 1:
+            return invoices
+        
+        # Group invoices by chunk
+        invoices_by_chunk = {}
+        for invoice in invoices:
+            chunk_idx = invoice.get('chunk_index', 0)
+            if chunk_idx not in invoices_by_chunk:
+                invoices_by_chunk[chunk_idx] = []
+            invoices_by_chunk[chunk_idx].append(invoice)
+        
+        # Start with all invoices from first chunk (no duplicates possible within chunk)
+        if 0 not in invoices_by_chunk:
+            return []
+        
+        result = list(invoices_by_chunk[0])
+        
+        # Process each subsequent chunk
+        for chunk_idx in range(1, len(chunks)):
+            if chunk_idx not in invoices_by_chunk:
+                continue
+            
+            current_chunk_invoices = invoices_by_chunk[chunk_idx]
+            
+            # Only compare with invoices from previous chunk that share pages
+            # (invoices in overlap zone)
+            previous_chunk_invoices = invoices_by_chunk.get(chunk_idx - 1, [])
+            
+            for current_invoice in current_chunk_invoices:
+                current_pages = set(current_invoice.get('pages', []))
+                is_duplicate = False
+                
+                # Only check against invoices from previous chunk with overlapping pages
+                for prev_invoice in previous_chunk_invoices:
+                    prev_pages = set(prev_invoice.get('pages', []))
+                    
+                    # If no page overlap, cannot be duplicates
+                    if not current_pages.intersection(prev_pages):
+                        continue
+                    
+                    # Check if they're duplicates
+                    if self.are_invoices_duplicate_by_pages(current_invoice, prev_invoice):
+                        if self.is_more_complete_invoice(current_invoice, prev_invoice):
+                            # Replace previous invoice with more complete one
+                            result = [inv for inv in result if id(inv) != id(prev_invoice)]
+                            result.append(current_invoice)
+                        # Either way, it's a duplicate
+                        is_duplicate = True
+                        break
+                
+                # If not a duplicate, add to results
+                if not is_duplicate:
+                    result.append(current_invoice)
+        
+        return result
 
 
 # ==============================================================================
@@ -184,6 +253,7 @@ class ChunkedInvoiceExtractor:
 LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')
 EXTRACTION_RESULTS_TABLE = os.environ.get('EXTRACTION_RESULTS_TABLE')
 CONFIGURATION_TABLE = os.environ.get('CONFIGURATION_TABLE')
+TRACKING_TABLE = os.environ.get('TRACKING_TABLE')  # For chunk progress tracking
 BEDROCK_MODEL_ID = os.environ.get('BEDROCK_MODEL_ID', 'anthropic.claude-3-7-sonnet-20250219-v1:0')
 AWS_REGION = os.environ.get('AWS_REGION', 'eu-central-1')
 BEDROCK_INFERENCE_PROFILE_ARN = os.environ.get('BEDROCK_INFERENCE_PROFILE_ARN', '').strip()
@@ -241,6 +311,7 @@ dynamodb = boto3.resource('dynamodb')
 bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
 extraction_table = dynamodb.Table(EXTRACTION_RESULTS_TABLE)
 config_table = dynamodb.Table(CONFIGURATION_TABLE)
+tracking_table = dynamodb.Table(TRACKING_TABLE) if TRACKING_TABLE else None
 
 
 THROTTLING_ERROR_CODES = {"ThrottlingException", "TooManyRequestsException"}
@@ -252,24 +323,356 @@ def log_with_timestamp(message: str):
     print(f"[{timestamp}] {message}")
 
 
-def _invoke_bedrock_runtime(model_id: str, profile_arn: str, body_json: str):
-    """Invoke Bedrock runtime, handling inference profile compatibility."""
-    invoke_kwargs = {
-        'modelId': model_id,
-        'body': body_json
-    }
+def update_chunk_status(
+    document_id: str,
+    section_id: str,
+    chunk_index: int,
+    status: str,
+    invoice_count: int = 0,
+    error_message: str = None,
+    model_used: str = None
+) -> None:
+    """
+    Update chunk processing status in TrackingTable
+    
+    Status values: PENDING | PROCESSING | COMPLETED | FAILED
+    
+    Args:
+        model_used: ID of Bedrock model that processed this chunk (for quality evaluation)
+    """
+    if not tracking_table:
+        log_with_timestamp("⚠️ TrackingTable not configured, skipping chunk status update")
+        return
+    
+    try:
+        current_timestamp = int(time.time())
+        
+        item = {
+            'PK': f"document#{document_id}#section#{section_id}",
+            'SK': f"chunk#{chunk_index}",
+            'chunk_status': status,
+            'chunk_index': chunk_index,
+            'invoice_count': invoice_count,
+            'updated_at': current_timestamp,
+            'document_id': document_id,
+            'section_id': section_id
+        }
+        
+        if status == 'COMPLETED':
+            item['completed_at'] = current_timestamp
+        
+        if error_message:
+            item['error_message'] = error_message[:1000]  # Limit error message size
+        
+        if model_used:
+            item['model_used'] = model_used  # Track which model processed this chunk
+        
+        tracking_table.put_item(Item=item)
+        log_with_timestamp(f"✅ Updated chunk {chunk_index} status: {status}")
+        
+    except Exception as e:
+        log_with_timestamp(f"⚠️ Failed to update chunk status in TrackingTable: {str(e)}")
 
+
+def get_chunk_status(document_id: str, section_id: str, chunk_index: int) -> str:
+    """
+    Get chunk processing status from TrackingTable
+    
+    Returns: PENDING | PROCESSING | COMPLETED | FAILED | None (not found)
+    """
+    if not tracking_table:
+        return None
+    
+    try:
+        response = tracking_table.get_item(
+            Key={
+                'PK': f"document#{document_id}#section#{section_id}",
+                'SK': f"chunk#{chunk_index}"
+            }
+        )
+        
+        if 'Item' in response:
+            return response['Item'].get('chunk_status')
+        
+        return None
+        
+    except Exception as e:
+        log_with_timestamp(f"⚠️ Failed to get chunk status from TrackingTable: {str(e)}")
+        return None
+
+
+def are_all_chunks_complete(document_id: str, section_id: str, total_chunks: int) -> bool:
+    """
+    Check if all chunks for a document section have been completed.
+    
+    Args:
+        document_id: Document identifier
+        section_id: Section identifier
+        total_chunks: Total number of chunks for this section
+    
+    Returns:
+        True if all chunks are COMPLETED, False otherwise
+    """
+    if not tracking_table:
+        log_with_timestamp("⚠️ TrackingTable not configured, cannot check completion status")
+        return False
+    
+    try:
+        completed_count = 0
+        
+        for chunk_idx in range(total_chunks):
+            status = get_chunk_status(document_id, section_id, chunk_idx)
+            
+            if status == 'COMPLETED':
+                completed_count += 1
+            elif status == 'FAILED':
+                log_with_timestamp(f"⚠️ Chunk {chunk_idx} is marked as FAILED")
+                return False
+            else:
+                # PENDING, PROCESSING, or not found
+                log_with_timestamp(f"⏸️  Chunk {chunk_idx} not yet complete (status: {status})")
+                return False
+        
+        # All chunks are COMPLETED
+        log_with_timestamp(f"✅ All {completed_count}/{total_chunks} chunks completed!")
+        return True
+        
+    except Exception as e:
+        log_with_timestamp(f"❌ Error checking chunk completion status: {str(e)}")
+        return False
+
+
+def deduplicate_invoices_in_dynamodb(document_id: str, section_id: str, user_id: str) -> int:
+    """
+    Deduplicate invoices for a completed section by querying DynamoDB,
+    identifying duplicates, and deleting duplicate records.
+    
+    This runs AFTER all chunks are complete to handle duplicates from overlapping chunks.
+    
+    Deduplication Strategy:
+    - Two invoices are duplicates if they have the same core data (supplier, amount, date, number)
+    - AND they appear in consecutive or same chunks (chunk_index within 1 of each other)
+    - When choosing which duplicate to keep:
+      1. Keep the one with MORE complete fields (non-empty values)
+      2. If both equally complete, keep the EARLIER one (lower chunk_index, earlier timestamp)
+    
+    Args:
+        document_id: Document identifier
+        section_id: Section identifier  
+        user_id: User identifier for querying
+    
+    Returns:
+        Number of duplicate invoices removed
+    """
+    if not extraction_table:
+        log_with_timestamp("⚠️ ExtractionResultsTable not configured, skipping deduplication")
+        return 0
+    
+    try:
+        log_with_timestamp("🔍 Starting intelligent deduplication with chunk awareness...")
+        
+        # Query all invoices for this document section
+        pk = f"user#{user_id}#doc#{document_id}"
+        sk_prefix = f"type#INVOICE#section#{section_id}#"
+        
+        response = extraction_table.query(
+            KeyConditionExpression='PK = :pk AND begins_with(SK, :sk)',
+            ExpressionAttributeValues={
+                ':pk': pk,
+                ':sk': sk_prefix
+            }
+        )
+        
+        invoices = response.get('Items', [])
+        log_with_timestamp(f"📊 Found {len(invoices)} invoices to check for duplicates")
+        
+        if len(invoices) <= 1:
+            log_with_timestamp("✅ No deduplication needed (only 1 invoice)")
+            return 0
+        
+        # Convert DynamoDB items to invoice dictionaries with chunk metadata
+        invoice_items = []
+        for item in invoices:
+            chunk_index = item.get('ChunkIndex')
+            # Convert Decimal to int if present
+            if chunk_index is not None:
+                chunk_index = int(chunk_index)
+                
+            invoice_dict = {
+                'supplier_name': item.get('SupplierName', ''),
+                'vendor_name': item.get('VendorName', ''),
+                'total_amount': float(item.get('TotalAmount', 0)) if item.get('TotalAmount') else 0,
+                'invoice_date': item.get('InvoiceDate', ''),
+                'invoice_number': item.get('InvoiceNumber', ''),
+                'reference_number': item.get('ReferenceNumber', ''),
+                'description': item.get('Description', ''),
+                'supplier_address': item.get('SupplierAddress', ''),
+                'source_page': int(item.get('SourcePage', 0)) if item.get('SourcePage') else 0,
+                # Chunk metadata
+                'chunk_index': chunk_index,
+                'chunk_pages': item.get('ChunkPages', []),
+                'created_at': int(item.get('CreatedAt', 0)) if item.get('CreatedAt') else 0,
+                # Keep DynamoDB keys for deletion
+                '_dynamodb_pk': item['PK'],
+                '_dynamodb_sk': item['SK'],
+                '_full_item': item  # Keep for completeness comparison
+            }
+            invoice_items.append(invoice_dict)
+        
+        # Group potential duplicates by core identity
+        from collections import defaultdict
+        duplicate_groups = defaultdict(list)
+        
+        for inv in invoice_items:
+            # Create identity key from core fields
+            identity_key = (
+                inv['supplier_name'].lower().strip(),
+                inv['invoice_number'].strip(),
+                inv['invoice_date'],
+                round(inv['total_amount'], 2)  # Round to avoid float precision issues
+            )
+            duplicate_groups[identity_key].append(inv)
+        
+        # Process each group to find duplicates
+        duplicates_to_delete = []
+        
+        for identity_key, group in duplicate_groups.items():
+            if len(group) <= 1:
+                continue  # No duplicates in this group
+            
+            log_with_timestamp(f"🔍 Found {len(group)} potential duplicates: {identity_key[0]} - {identity_key[2]} - {identity_key[3]}")
+            
+            # Check if duplicates are from consecutive chunks (overlap region)
+            chunk_indices = [inv['chunk_index'] for inv in group if inv['chunk_index'] is not None]
+            source_pages = [inv['source_page'] for inv in group if inv.get('source_page')]
+            
+            if chunk_indices:
+                # Only deduplicate if invoices are from same or consecutive chunks
+                min_chunk = min(chunk_indices)
+                max_chunk = max(chunk_indices)
+                
+                if max_chunk - min_chunk > 1:
+                    log_with_timestamp(f"   ⚠️  Chunks too far apart ({min_chunk} to {max_chunk}) - keeping all as different invoices")
+                    continue
+                
+                # Enhanced heuristic: Check if SourcePage positions suggest overlap region
+                # High risk: Last invoices in chunk N (high SourcePage) + first invoices in chunk N+1 (low SourcePage)
+                if len(group) == 2 and len(chunk_indices) == 2 and len(source_pages) == 2:
+                    chunk_diff = max(chunk_indices) - min(chunk_indices)
+                    if chunk_diff == 1:  # Consecutive chunks
+                        # Get invoices from each chunk
+                        inv_chunk_min = [inv for inv in group if inv['chunk_index'] == min_chunk][0]
+                        inv_chunk_max = [inv for inv in group if inv['chunk_index'] == max_chunk][0]
+                        
+                        sp_min_chunk = inv_chunk_min.get('source_page', 0)
+                        sp_max_chunk = inv_chunk_max.get('source_page', 0)
+                        
+                        # Pattern: chunk N has high SourcePage (near end) AND chunk N+1 has low SourcePage (near start)
+                        # This suggests they're in the overlap region (5k chars = ~2-3 invoices)
+                        is_overlap_pattern = (sp_min_chunk >= 8 and sp_max_chunk <= 3)  # Last few + First few
+                        
+                        if is_overlap_pattern:
+                            log_with_timestamp(
+                                f"   ✅ Chunks {min_chunk},{max_chunk} consecutive - "
+                                f"SourcePages {sp_min_chunk},{sp_max_chunk} suggest overlap region (HIGH confidence)"
+                            )
+                        else:
+                            log_with_timestamp(
+                                f"   ✅ Chunks {min_chunk},{max_chunk} consecutive - "
+                                f"SourcePages {sp_min_chunk},{sp_max_chunk} (pattern: {sp_min_chunk}≥8 and {sp_max_chunk}≤3)"
+                            )
+                else:
+                    log_with_timestamp(f"   ✅ Chunks are consecutive ({min_chunk} to {max_chunk}) - likely duplicates from overlap")
+            
+            # Sort by completeness (most complete first), then by chunk_index (earlier first), then by timestamp
+            def count_non_empty_fields(inv):
+                """Count how many fields have meaningful values"""
+                count = 0
+                if inv['supplier_name'] and inv['supplier_name'].strip(): count += 1
+                if inv['invoice_number'] and inv['invoice_number'].strip(): count += 1
+                if inv['invoice_date'] and inv['invoice_date'].strip(): count += 1
+                if inv['reference_number'] and inv['reference_number'].strip(): count += 1
+                if inv['description'] and inv['description'].strip(): count += 1
+                if inv['supplier_address'] and inv['supplier_address'].strip(): count += 1
+                if inv['vendor_name'] and inv['vendor_name'].strip(): count += 1
+                if inv['total_amount'] > 0: count += 1
+                return count
+            
+            sorted_group = sorted(
+                group,
+                key=lambda inv: (
+                    -count_non_empty_fields(inv),  # More complete first (negative for descending)
+                    inv['chunk_index'] if inv['chunk_index'] is not None else 999,  # Earlier chunk first
+                    inv['created_at']  # Earlier timestamp first
+                )
+            )
+            
+            # Keep the first one (most complete, earliest), mark rest as duplicates
+            keeper = sorted_group[0]
+            to_delete = sorted_group[1:]
+            
+            completeness_keeper = count_non_empty_fields(keeper)
+            log_with_timestamp(f"   ✅ Keeping: chunk={keeper['chunk_index']}, completeness={completeness_keeper} fields")
+            
+            for dup in to_delete:
+                completeness_dup = count_non_empty_fields(dup)
+                log_with_timestamp(f"   🗑️  Deleting: chunk={dup['chunk_index']}, completeness={completeness_dup} fields")
+                duplicates_to_delete.append(dup)
+        
+        # Delete duplicate records from DynamoDB
+        deleted_count = 0
+        for duplicate in duplicates_to_delete:
+            try:
+                extraction_table.delete_item(
+                    Key={
+                        'PK': duplicate['_dynamodb_pk'],
+                        'SK': duplicate['_dynamodb_sk']
+                    }
+                )
+                deleted_count += 1
+            except Exception as e:
+                log_with_timestamp(f"⚠️ Failed to delete duplicate {duplicate['_dynamodb_sk']}: {str(e)}")
+        
+        log_with_timestamp(
+            f"✅ Deduplication complete: {len(invoices)} → {len(invoices) - deleted_count} "
+            f"(removed {deleted_count} duplicates)"
+        )
+        
+        return deleted_count
+        
+    except Exception as e:
+        log_with_timestamp(f"❌ Error during deduplication: {str(e)}")
+        import traceback
+        log_with_timestamp(f"📋 Traceback: {traceback.format_exc()}")
+        return 0
+
+
+def _invoke_bedrock_runtime(model_id: str, profile_arn: str, body_json: str):
+    """Invoke Bedrock runtime, handling inference profile compatibility.
+    
+    When using inference profiles, the profile ARN should be passed as the modelId,
+    not as a separate inferenceProfileArn parameter.
+    """
+    # Use inference profile ARN as modelId if available, otherwise use the model ID
+    effective_model_id = profile_arn if profile_arn else model_id
+    
     if profile_arn:
         log_with_timestamp(f"🌍 Using Bedrock inference profile: {profile_arn}")
-        invoke_kwargs['inferenceProfileArn'] = profile_arn
     else:
         log_with_timestamp(f"🌍 Using Bedrock model ID: {model_id}")
 
+    invoke_kwargs = {
+        'modelId': effective_model_id,
+        'body': body_json
+    }
+
     try:
         return bedrock_runtime.invoke_model(**invoke_kwargs)
-    except ParamValidationError as param_error:
-        if profile_arn and 'inferenceProfileArn' in str(param_error):
-            log_with_timestamp("⚠️ Inference profile unsupported, retrying with direct modelId")
+    except ClientError as client_error:
+        error_code = client_error.response.get('Error', {}).get('Code', '')
+        # If inference profile fails, fall back to direct model ID
+        if profile_arn and error_code in ['ValidationException', 'ResourceNotFoundException']:
+            log_with_timestamp(f"⚠️ Inference profile failed ({error_code}), retrying with direct modelId")
             return bedrock_runtime.invoke_model(modelId=model_id, body=body_json)
         raise
 
@@ -358,7 +761,7 @@ Text to extract from:
 {section_text}"""
 
 
-def invoke_bedrock(prompt: str, use_caching: bool = None) -> str:
+def invoke_bedrock(prompt: str, use_caching: bool = None) -> tuple[str, str]:
     """
     Invoke Bedrock Claude model for invoice extraction
     
@@ -368,7 +771,7 @@ def invoke_bedrock(prompt: str, use_caching: bool = None) -> str:
                      Defaults to USE_PROMPT_CACHING env var
     
     Returns:
-        Extracted invoice XML string
+        Tuple of (extracted_xml, model_used) where model_used is the ID of the model that succeeded
     """
     if use_caching is None:
         use_caching = USE_PROMPT_CACHING
@@ -447,7 +850,8 @@ def invoke_bedrock(prompt: str, use_caching: bool = None) -> str:
                             f"{usage.get('input_tokens', 0)} new tokens"
                         )
 
-                return response_body['content'][0]['text']
+                # Return both the extracted text and the model that succeeded
+                return response_body['content'][0]['text'], active_model_id
 
             except ClientError as client_error:
                 error_code = client_error.response.get('Error', {}).get('Code', '')
@@ -504,6 +908,45 @@ def invoke_bedrock(prompt: str, use_caching: bool = None) -> str:
                     continue
 
                 raise
+
+            except ReadTimeoutError as timeout_error:
+                # Handle read timeouts - retry with fallback or same model
+                log_with_timestamp(f"⏱️ Read timeout on {describe_model(active_entry)}")
+                model_attempt_counters[current_model_index] += 1
+                total_attempts += 1
+                attempts_for_model = model_attempt_counters[current_model_index]
+
+                # Try fallback model if available
+                if attempts_for_model >= 2 and current_model_index < len(model_chain) - 1:
+                    next_index = current_model_index + 1
+                    next_entry = model_chain[next_index]
+                    log_with_timestamp(
+                        f"🔁 Switching to fallback model {describe_model(next_entry)} "
+                        f"after {attempts_for_model} timeout(s)"
+                    )
+                    current_model_index = next_index
+                    continue
+
+                if attempts_for_model >= BEDROCK_MAX_RETRIES:
+                    if current_model_index < len(model_chain) - 1:
+                        next_index = current_model_index + 1
+                        next_entry = model_chain[next_index]
+                        log_with_timestamp(
+                            f"⚠️ Max timeouts reached for {describe_model(active_entry)}. "
+                            f"Escalating to {describe_model(next_entry)}"
+                        )
+                        current_model_index = next_index
+                        continue
+                    raise
+
+                # Retry same model with short backoff
+                wait_time = 5.0 * random.uniform(0.8, 1.2)
+                log_with_timestamp(
+                    f"⏳ Retrying {describe_model(active_entry)} after timeout "
+                    f"(attempt {attempts_for_model}/{BEDROCK_MAX_RETRIES}). Waiting {wait_time:.2f}s"
+                )
+                time.sleep(wait_time)
+                continue
 
             except Exception as e:
                 message_lower = str(e).lower()
@@ -648,24 +1091,28 @@ def process_section_with_chunking(
     section_text: str,
     prompt_template: str,
     document_id: str,
-    section_id: str
+    section_id: str,
+    user_id: str
 ) -> List[Dict[str, Any]]:
     """
     Process large section text using chunking strategy (Phase 3)
     
     This function:
-    1. Splits text into overlapping chunks (default 15k chars with 3k overlap)
+    1. Splits text into overlapping chunks (default 60k chars with 5k overlap)
     2. Processes each chunk separately with Bedrock
-    3. Deduplicates invoices using page-based algorithm
+    3. Tracks chunk processing status in TrackingTable for resume capability
+    4. Checks if all chunks complete and triggers deduplication
+    5. Returns all extracted invoices (with duplicates removed if all chunks done)
     
     Args:
         section_text: Full OCR text from section
         prompt_template: Invoice extraction prompt template
         document_id: Document identifier
         section_id: Section identifier
+        user_id: User identifier (for deduplication queries)
         
     Returns:
-        List of deduplicated invoice dictionaries
+        List of invoice dictionaries (deduplicated if all chunks complete)
     """
     log_with_timestamp(f"🔄 Using CHUNKED extraction (chunk_size={CHUNK_SIZE}, overlap={OVERLAP_SIZE})")
     
@@ -677,17 +1124,30 @@ def process_section_with_chunking(
     log_with_timestamp(f"📚 Created {len(chunks)} chunks from {len(section_text)} chars")
     
     # Process each chunk
+    # NOTE: Due to overlapping chunks, invoices at chunk boundaries will appear multiple times
+    # This is intentional - deduplication will be handled by MergeAndDeduplicateFunction
     all_invoices = []
+    failed_chunks = []
     
     for idx, chunk_info in enumerate(chunks):
         chunk_text = chunk_info['chunk']
         chunk_pages = chunk_info['pages']
+        
+        # Check if chunk already processed (resume capability)
+        existing_status = get_chunk_status(document_id, section_id, idx)
+        if existing_status == 'COMPLETED':
+            log_with_timestamp(f"⏭️  Chunk {idx+1}/{len(chunks)} already completed, skipping...")
+            # TODO: Load invoices from DynamoDB instead of reprocessing
+            continue
         
         log_with_timestamp(
             f"📤 Processing chunk {idx+1}/{len(chunks)} "
             f"(chars {chunk_info['start']}-{chunk_info['end']}, "
             f"pages {chunk_pages})"
         )
+        
+        # Mark chunk as PROCESSING
+        update_chunk_status(document_id, section_id, idx, 'PROCESSING')
         
         try:
             # Generate prompt for this chunk
@@ -696,39 +1156,56 @@ def process_section_with_chunking(
             # Invoke Bedrock for this chunk
             # Enable prompt caching only if the feature is configured and this is not the first chunk
             chunk_use_caching = USE_PROMPT_CACHING and idx > 0
-            xml_response = invoke_bedrock(prompt, use_caching=chunk_use_caching)
+            xml_response, model_used = invoke_bedrock(prompt, use_caching=chunk_use_caching)
             
             # Parse invoices from chunk response
             chunk_invoices = parse_invoices_from_xml(xml_response)
             
             # Add chunk metadata to each invoice
-            for invoice in chunk_invoices:
+            for invoice_idx, invoice in enumerate(chunk_invoices, start=1):
                 invoice['chunk_index'] = idx
                 invoice['chunk_pages'] = chunk_pages
+                invoice['model_used'] = model_used  # Track which model extracted this invoice
+                # Keep source_page as sequential position within chunk (for deduplication heuristic)
+                # The model returns source_page, but we override with position in chunk for consistency
+                invoice['source_page'] = invoice_idx  # Sequential: 1, 2, 3... within this chunk
                 # If invoice doesn't have pages, use chunk pages
                 if not invoice.get('pages'):
                     invoice['pages'] = chunk_pages
             
             all_invoices.extend(chunk_invoices)
+            
+            # Mark chunk as COMPLETED with model metadata
+            update_chunk_status(
+                document_id, section_id, idx, 
+                'COMPLETED', 
+                invoice_count=len(chunk_invoices),
+                model_used=model_used
+            )
+            
             log_with_timestamp(f"✅ Chunk {idx+1} yielded {len(chunk_invoices)} invoices")
             
         except Exception as e:
             log_with_timestamp(f"❌ Error processing chunk {idx+1}: {str(e)}")
+            
+            # Mark chunk as FAILED
+            update_chunk_status(
+                document_id, section_id, idx,
+                'FAILED',
+                error_message=str(e)
+            )
+            
             raise ChunkProcessingError(
                 f"Chunk {idx+1}/{len(chunks)} failed for document {document_id}, section {section_id}: {str(e)}"
             ) from e
     
-    log_with_timestamp(f"📊 Total invoices before deduplication: {len(all_invoices)}")
+    log_with_timestamp(f"📊 Total invoices extracted: {len(all_invoices)}")
     
-    # Deduplicate using page-based algorithm
-    deduplicated_invoices = extractor.deduplicate_invoices(all_invoices)
-    
-    log_with_timestamp(
-        f"✅ Deduplication complete: {len(all_invoices)} → {len(deduplicated_invoices)} "
-        f"(removed {len(all_invoices) - len(deduplicated_invoices)} duplicates)"
-    )
-    
-    return deduplicated_invoices
+    # Return invoices and completion status for deduplication to happen after writing to DynamoDB
+    return {
+        'invoices': all_invoices,
+        'all_chunks_complete': are_all_chunks_complete(document_id, section_id, len(chunks))
+    }
 
 
 def write_invoices_to_dynamodb(
@@ -793,12 +1270,17 @@ def write_invoices_to_dynamodb(
                 'PaymentTerms': invoice_data['payment_terms'],
                 'SourcePage': invoice_data['source_page'],
 
+                # Chunk metadata for deduplication
+                'ChunkIndex': invoice_data.get('chunk_index'),  # Which chunk extracted this invoice
+                'ChunkPages': invoice_data.get('chunk_pages', []),  # Pages covered by this chunk
+
                 # Metadata
                 'CreatedAt': current_timestamp,
                 'UpdatedAt': current_timestamp,
                 'DateExtracted': datetime.now().strftime('%Y-%m-%d'),
                 'ConfidenceScore': Decimal('0.95'),  # Placeholder - can be enhanced
                 'Version': 1,
+                'ModelUsed': invoice_data.get('model_used', 'unknown'),  # Track which model extracted this
 
                 # TTL (optional - set to 1 year from now)
                 'TTL': current_timestamp + (365 * 24 * 60 * 60)
@@ -951,11 +1433,25 @@ def lambda_handler(event, context):
                     page_data = pages[page_id]
                     log_with_timestamp(f"📄 Processing page {page_id}, keys: {list(page_data.keys())}")
 
+                    # Extract page number from page_id (e.g., "page-5" -> 5)
+                    page_number = 1
+                    try:
+                        if page_id.startswith('page-'):
+                            page_number = int(page_id.split('-')[1])
+                        elif page_id.isdigit():
+                            page_number = int(page_id)
+                    except (ValueError, IndexError):
+                        log_with_timestamp(f"⚠️ Could not extract page number from {page_id}, using sequential")
+                        page_number = section_pages.index(page_id) + 1
+                    
+                    # Add page marker for chunk tracking
+                    page_marker = f"\n[PAGE:{page_number}]\n"
+                    
                     # Check if page has inline ocr_text
                     if 'ocr_text' in page_data:
                         page_text = page_data['ocr_text']
-                        section_text += page_text + "\n"
-                        log_with_timestamp(f"✅ Added inline text from page {page_id} ({len(page_text)} chars)")
+                        section_text += page_marker + page_text + "\n"
+                        log_with_timestamp(f"✅ Added inline text from page {page_id} (page #{page_number}, {len(page_text)} chars)")
 
                     # Otherwise fetch from raw_text_uri
                     elif 'raw_text_uri' in page_data:
@@ -993,8 +1489,8 @@ def lambda_handler(event, context):
                             log_with_timestamp(f"📝 Extracted {len(lines)} lines from Textract Blocks")
 
                         if page_text:
-                            section_text += page_text + "\n"
-                            log_with_timestamp(f"✅ Added text from S3 for page {page_id} ({len(page_text)} chars)")
+                            section_text += page_marker + page_text + "\n"
+                            log_with_timestamp(f"✅ Added text from S3 for page {page_id} (page #{page_number}, {len(page_text)} chars)")
                         else:
                             log_with_timestamp(f"⚠️ No text found in rawText.json for page {page_id}")
                     else:
@@ -1033,12 +1529,16 @@ def lambda_handler(event, context):
             )
             log_with_timestamp("   Using CHUNKED extraction strategy...")
             
-            invoices = process_section_with_chunking(
+            result = process_section_with_chunking(
                 section_text=section_text,
                 prompt_template=prompt_template,
                 document_id=document_id,
-                section_id=section_id
+                section_id=section_id,
+                user_id=user_id
             )
+            
+            invoices = result['invoices']
+            all_chunks_complete = result['all_chunks_complete']
         else:
             # Original non-chunked flow (default/fallback)
             if USE_CHUNKED_EXTRACTION:
@@ -1054,11 +1554,17 @@ def lambda_handler(event, context):
             
             # Invoke Bedrock to extract invoices
             log_with_timestamp("📤 Calling Bedrock for invoice extraction...")
-            xml_response = invoke_bedrock(prompt)
+            xml_response, model_used = invoke_bedrock(prompt)
             
             # Parse invoices from XML (hardcoded logic)
             log_with_timestamp("🔍 Parsing invoices from XML response...")
             invoices = parse_invoices_from_xml(xml_response)
+            
+            # Add model metadata to invoices
+            for invoice in invoices:
+                invoice['model_used'] = model_used
+            
+            all_chunks_complete = False  # Non-chunked flow doesn't need deduplication
 
         if not invoices:
             log_with_timestamp("⚠️ No valid invoices found in section")
@@ -1074,6 +1580,21 @@ def lambda_handler(event, context):
         inserted_count = write_invoices_to_dynamodb(
             invoices, document_id, section_id, user_id, client_id, company_number, company_name
         )
+        
+        # PHASE 3: Deduplicate AFTER writing to DynamoDB (only if all chunks complete)
+        if all_chunks_complete:
+            log_with_timestamp("✅ All chunks complete! Starting deduplication...")
+            
+            # Deduplicate invoices in DynamoDB
+            # This handles duplicates from overlapping chunks
+            deleted_count = deduplicate_invoices_in_dynamodb(document_id, section_id, user_id)
+            
+            if deleted_count > 0:
+                log_with_timestamp(f"🎯 Deduplication removed {deleted_count} duplicate invoices")
+            else:
+                log_with_timestamp("✅ No duplicates found")
+        else:
+            log_with_timestamp("⏸️  Some chunks still pending - deduplication deferred")
 
         processing_time = time.time() - start_time
         log_with_timestamp(

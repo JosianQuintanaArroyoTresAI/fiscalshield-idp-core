@@ -119,6 +119,7 @@
                         "Retry": [
                             {
                                 "ErrorEquals": [
+                                    "States.Timeout",
                                     "Sandbox.Timedout",
                                     "Lambda.ServiceException",
                                     "Lambda.AWSLambdaException",
@@ -129,8 +130,8 @@
                                     "ProvisionedThroughputExceededException",
                                     "RequestLimitExceeded"
                                 ],
-                                "IntervalSeconds": 2,
-                                "MaxAttempts": 10,
+                                "IntervalSeconds": 10,
+                                "MaxAttempts": 3,
                                 "BackoffRate": 2
                             }
                         ],
