@@ -32,11 +32,22 @@ class ChunkProcessingError(Exception):
 
 
 class ChunkedInvoiceExtractor:
-    """Handles chunked extraction and deduplication of invoices from large documents."""
+    """
+    Handles chunked extraction and deduplication of invoices from large documents.
+    
+    Features:
+    - Semantic chunking (invoice boundary detection)
+    - Automatic fallback to overlap chunking
+    - Multiple quality validation checks
+    - Robust error handling
+    """
     
     def __init__(self, chunk_size: int = 60000, overlap_size: int = 5000):
         self.chunk_size = chunk_size
         self.overlap_size = overlap_size
+        # Semantic chunking configuration
+        self.min_invoice_size = 500  # Minimum chars for valid invoice
+        self.max_invoice_size = 50000  # Maximum single invoice size (safety limit)
     
     def extract_page_numbers(self, text: str) -> List[int]:
         page_pattern = r'\[PAGE:(\d+)\]'
@@ -44,7 +55,396 @@ class ChunkedInvoiceExtractor:
         pages = sorted(set(int(page_num) for page_num in matches))
         return pages if pages else [1]
     
+    def detect_invoice_boundaries(self, text: str) -> List[Dict[str, int]]:
+        """
+        Detect invoice start/end positions using UK invoice patterns.
+        Returns list of {'start': int, 'end': int, 'size': int} boundaries.
+        
+        Returns None if detection fails (triggers fallback to overlap chunking).
+        """
+        try:
+            # Invoice START patterns (ordered by reliability)
+            start_patterns = [
+                r'(?:^|\n)To:\s*\n',  # "To:" at start of line (most reliable)
+                r'(?:^|\n)Invoice Date[\s:]+\d{1,2}[\s/\-]',  # "Invoice Date" with date
+                r'(?:^|\n)(?:Invoice|Reference)\s+(?:Number|No)[\s:]+',  # Invoice/Reference Number
+                r'(?:^|\n)[A-Z][a-z]+\s+(?:Limited|Ltd|LLP|PLC|Company)\s*\n',  # Company name
+                r'(?:^|\n)Description\s*\n',  # Description header (common in invoices)
+                r'(?:^|\n)VAT\s+Registration\s+No',  # VAT number (UK-specific)
+                r'(?:^|\n)Tax Point',  # UK tax terminology
+                r'(?:^|\n)INVOICE\s*$',  # Simple "INVOICE" header
+            ]
+            
+            # Invoice END patterns (ordered by reliability)
+            end_patterns = [
+                r'AMOUNT DUE\s+[\d,]+\.?\d*',  # "AMOUNT DUE" with amount
+                r'This is not a tax invoice',  # UK disclaimer
+                r'DUE DATE\s+\d{1,2}\s+\w+\s+\d{4}',  # "DUE DATE" with date
+                r'TOTAL GBP\s+[\d,]+\.?\d*',  # "TOTAL GBP" with amount
+                r'Less Amount Paid\s+[\d,]+\.?\d*',  # Payment line
+                r'Payment terms:',  # Often marks end
+                r'Thank you for your business',  # Common footer
+                r'VAT TOTAL\s+[\d,]+\.?\d*',  # UK VAT total line
+                r'\f',  # Form feed (page break)
+            ]
+            
+            # Find all potential start positions
+            starts = []
+            for pattern in start_patterns:
+                for match in re.finditer(pattern, text, re.MULTILINE | re.IGNORECASE):
+                    starts.append({
+                        'pos': match.start(),
+                        'pattern': pattern[:30],  # Store pattern for debugging
+                        'confidence': start_patterns.index(pattern)  # Lower = higher confidence
+                    })
+            
+            # Find all potential end positions
+            ends = []
+            for pattern in end_patterns:
+                for match in re.finditer(pattern, text, re.MULTILINE | re.IGNORECASE):
+                    ends.append({
+                        'pos': match.end(),
+                        'pattern': pattern[:30],
+                        'confidence': end_patterns.index(pattern)
+                    })
+            
+            if not starts:
+                log_with_timestamp("⚠️ No invoice start patterns found - falling back to overlap chunking")
+                return None
+            
+            # Log pattern detection stats
+            log_with_timestamp(
+                f"📊 Pattern detection: {len(starts)} starts, {len(ends)} ends "
+                f"from {len(text)} chars ({len(text)/1000:.0f}kb)"
+            )
+            
+            # Sort by position
+            starts = sorted(starts, key=lambda x: x['pos'])
+            ends = sorted(ends, key=lambda x: x['pos'])
+            
+            # Match starts to ends intelligently
+            boundaries = []
+            used_ends = set()
+            
+            for i, start in enumerate(starts):
+                start_pos = start['pos']
+                
+                # Find the best matching end:
+                # 1. After this start
+                # 2. Before next start (if exists)
+                # 3. With reasonable size (500 - 50000 chars)
+                # 4. Not already used
+                
+                next_start_pos = starts[i + 1]['pos'] if i + 1 < len(starts) else len(text)
+                best_end = None
+                best_end_score = -1
+                
+                for end in ends:
+                    end_pos = end['pos']
+                    
+                    # Skip if already used or before start
+                    if end_pos in used_ends or end_pos <= start_pos:
+                        continue
+                    
+                    # Skip if after next start (too far)
+                    if end_pos > next_start_pos:
+                        break
+                    
+                    # Check invoice size
+                    invoice_size = end_pos - start_pos
+                    if invoice_size < self.min_invoice_size:
+                        continue  # Too small
+                    if invoice_size > self.max_invoice_size:
+                        continue  # Too large (probably malformed)
+                    
+                    # Score this end candidate
+                    # Prefer: high confidence pattern, reasonable size, not too close to next start
+                    distance_to_next = next_start_pos - end_pos
+                    size_score = 1.0 if self.min_invoice_size <= invoice_size <= 10000 else 0.5
+                    confidence_score = 1.0 / (end['confidence'] + 1)  # Higher confidence = lower index
+                    spacing_score = 1.0 if distance_to_next > 100 else 0.5  # Prefer some spacing
+                    
+                    score = size_score * confidence_score * spacing_score
+                    
+                    if score > best_end_score:
+                        best_end = end
+                        best_end_score = score
+                
+                # If no valid end found, use next start or end of text
+                if best_end is None:
+                    # Fallback: use position before next start
+                    if i + 1 < len(starts):
+                        end_pos = starts[i + 1]['pos'] - 10  # Leave small gap
+                    else:
+                        end_pos = len(text)
+                    
+                    # Check if this creates reasonable size
+                    invoice_size = end_pos - start_pos
+                    if invoice_size < self.min_invoice_size:
+                        log_with_timestamp(
+                            f"⚠️ Skipping potential invoice at {start_pos} - too small ({invoice_size} chars)"
+                        )
+                        continue
+                    
+                    if invoice_size > self.max_invoice_size:
+                        # Truncate to max size
+                        log_with_timestamp(
+                            f"⚠️ Invoice at {start_pos} too large ({invoice_size} chars) - truncating"
+                        )
+                        end_pos = start_pos + self.max_invoice_size
+                else:
+                    end_pos = best_end['pos']
+                    used_ends.add(end_pos)
+                
+                # Add boundary
+                boundaries.append({
+                    'start': start_pos,
+                    'end': end_pos,
+                    'size': end_pos - start_pos,
+                    'start_pattern': start['pattern'][:20],
+                    'confidence': 'high' if best_end else 'medium'
+                })
+            
+            if not boundaries:
+                log_with_timestamp("⚠️ No valid invoice boundaries found - falling back to overlap chunking")
+                return None
+            
+            # Sanity check: Too many boundaries might indicate false positives
+            if len(boundaries) > len(text) / 500:  # More than 1 invoice per 500 chars
+                log_with_timestamp(
+                    f"⚠️ Too many boundaries detected ({len(boundaries)}) - likely false positives"
+                )
+                return None
+            
+            log_with_timestamp(
+                f"✅ Detected {len(boundaries)} invoice boundaries "
+                f"(avg size: {sum(b['size'] for b in boundaries) // len(boundaries)} chars)"
+            )
+            
+            return boundaries
+            
+        except Exception as e:
+            log_with_timestamp(f"❌ Error detecting invoice boundaries: {str(e)}")
+            return None
+    
+    def validate_chunk_quality(self, chunks: List[Dict], original_text: str) -> bool:
+        """
+        Validate that semantic chunking produced reasonable results.
+        Returns False if chunks are suspicious (triggers fallback to overlap chunking).
+        
+        Quality checks:
+        1. Text coverage (did we lose >20% of text?)
+        2. Chunk size distribution (are chunks extremely uneven?)
+        3. Minimum chunk count (too few chunks for large text?)
+        4. Invoice count sanity (did we find any invoices?)
+        """
+        if not chunks:
+            log_with_timestamp("❌ No chunks created")
+            return False
+        
+        # Check 1: Text coverage (detect significant text loss)
+        total_size = sum(len(c['chunk']) for c in chunks)
+        coverage = total_size / len(original_text) if len(original_text) > 0 else 0
+        if coverage < 0.80:  # Lost >20% of text
+            log_with_timestamp(f"❌ Poor text coverage: {coverage:.1%} (threshold: 80%)")
+            return False
+        
+        # Check 2: Chunk size distribution (detect pathological cases)
+        chunk_sizes = [len(c['chunk']) for c in chunks]
+        avg_size = sum(chunk_sizes) / len(chunk_sizes)
+        max_size = max(chunk_sizes)
+        min_size = min(chunk_sizes)
+        
+        # If chunks are extremely uneven, something went wrong
+        if max_size > avg_size * 5 and len(chunks) > 1:  # One chunk 5x bigger than average
+            log_with_timestamp(
+                f"❌ Uneven chunks: max={max_size}, min={min_size}, avg={avg_size:.0f} "
+                f"(ratio: {max_size/avg_size:.1f}x)"
+            )
+            return False
+        
+        # Check 3: Minimum chunk count (detect if semantic found almost nothing)
+        # If text is large but only 1-2 chunks, semantic probably failed
+        if len(original_text) > 100000 and len(chunks) < 3:
+            log_with_timestamp(
+                f"❌ Too few chunks for large text: {len(chunks)} chunks for "
+                f"{len(original_text)} chars ({len(original_text)/1000:.0f}kb)"
+            )
+            return False
+        
+        # Check 4: Invoice count sanity check
+        # If we found 0 invoices in all chunks, something is wrong
+        total_invoices = sum(c.get('invoice_count', 0) for c in chunks)
+        if total_invoices == 0 and len(original_text) > 1000:
+            log_with_timestamp(
+                f"❌ No invoices detected in {len(original_text)} chars "
+                f"({len(original_text)/1000:.0f}kb)"
+            )
+            return False
+        
+        # All checks passed
+        log_with_timestamp(
+            f"✅ Chunk quality validated: {len(chunks)} chunks, "
+            f"{coverage:.1%} coverage, avg_size={avg_size:.0f}, "
+            f"{total_invoices} invoices detected"
+        )
+        return True
+    
+    def create_semantic_chunks(self, text: str) -> List[Dict[str, Any]]:
+        """
+        Create chunks based on invoice boundaries (semantic chunking).
+        Groups 1-3 complete invoices per chunk, respecting chunk_size limit.
+        
+        ROBUST: Falls back to overlap chunking if:
+        - Invoice detection fails
+        - Quality validation fails
+        - Any errors occur
+        
+        Returns: List of chunk dictionaries with metadata
+        """
+        try:
+            log_with_timestamp("🔍 Attempting semantic chunking (invoice boundary detection)...")
+            
+            # Detect invoice boundaries
+            boundaries = self.detect_invoice_boundaries(text)
+            
+            # Fallback to overlap if detection fails
+            if not boundaries:
+                log_with_timestamp("⚠️ Semantic chunking failed - using overlap strategy")
+                return self.create_chunks_with_overlap(text)
+            
+            # Group invoices into chunks
+            chunks = []
+            current_chunk_invoices = []
+            current_chunk_size = 0
+            current_chunk_start = 0
+            chunk_index = 0
+            
+            for boundary in boundaries:
+                invoice_text = text[boundary['start']:boundary['end']]
+                invoice_size = len(invoice_text)
+                
+                # Safety check: skip malformed invoices
+                if invoice_size < self.min_invoice_size:
+                    log_with_timestamp(
+                        f"⚠️ Skipping malformed invoice at {boundary['start']} "
+                        f"(size: {invoice_size} < min: {self.min_invoice_size})"
+                    )
+                    continue
+                
+                # If single invoice exceeds chunk_size, create dedicated chunk
+                if invoice_size > self.chunk_size:
+                    # Flush current chunk if not empty
+                    if current_chunk_invoices:
+                        chunk_text = ''.join(current_chunk_invoices)
+                        pages = self.extract_page_numbers(chunk_text)
+                        
+                        chunks.append({
+                            'chunk': chunk_text,
+                            'start': current_chunk_start,
+                            'end': current_chunk_start + len(chunk_text),
+                            'pages': pages,
+                            'chunk_index': chunk_index,
+                            'invoice_count': len(current_chunk_invoices),
+                            'chunking_strategy': 'semantic'
+                        })
+                        
+                        chunk_index += 1
+                        current_chunk_invoices = []
+                        current_chunk_size = 0
+                    
+                    # Create dedicated chunk for large invoice
+                    log_with_timestamp(
+                        f"📄 Large invoice at pos {boundary['start']} "
+                        f"({invoice_size} chars) -> dedicated chunk"
+                    )
+                    
+                    pages = self.extract_page_numbers(invoice_text)
+                    chunks.append({
+                        'chunk': invoice_text,
+                        'start': boundary['start'],
+                        'end': boundary['end'],
+                        'pages': pages,
+                        'chunk_index': chunk_index,
+                        'invoice_count': 1,
+                        'chunking_strategy': 'semantic'
+                    })
+                    
+                    chunk_index += 1
+                    current_chunk_start = boundary['end']
+                    continue
+                
+                # Try adding invoice to current chunk
+                if current_chunk_size + invoice_size <= self.chunk_size:
+                    # Fits in current chunk
+                    if not current_chunk_invoices:
+                        current_chunk_start = boundary['start']
+                    current_chunk_invoices.append(invoice_text)
+                    current_chunk_size += invoice_size
+                else:
+                    # Flush current chunk and start new one
+                    if current_chunk_invoices:
+                        chunk_text = ''.join(current_chunk_invoices)
+                        pages = self.extract_page_numbers(chunk_text)
+                        
+                        chunks.append({
+                            'chunk': chunk_text,
+                            'start': current_chunk_start,
+                            'end': current_chunk_start + len(chunk_text),
+                            'pages': pages,
+                            'chunk_index': chunk_index,
+                            'invoice_count': len(current_chunk_invoices),
+                            'chunking_strategy': 'semantic'
+                        })
+                        
+                        chunk_index += 1
+                    
+                    # Start new chunk with current invoice
+                    current_chunk_start = boundary['start']
+                    current_chunk_invoices = [invoice_text]
+                    current_chunk_size = invoice_size
+            
+            # Flush remaining invoices
+            if current_chunk_invoices:
+                chunk_text = ''.join(current_chunk_invoices)
+                pages = self.extract_page_numbers(chunk_text)
+                
+                chunks.append({
+                    'chunk': chunk_text,
+                    'start': current_chunk_start,
+                    'end': current_chunk_start + len(chunk_text),
+                    'pages': pages,
+                    'chunk_index': chunk_index,
+                    'invoice_count': len(current_chunk_invoices),
+                    'chunking_strategy': 'semantic'
+                })
+            
+            # CRITICAL: Validate chunk quality before returning
+            if not self.validate_chunk_quality(chunks, text):
+                log_with_timestamp("⚠️ Semantic chunks failed quality validation - using overlap")
+                return self.create_chunks_with_overlap(text)
+            
+            log_with_timestamp(
+                f"✅ Semantic chunking created {len(chunks)} chunks "
+                f"(avg {sum(c['invoice_count'] for c in chunks) / len(chunks):.1f} invoices/chunk)"
+            )
+            
+            return chunks
+            
+        except Exception as e:
+            log_with_timestamp(f"❌ Semantic chunking error: {str(e)}")
+            import traceback
+            log_with_timestamp(f"📋 Traceback: {traceback.format_exc()}")
+            log_with_timestamp("⚠️ Falling back to overlap chunking")
+            return self.create_chunks_with_overlap(text)
+    
     def create_chunks_with_overlap(self, text: str) -> List[Dict[str, Any]]:
+        """
+        Original overlap-based chunking (fallback strategy).
+        
+        Creates fixed-size chunks with overlap to ensure no invoice is split.
+        This is the SAFE fallback when semantic chunking fails.
+        """
         chunks = []
         start = 0
         chunk_index = 0
@@ -59,7 +459,8 @@ class ChunkedInvoiceExtractor:
                 'start': start,
                 'end': end,
                 'pages': pages,
-                'chunk_index': chunk_index
+                'chunk_index': chunk_index,
+                'chunking_strategy': 'overlap'
             }
             
             chunks.append(chunk_data)
@@ -180,15 +581,61 @@ class ChunkedInvoiceExtractor:
         """
         OPTIMIZED deduplication for chunked extraction.
         
-        Key insights:
-        1. Invoices within same chunk cannot be duplicates (no overlap within chunk)
-        2. Invoices on different pages cannot be duplicates
-        3. Only check invoices at chunk boundaries (overlap zones)
+        Handles both overlap and semantic chunking strategies:
+        - Overlap chunks: Check only adjacent chunks (O(k*m) complexity)
+        - Semantic chunks: Use signature-based dedup (minimal overlap expected)
         
         This reduces complexity from O(n²) to O(k*m) where:
         - k = number of chunk boundaries
         - m = average invoices per overlap zone (typically 1-3)
         """
+        if len(invoices) <= 1:
+            return invoices
+        
+        # Check chunking strategy
+        chunking_strategy = chunks[0].get('chunking_strategy', 'overlap') if chunks else 'overlap'
+        
+        if chunking_strategy == 'semantic':
+            # Semantic chunks have clean boundaries - less likely to have duplicates
+            log_with_timestamp("🧹 Using signature-based deduplication for semantic chunks")
+            return self._deduplicate_semantic_chunks(invoices, chunks)
+        else:
+            # Overlap chunking - use existing optimized logic
+            log_with_timestamp("🧹 Using boundary-based deduplication for overlap chunks")
+            return self._deduplicate_overlap_chunks(invoices, chunks)
+    
+    def _deduplicate_semantic_chunks(self, invoices: List[Dict], chunks: List[Dict]) -> List[Dict]:
+        """Deduplication for semantic chunks (minimal overlap expected)"""
+        if len(invoices) <= 1:
+            return invoices
+        
+        result = []
+        seen_signatures = set()  # Track unique invoice signatures
+        duplicate_count = 0
+        
+        for invoice in invoices:
+            # Create signature: vendor + amount + date
+            vendor = str(invoice.get('supplier_name', '') or invoice.get('vendor_name', '')).strip().lower()
+            amount = str(invoice.get('total_amount', ''))
+            date = str(invoice.get('invoice_date', ''))
+            signature = f"{vendor}|{amount}|{date}"
+            
+            # Skip if we've seen this exact invoice (but don't skip empty signatures)
+            if signature in seen_signatures and signature != "||":
+                duplicate_count += 1
+                log_with_timestamp(f"⚠️ Semantic chunk duplicate detected: {signature[:50]}")
+                continue
+            
+            seen_signatures.add(signature)
+            result.append(invoice)
+        
+        if duplicate_count > 0:
+            log_with_timestamp(f"🧹 Removed {duplicate_count} duplicates from semantic chunks")
+        
+        return result
+    
+    def _deduplicate_overlap_chunks(self, invoices: List[Dict], chunks: List[Dict]) -> List[Dict]:
+        """Deduplication for overlap chunks (optimized boundary checking)"""
         if len(invoices) <= 1:
             return invoices
         
@@ -205,6 +652,7 @@ class ChunkedInvoiceExtractor:
             return []
         
         result = list(invoices_by_chunk[0])
+        duplicate_count = 0
         
         # Process each subsequent chunk
         for chunk_idx in range(1, len(chunks)):
@@ -231,6 +679,7 @@ class ChunkedInvoiceExtractor:
                     
                     # Check if they're duplicates
                     if self.are_invoices_duplicate_by_pages(current_invoice, prev_invoice):
+                        duplicate_count += 1
                         if self.is_more_complete_invoice(current_invoice, prev_invoice):
                             # Replace previous invoice with more complete one
                             result = [inv for inv in result if id(inv) != id(prev_invoice)]
@@ -242,6 +691,9 @@ class ChunkedInvoiceExtractor:
                 # If not a duplicate, add to results
                 if not is_duplicate:
                     result.append(current_invoice)
+        
+        if duplicate_count > 0:
+            log_with_timestamp(f"🧹 Removed {duplicate_count} duplicates from overlap chunks")
         
         return result
 
@@ -304,6 +756,7 @@ if not BEDROCK_MODEL_CHAIN:
 USE_CHUNKED_EXTRACTION = os.environ.get('USE_CHUNKED_EXTRACTION', 'false').lower() == 'true'
 CHUNK_SIZE = int(os.environ.get('CHUNK_SIZE', '60000'))  # Optimized: ~15k tokens (vs 15k chars = 3.75k tokens)
 OVERLAP_SIZE = int(os.environ.get('OVERLAP_SIZE', '5000'))  # Covers 3-page invoices with minimal duplicates
+USE_SEMANTIC_CHUNKING = os.environ.get('USE_SEMANTIC_CHUNKING', 'true').lower() == 'true'  # Invoice boundary detection
 USE_PROMPT_CACHING = os.environ.get('USE_PROMPT_CACHING', 'true').lower() == 'true'  # 60-70% cost savings
 
 # Initialize AWS clients
@@ -1285,7 +1738,7 @@ def process_section_with_chunking(
     Process large section text using chunking strategy (Phase 3)
     
     This function:
-    1. Splits text into overlapping chunks (default 60k chars with 5k overlap)
+    1. Splits text into chunks (semantic OR overlap-based)
     2. Processes each chunk separately with Bedrock
     3. Tracks chunk processing status in TrackingTable for resume capability
     4. Checks if all chunks complete and triggers deduplication
@@ -1306,9 +1759,30 @@ def process_section_with_chunking(
     # Initialize chunking extractor
     extractor = ChunkedInvoiceExtractor(chunk_size=CHUNK_SIZE, overlap_size=OVERLAP_SIZE)
     
-    # Create chunks with overlap
-    chunks = extractor.create_chunks_with_overlap(section_text)
-    log_with_timestamp(f"📚 Created {len(chunks)} chunks from {len(section_text)} chars")
+    # Create chunks - CHOOSE STRATEGY BASED ON CONFIG
+    if USE_SEMANTIC_CHUNKING:
+        log_with_timestamp("🧠 Using SEMANTIC chunking (invoice boundary detection)")
+        chunks = extractor.create_semantic_chunks(section_text)
+    else:
+        log_with_timestamp("📏 Using OVERLAP chunking (fixed-size with overlap)")
+        chunks = extractor.create_chunks_with_overlap(section_text)
+    
+    # Log chunking strategy used (will be 'semantic' or 'overlap')
+    strategy = chunks[0].get('chunking_strategy', 'unknown') if chunks else 'none'
+    log_with_timestamp(
+        f"📚 Created {len(chunks)} chunks using '{strategy}' strategy "
+        f"from {len(section_text)} chars"
+    )
+    
+    # CloudWatch metrics: Track semantic vs overlap chunking performance
+    if chunks:
+        semantic_count = sum(1 for c in chunks if c.get('chunking_strategy') == 'semantic')
+        overlap_count = sum(1 for c in chunks if c.get('chunking_strategy') == 'overlap')
+        
+        log_with_timestamp(
+            f"📊 Chunking stats: {semantic_count} semantic, {overlap_count} overlap "
+            f"(semantic success rate: {semantic_count/len(chunks)*100:.1f}%)"
+        )
     
     # Process each chunk
     # NOTE: Due to overlapping chunks, invoices at chunk boundaries will appear multiple times
@@ -1353,6 +1827,7 @@ def process_section_with_chunking(
                 invoice['chunk_index'] = idx
                 invoice['chunk_pages'] = chunk_pages
                 invoice['model_used'] = model_used  # Track which model extracted this invoice
+                invoice['chunking_strategy'] = chunk_info.get('chunking_strategy', 'unknown')  # Track strategy
                 # Keep source_page as sequential position within chunk (for deduplication heuristic)
                 # The model returns source_page, but we override with position in chunk for consistency
                 invoice['source_page'] = invoice_idx  # Sequential: 1, 2, 3... within this chunk

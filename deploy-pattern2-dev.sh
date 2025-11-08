@@ -169,6 +169,9 @@ if [ $STACK_CMD_EXIT -eq 0 ]; then
     echo ""
     echo "Deployment typically takes 15-20 minutes."
     echo ""
+    echo "NOTE: Configuration reload happens automatically in CI/CD pipeline."
+    echo "      For manual deployments, config should be committed to git first."
+    echo ""
 else
     echo ""
     echo "ERROR: Stack $OPERATION failed. Check the error message above."
