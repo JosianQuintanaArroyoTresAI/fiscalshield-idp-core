@@ -198,7 +198,17 @@ def get_cached_intelligence(company_number: str):
         item = response['Items'][0]
         
         # Check if cache is still valid
-        cached_time = datetime.fromisoformat(item.get('calculation_timestamp', ''))
+        calculation_timestamp = item.get('calculation_timestamp')
+        if not calculation_timestamp:
+            logger.warning(f"Cache entry missing calculation_timestamp for {company_number}, treating as expired")
+            return None
+        
+        try:
+            cached_time = datetime.fromisoformat(calculation_timestamp)
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Invalid calculation_timestamp format for {company_number}: {calculation_timestamp} - {e}")
+            return None
+        
         age = datetime.now() - cached_time
         
         if age.total_seconds() < CACHE_TTL_SECONDS:
@@ -209,7 +219,7 @@ def get_cached_intelligence(company_number: str):
             return None
             
     except Exception as e:
-        logger.warning(f"Error checking cache: {str(e)}")
+        logger.error(f"Unexpected error checking cache for {company_number}: {str(e)}", exc_info=True)
         return None
 
 
