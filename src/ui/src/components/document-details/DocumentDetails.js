@@ -103,9 +103,9 @@ const DocumentDetails = () => {
   };
 
   // Function to handle reprocess confirmation
-  const handleReprocessConfirm = async () => {
-    logger.debug('Reprocessing document', objectKey);
-    const result = await reprocessDocuments([objectKey]);
+  const handleReprocessConfirm = async (documentType) => {
+    logger.debug('Reprocessing document', { objectKey, documentType });
+    const result = await reprocessDocuments([objectKey], documentType);
     logger.debug('Reprocess result', result);
     // Close the modal
     setIsReprocessModalVisible(false);

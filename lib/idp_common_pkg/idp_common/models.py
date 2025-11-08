@@ -223,6 +223,7 @@ class Document:
     user_id: Optional[str] = None  # Cognito user ID for multi-tenant isolation
     company_number: Optional[str] = None  # Company number for company-based isolation
     company_name: Optional[str] = None  # Company name for display purposes
+    user_document_type: Optional[str] = None  # NEW: User's document type hint from upload
 
     # Processing state and timing
     status: Status = Status.QUEUED
@@ -260,6 +261,9 @@ class Document:
             "input_key": self.input_key,
             "output_bucket": self.output_bucket,
             "user_id": self.user_id,
+            "company_number": self.company_number,  # Company isolation
+            "company_name": self.company_name,  # Company display name
+            "user_document_type": self.user_document_type,  # NEW
             "status": self.status.value,
             "initial_event_time": self.initial_event_time,
             "queued_time": self.queued_time,
@@ -328,6 +332,9 @@ class Document:
             input_key=data.get("input_key"),
             output_bucket=data.get("output_bucket"),
             user_id=user_id,
+            company_number=data.get("company_number"),  # Company isolation
+            company_name=data.get("company_name"),  # Company display name
+            user_document_type=data.get("user_document_type"),  # NEW
             num_pages=int(data.get("num_pages", 0)),  # Ensure num_pages is integer
             initial_event_time=data.get("initial_event_time"),
             queued_time=data.get("queued_time"),
@@ -618,7 +625,19 @@ class Document:
                 for section in self.sections
             ]
 
+            # Surface key routing metadata so downstream states (DLQ, metrics, etc.)
+            # can act without rehydrating from S3. Keep fallbacks gentle because
+            # older documents may lack certain optional fields.
+            client_id = getattr(self, "client_id", None)
+            if not client_id and self.metadata:
+                client_id = self.metadata.get("client_id")
+            if not client_id:
+                client_id = self.company_number
+            if not client_id:
+                client_id = "default-client"
+
             return {
+                "id": self.id,
                 "document_id": self.id,
                 "s3_uri": s3_uri,
                 "timestamp": timestamp,
@@ -626,6 +645,10 @@ class Document:
                 "num_pages": self.num_pages,
                 "sections": sections_for_map,  # For Step Functions Map state with routing info
                 "compressed": True,
+                "user_id": self.user_id,
+                "client_id": client_id,
+                "company_number": self.company_number,
+                "company_name": self.company_name,
             }
 
         except Exception as e:

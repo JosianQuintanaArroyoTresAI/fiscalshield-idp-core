@@ -16,6 +16,12 @@ import DocumentsRoutes from './DocumentsRoutes';
 import DocumentsQueryRoutes from './DocumentsQueryRoutes';
 import DocumentsAnalyticsRoutes from './DocumentsAnalyticsRoutes';
 import CompanyIntelligence from '../components/company-intelligence';
+import { CompanyAnalysis } from '../components/company-intelligence';
+import { OverviewDashboard } from '../components/overview';
+import { ClientTakeOnAnalysis } from '../components/client-takeon';
+import { InvoiceInsights } from '../components/invoice-insights';
+import { BankStatementInsights } from '../components/bank-insights';
+import { CompanyHub } from '../components/company-hub';
 
 import {
   COMPANY_SELECT_PATH,
@@ -25,7 +31,13 @@ import {
   LOGOUT_PATH,
   DOCUMENTS_KB_QUERY_PATH,
   DOCUMENTS_ANALYTICS_PATH,
+  COMPANY_HUB_PATH,
   COMPANY_INTELLIGENCE_PATH,
+  COMPANY_ANALYSIS_PATH,
+  OVERVIEW_DASHBOARD_PATH,
+  CLIENT_TAKEON_PATH,
+  INVOICE_INSIGHTS_PATH,
+  BANK_INSIGHTS_PATH,
 } from './constants';
 
 const logger = new Logger('AuthRoutes');
@@ -47,8 +59,26 @@ const AuthRoutes = ({ redirectParam }) => {
         <Route exact path={COMPANY_SELECT_PATH}>
           <CompanySelect />
         </Route>
+        <Route exact path={COMPANY_HUB_PATH}>
+          <CompanyHub />
+        </Route>
+        <Route exact path={OVERVIEW_DASHBOARD_PATH}>
+          <OverviewDashboard />
+        </Route>
+        <Route exact path={CLIENT_TAKEON_PATH}>
+          <ClientTakeOnAnalysis />
+        </Route>
+        <Route exact path={INVOICE_INSIGHTS_PATH}>
+          <InvoiceInsights />
+        </Route>
+        <Route exact path={BANK_INSIGHTS_PATH}>
+          <BankStatementInsights />
+        </Route>
         <Route path={COMPANY_INTELLIGENCE_PATH}>
           <CompanyIntelligence />
+        </Route>
+        <Route path={COMPANY_ANALYSIS_PATH}>
+          <CompanyAnalysis />
         </Route>
         <Route path={DOCUMENTS_PATH}>
           <DocumentsRoutes />

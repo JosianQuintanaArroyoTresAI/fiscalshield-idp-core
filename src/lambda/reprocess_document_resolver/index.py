@@ -43,18 +43,19 @@ def handler(event, context):
         # Extract arguments from GraphQL event
         args = event.get("arguments", {})
         object_keys = args.get("objectKeys", [])
+        document_type = args.get("documentType")  # Optional user hint for classification
 
         if not object_keys:
             logger.error("objectKeys is required but not provided")
             return False
 
-        logger.info(f"Reprocessing {len(object_keys)} documents")
+        logger.info(f"Reprocessing {len(object_keys)} documents with documentType={document_type}")
 
         # Process each document
         success_count = 0
         for object_key in object_keys:
             try:
-                reprocess_document(object_key)
+                reprocess_document(object_key, document_type)
                 success_count += 1
             except Exception as e:
                 logger.error(
@@ -72,13 +73,17 @@ def handler(event, context):
         raise e
 
 
-def reprocess_document(object_key):
+def reprocess_document(object_key, document_type=None):
     """
     Reprocess a document by creating a fresh Document object and queueing it.
     This exactly mirrors the queue_sender pattern for consistency and avoids
     S3 copy operations that can trigger duplicate events for large files.
+    
+    Args:
+        object_key: S3 object key of the document to reprocess
+        document_type: Optional user-provided document type hint (e.g., "Invoice", "Bank-Statement")
     """
-    logger.info(f"Reprocessing document: {object_key}")
+    logger.info(f"Reprocessing document: {object_key} with documentType: {document_type}")
 
     # Verify file exists in S3
     try:
@@ -101,6 +106,7 @@ def reprocess_document(object_key):
         initial_event_time=current_time,
         pages={},
         sections=[],
+        user_document_type=document_type,  # Add user hint for Phase 2 smart classification
     )
 
     logger.info(f"Created fresh document object for reprocessing: {object_key}")

@@ -119,6 +119,7 @@
                         "Retry": [
                             {
                                 "ErrorEquals": [
+                                    "States.Timeout",
                                     "Sandbox.Timedout",
                                     "Lambda.ServiceException",
                                     "Lambda.AWSLambdaException",
@@ -129,12 +130,50 @@
                                     "ProvisionedThroughputExceededException",
                                     "RequestLimitExceeded"
                                 ],
-                                "IntervalSeconds": 2,
-                                "MaxAttempts": 10,
+                                "IntervalSeconds": 10,
+                                "MaxAttempts": 3,
                                 "BackoffRate": 2
                             }
                         ],
+                        "Catch": [
+                            {
+                                "ErrorEquals": [
+                                    "States.ALL"
+                                ],
+                                "ResultPath": "$.InvoiceExtractionError",
+                                "Next": "SendInvoiceToDLQ"
+                            }
+                        ],
                         "Next": "AssessmentStep"
+                    },
+                    "SendInvoiceToDLQ": {
+                        "Type": "Task",
+                        "Resource": "arn:aws:states:::sqs:sendMessage",
+                        "Parameters": {
+                            "QueueUrl": "${InvoiceExtractionDLQUrl}",
+                            "MessageBody": {
+                                "error.$": "$.InvoiceExtractionError",
+                                "documentId.$": "$.document.document_id",
+                                "userId.$": "$.document.user_id",
+                                "clientId.$": "$.document.client_id",
+                                "sectionId.$": "$.section.section_id",
+                                "sectionClassification.$": "$.section.classification",
+                                "executionArn.$": "$$.Execution.Id",
+                                "timestamp.$": "$$.State.EnteredTime"
+                            }
+                        },
+                        "ResultPath": "$.DLQDispatchResult",
+                        "Next": "SectionFailed"
+                    },
+                    "SectionFailed": {
+                        "Type": "Pass",
+                        "Parameters": {
+                            "status": "FAILED",
+                            "sectionId.$": "$.section.section_id",
+                            "documentId.$": "$.document.id",
+                            "executionArn.$": "$$.Execution.Id"
+                        },
+                        "End": true
                     },
                     "AssessmentStep": {
                         "Type": "Task",

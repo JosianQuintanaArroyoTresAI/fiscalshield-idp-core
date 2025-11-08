@@ -16,6 +16,13 @@ set -e
 # Configuration
 STACK_NAME="${STACK_NAME:-fiscalshield-idp-dev}"
 REGION="${REGION:-eu-central-1}"
+BUCKET_BASENAME="${BUCKET_BASENAME:-fiscalshield-templates}"
+
+if [ -f "VERSION" ]; then
+    ARTIFACT_VERSION=$(tr -d '\r' < VERSION)
+else
+    ARTIFACT_VERSION="latest"
+fi
 
 # Colors for output
 RED='\033[0;31m'
@@ -36,8 +43,14 @@ echo "Region: $REGION"
 echo ""
 
 # S3 bucket where SAM packages are uploaded
-S3_BUCKET="${S3_BUCKET:-fiscalshield-templates-eu-central-1}"
-S3_PREFIX="${S3_PREFIX:-fiscalshield/dev/0.3.19}"
+S3_BUCKET="${S3_BUCKET:-${BUCKET_BASENAME}-${REGION}}"
+ARTIFACT_PREFIX="${ARTIFACT_PREFIX:-fiscalshield/dev}" # reused across scripts
+S3_PREFIX="${S3_PREFIX:-${ARTIFACT_PREFIX}/${ARTIFACT_VERSION}}"
+
+echo "Artifacts Bucket: $S3_BUCKET"
+echo "Artifacts Prefix: $S3_PREFIX"
+echo "Version Source : $ARTIFACT_VERSION"
+echo ""
 
 # Functions to update (LogicalResourceId:StackName:SAM_BUILD_PATH)
 # Format: "LogicalResourceId:StackName:SAM_BUILD_PATH"
@@ -51,13 +64,13 @@ ALL_FUNCTIONS=(
     "WorkflowTracker::.aws-sam/build/WorkflowTracker"
     "GetFileContentsResolverFunction::.aws-sam/build/GetFileContentsResolverFunction"
     # Pattern 2 Functions (in nested stack) - use SAM built packages
-    "OCRFunction:fiscalshield-idp-dev-PATTERN2STACK-19EURLXCA5XXH:patterns/pattern-2/.aws-sam/build/OCRFunction"
-    "ClassificationFunction:fiscalshield-idp-dev-PATTERN2STACK-19EURLXCA5XXH:patterns/pattern-2/.aws-sam/build/ClassificationFunction"
-    "ExtractionFunction:fiscalshield-idp-dev-PATTERN2STACK-19EURLXCA5XXH:patterns/pattern-2/.aws-sam/build/ExtractionFunction"
-    "InvoiceExtractionFunction:fiscalshield-idp-dev-PATTERN2STACK-19EURLXCA5XXH:patterns/pattern-2/lambdas/invoice_extraction"
-    "AssessmentFunction:fiscalshield-idp-dev-PATTERN2STACK-19EURLXCA5XXH:patterns/pattern-2/.aws-sam/build/AssessmentFunction"
-    "ProcessResultsFunction:fiscalshield-idp-dev-PATTERN2STACK-19EURLXCA5XXH:patterns/pattern-2/.aws-sam/build/ProcessResultsFunction"
-    "SummarizationFunction:fiscalshield-idp-dev-PATTERN2STACK-19EURLXCA5XXH:patterns/pattern-2/.aws-sam/build/SummarizationFunction"
+    "OCRFunction:fiscalshield-idp-dev-PATTERN2STACK-12AZHXIRN6HYB:patterns/pattern-2/.aws-sam/build/OCRFunction"
+    "ClassificationFunction:fiscalshield-idp-dev-PATTERN2STACK-12AZHXIRN6HYB:patterns/pattern-2/.aws-sam/build/ClassificationFunction"
+    "ExtractionFunction:fiscalshield-idp-dev-PATTERN2STACK-12AZHXIRN6HYB:patterns/pattern-2/.aws-sam/build/ExtractionFunction"
+    "InvoiceExtractionFunction:fiscalshield-idp-dev-PATTERN2STACK-12AZHXIRN6HYB:patterns/pattern-2/.aws-sam/build/InvoiceExtractionFunction"
+    "AssessmentFunction:fiscalshield-idp-dev-PATTERN2STACK-12AZHXIRN6HYB:patterns/pattern-2/.aws-sam/build/AssessmentFunction"
+    "ProcessResultsFunction:fiscalshield-idp-dev-PATTERN2STACK-12AZHXIRN6HYB:patterns/pattern-2/.aws-sam/build/ProcessResultsFunction"
+    "SummarizationFunction:fiscalshield-idp-dev-PATTERN2STACK-12AZHXIRN6HYB:patterns/pattern-2/.aws-sam/build/SummarizationFunction"
     # Analysis Stack Functions
     "AssessCompanyFunction:fiscalshield-analysis-dev:stacks/analysis/.aws-sam/build/AssessCompanyFunction"
     "HealthCheckFunction:fiscalshield-analysis-dev:stacks/analysis/.aws-sam/build/HealthCheckFunction"

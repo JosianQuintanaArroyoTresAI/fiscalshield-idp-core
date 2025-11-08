@@ -20,6 +20,88 @@ dynamodb = boto3.resource("dynamodb")
 s3 = boto3.client("s3")
 
 
+def delete_chunk_tracking_records(tracking_table, object_key: str) -> int:
+    """
+    Delete all chunk tracking records for a document.
+    
+    Chunk records have PK pattern: document#{object_key}#section#{section_id}
+    and SK pattern: chunk#{idx}
+    
+    Args:
+        tracking_table: DynamoDB table resource
+        object_key: Document object key
+        
+    Returns:
+        int: Number of chunk records deleted
+    """
+    deleted_count = 0
+    
+    try:
+        # Query for all sections of this document
+        # We need to scan with a filter since we don't know section IDs in advance
+        logger.info(f"Scanning for chunk tracking records for document: {object_key}")
+        
+        # Use begins_with filter on PK to find all section chunks
+        pk_prefix = f"document#{object_key}#section#"
+        
+        response = tracking_table.scan(
+            FilterExpression="begins_with(PK, :pk_prefix) AND begins_with(SK, :sk_prefix)",
+            ExpressionAttributeValues={
+                ":pk_prefix": pk_prefix,
+                ":sk_prefix": "chunk#"
+            }
+        )
+        
+        items = response.get('Items', [])
+        logger.info(f"Found {len(items)} chunk tracking records to delete")
+        
+        # Delete each chunk record
+        for item in items:
+            try:
+                tracking_table.delete_item(
+                    Key={
+                        "PK": item["PK"],
+                        "SK": item["SK"]
+                    }
+                )
+                deleted_count += 1
+                logger.debug(f"Deleted chunk record: PK={item['PK']}, SK={item['SK']}")
+            except Exception as e:
+                logger.error(f"Error deleting chunk record {item['PK']}/{item['SK']}: {str(e)}")
+        
+        # Handle pagination if there are more items
+        while 'LastEvaluatedKey' in response:
+            response = tracking_table.scan(
+                FilterExpression="begins_with(PK, :pk_prefix) AND begins_with(SK, :sk_prefix)",
+                ExpressionAttributeValues={
+                    ":pk_prefix": pk_prefix,
+                    ":sk_prefix": "chunk#"
+                },
+                ExclusiveStartKey=response['LastEvaluatedKey']
+            )
+            
+            items = response.get('Items', [])
+            for item in items:
+                try:
+                    tracking_table.delete_item(
+                        Key={
+                            "PK": item["PK"],
+                            "SK": item["SK"]
+                        }
+                    )
+                    deleted_count += 1
+                    logger.debug(f"Deleted chunk record: PK={item['PK']}, SK={item['SK']}")
+                except Exception as e:
+                    logger.error(f"Error deleting chunk record {item['PK']}/{item['SK']}: {str(e)}")
+        
+        logger.info(f"Successfully deleted {deleted_count} chunk tracking records for {object_key}")
+        
+    except Exception as e:
+        logger.error(f"Error deleting chunk tracking records for {object_key}: {str(e)}")
+    
+    return deleted_count
+
+
 def handler(event, context):
     logger.info(f"Delete document resolver invoked with event: {json.dumps(event)}")
 
@@ -109,6 +191,14 @@ def handler(event, context):
                     )
             except Exception as e:
                 logger.error(f"Error in robust list entry deletion: {str(e)}")
+
+            # Delete chunk tracking records (for chunked extraction feature)
+            try:
+                logger.info(f"Deleting chunk tracking records for {object_key}")
+                chunk_count = delete_chunk_tracking_records(tracking_table, object_key)
+                logger.info(f"Deleted {chunk_count} chunk tracking records")
+            except Exception as e:
+                logger.error(f"Error deleting chunk tracking records: {str(e)}")
 
             # Finally, delete the document record from tracking table
             if document_metadata:

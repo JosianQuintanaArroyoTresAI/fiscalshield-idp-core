@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT-0
 
 // src/components/upload-document/UploadDocumentPanel.jsx
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Button,
   Container,
@@ -11,7 +11,8 @@ import {
   FormField,
   StatusIndicator,
   Alert,
-  Input,
+  Box,
+  ButtonDropdown,
 } from '@awsui/components-react';
 import { API, graphqlOperation } from 'aws-amplify';
 import uploadDocument from '../../graphql/queries/uploadDocument';
@@ -23,7 +24,9 @@ const UploadDocumentPanel = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState([]);
   const [error, setError] = useState(null);
-  const [prefix, setPrefix] = useState('');
+  const [documentType, setDocumentType] = useState(null); // 'invoice' or 'bank-statement'
+  const [dragActive, setDragActive] = useState(false);
+  const fileInputRef = useRef(null);
 
   if (!settings.InputBucket) {
     return (
@@ -34,13 +37,46 @@ const UploadDocumentPanel = () => {
   }
 
   const handleFileChange = (e) => {
-    setSelectedFiles(Array.from(e.target.files));
-    setUploadStatus([]);
-    setError(null);
+    if (e.target.files && e.target.files.length > 0) {
+      setSelectedFiles(Array.from(e.target.files));
+      setUploadStatus([]);
+      setError(null);
+    }
   };
 
-  const handlePrefixChange = (e) => {
-    setPrefix(e.detail.value);
+  const handleDrag = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setDragActive(true);
+    } else if (e.type === 'dragleave') {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+
+    if (!documentType) {
+      setError('Please select a document type first');
+      return;
+    }
+
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      setSelectedFiles(Array.from(e.dataTransfer.files));
+      setUploadStatus([]);
+      setError(null);
+    }
+  };
+
+  const handleBrowseFiles = () => {
+    if (!documentType) {
+      setError('Please select a document type first');
+      return;
+    }
+    fileInputRef.current?.click();
   };
 
   const uploadFiles = async () => {
@@ -75,17 +111,17 @@ const UploadDocumentPanel = () => {
         try {
           // Step 1: Get presigned URL data
           console.log(`Getting upload credentials for ${file.name}...`);
-          console.log(`Using prefix: ${prefix || 'none'}`);
+          console.log(`Document type: ${documentType}`);
           console.log(`Company: ${activeCompany.company_name} (${activeCompany.company_number})`);
 
           const response = await API.graphql(
             graphqlOperation(uploadDocument, {
               fileName: file.name,
               contentType: file.type,
-              prefix: prefix || '', // Use the user-provided prefix or empty string
               bucket: settings.InputBucket, // Explicitly pass the input bucket
               companyNumber: activeCompany.company_number, // Pass company number for isolation
               companyName: activeCompany.company_name, // Pass company name for metadata
+              documentType: documentType, // NEW: Pass the selected document type
             }),
           );
           const { presignedUrl, objectKey, usePostMethod } = response.data.uploadDocument;
@@ -164,31 +200,162 @@ const UploadDocumentPanel = () => {
       )}
 
       <SpaceBetween size="l">
-        <FormField label="Optional folder prefix (e.g., invoices/2024)">
-          <Input
-            value={prefix}
-            onChange={handlePrefixChange}
-            placeholder="Leave empty for root folder"
-            disabled={isUploading}
+        {/* Document Type Selection Buttons */}
+        <Box>
+          <FormField label="Select Document Type" description="Choose the type of documents you want to upload">
+            <SpaceBetween direction="horizontal" size="m">
+              <Button
+                variant={documentType === 'invoice' ? 'primary' : 'normal'}
+                onClick={() => {
+                  setDocumentType('invoice');
+                  setSelectedFiles([]);
+                  setUploadStatus([]);
+                  setError(null);
+                }}
+                disabled={isUploading}
+                iconName={documentType === 'invoice' ? 'check' : undefined}
+              >
+                📄 Invoices
+              </Button>
+
+              <Button
+                variant={documentType === 'bank-statement' ? 'primary' : 'normal'}
+                onClick={() => {
+                  setDocumentType('bank-statement');
+                  setSelectedFiles([]);
+                  setUploadStatus([]);
+                  setError(null);
+                }}
+                disabled={isUploading}
+                iconName={documentType === 'bank-statement' ? 'check' : undefined}
+              >
+                🏦 Bank Statements
+              </Button>
+
+              {/* More document types dropdown */}
+              <ButtonDropdown
+                items={[
+                  { id: 'payslip', text: '💰 Payslip' },
+                  { id: 'drivers-license', text: "🪪 Driver's License" },
+                  { id: 'w2', text: '📋 W2 Tax Form' },
+                  { id: 'check', text: '✅ Check' },
+                  { id: 'homeowners-insurance', text: '🏠 Homeowners Insurance' },
+                ]}
+                onItemClick={({ detail }) => {
+                  setDocumentType(detail.id);
+                  setSelectedFiles([]);
+                  setUploadStatus([]);
+                  setError(null);
+                }}
+                disabled={isUploading}
+                variant={documentType && !['invoice', 'bank-statement'].includes(documentType) ? 'primary' : 'normal'}
+              >
+                {documentType && !['invoice', 'bank-statement'].includes(documentType)
+                  ? `✓ ${documentType.replace(/-/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())}`
+                  : 'Other Document Types'}
+              </ButtonDropdown>
+            </SpaceBetween>
+          </FormField>
+        </Box>
+
+        {/* Drag and Drop Upload Area */}
+        <Box>
+          <div
+            onDragEnter={handleDrag}
+            onDragLeave={handleDrag}
+            onDragOver={handleDrag}
+            onDrop={handleDrop}
+            style={{
+              border: documentType ? (dragActive ? '3px dashed #0972d3' : '2px dashed #aab7b8') : '2px dashed #d5dbdb',
+              borderRadius: '8px',
+              padding: '60px 20px',
+              textAlign: 'center',
+              backgroundColor: documentType ? (dragActive ? '#f0f8ff' : '#fafafa') : '#f5f5f5',
+              cursor: documentType ? 'pointer' : 'not-allowed',
+              transition: 'all 0.3s ease',
+              opacity: documentType ? 1 : 0.5,
+            }}
+            onClick={handleBrowseFiles}
+          >
+            <SpaceBetween size="m" alignItems="center">
+              <Box fontSize="heading-xl" color={documentType ? 'text-label' : 'text-status-inactive'}>
+                📁
+              </Box>
+              <Box fontSize="heading-m" color={documentType ? 'text-label' : 'text-status-inactive'}>
+                {documentType
+                  ? dragActive
+                    ? 'Drop files here'
+                    : 'Drag and drop files here'
+                  : 'Select a document type to enable upload'}
+              </Box>
+              {documentType && (
+                <>
+                  <Box fontSize="body-s" color="text-body-secondary">
+                    or
+                  </Box>
+                  <Button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleBrowseFiles();
+                    }}
+                    disabled={!documentType || isUploading}
+                  >
+                    Browse Files
+                  </Button>
+                  <Box fontSize="body-s" color="text-body-secondary">
+                    Supports: PDF, PNG, JPG (Max 100MB per file)
+                  </Box>
+                </>
+              )}
+            </SpaceBetween>
+          </div>
+
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            onChange={handleFileChange}
+            disabled={!documentType || isUploading}
+            style={{ display: 'none' }}
+            accept=".pdf,.png,.jpg,.jpeg"
           />
-        </FormField>
+        </Box>
 
-        <FormField label="Select files to upload">
-          <input type="file" multiple onChange={handleFileChange} disabled={isUploading} />
-        </FormField>
+        {/* Selected Files Display */}
+        {selectedFiles.length > 0 && (
+          <Box>
+            <FormField label={`Selected Files (${selectedFiles.length})`}>
+              <SpaceBetween size="xs">
+                {selectedFiles.map((file, index) => (
+                  <Box key={index} fontSize="body-s">
+                    📎 {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
+                  </Box>
+                ))}
+              </SpaceBetween>
+            </FormField>
+          </Box>
+        )}
 
+        {/* Upload Button */}
         <Button
           variant="primary"
           onClick={uploadFiles}
           loading={isUploading}
-          disabled={selectedFiles.length === 0 || isUploading}
+          disabled={selectedFiles.length === 0 || isUploading || !documentType}
+          iconName="upload"
         >
-          Upload {selectedFiles.length > 0 ? `(${selectedFiles.length} files)` : ''}
+          {isUploading
+            ? `Uploading... (${uploadStatus.length}/${selectedFiles.length})`
+            : `Upload ${
+                selectedFiles.length > 0 ? `${selectedFiles.length} ${documentType?.replace(/-/g, ' ')}(s)` : 'Files'
+              }`}
         </Button>
 
+        {/* Upload Results */}
         {uploadStatus.length > 0 && (
-          <div>
-            <h3>Upload Results:</h3>
+          <Box>
+            <Header variant="h3">Upload Results</Header>
             <SpaceBetween size="s">
               {uploadStatus.map((item, index) => (
                 // eslint-disable-next-line react/no-array-index-key
@@ -196,15 +363,15 @@ const UploadDocumentPanel = () => {
                   <StatusIndicator type={item.status === 'success' ? 'success' : 'error'}>
                     {item.file}: {item.status === 'success' ? 'Uploaded successfully' : `Failed - ${item.error}`}
                     {item.status === 'success' && (
-                      <div>
-                        <small>Object Key: {item.objectKey}</small>
-                      </div>
+                      <Box fontSize="body-s" color="text-body-secondary">
+                        Object Key: {item.objectKey}
+                      </Box>
                     )}
                   </StatusIndicator>
                 </div>
               ))}
             </SpaceBetween>
-          </div>
+          </Box>
         )}
       </SpaceBetween>
     </Container>

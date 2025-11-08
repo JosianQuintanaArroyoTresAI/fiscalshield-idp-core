@@ -101,6 +101,7 @@ def handler(event, context):
         )  # User-provided subdirectory (optional)
         company_number = arguments.get("companyNumber")  # Company isolation
         company_name = arguments.get("companyName")  # Company name for metadata
+        document_type = arguments.get("documentType")  # NEW: User-indicated document type
 
         if not file_name:
             raise ValueError("fileName is required")
@@ -150,6 +151,12 @@ def handler(event, context):
             metadata_fields["x-amz-meta-company-name"] = company_name
             metadata_conditions.append({"x-amz-meta-company-name": company_name})
             logger.info(f"Adding company name metadata: {company_name}")
+
+        # NEW: Add user document type hint if provided
+        if document_type:
+            metadata_fields["x-amz-meta-user-document-type"] = document_type
+            metadata_conditions.append({"x-amz-meta-user-document-type": document_type})
+            logger.info(f"Adding user document type hint: {document_type}")
 
         # Generate a presigned POST URL for uploading
         logger.info(

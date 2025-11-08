@@ -24,8 +24,10 @@ import { Logger } from 'aws-amplify';
 import { checkDataCollectionHealth, lookupCompany, triggerBackgroundResearch } from '../../services/dataCollection';
 import { fetchUserCompanies, registerCompany, deleteCompany } from '../../services/userCompanies';
 import CompanyCard from '../company-card/CompanyCard';
+import GenAIIDPTopNavigation from '../genai-idp-top-navigation';
 import useAppContext from '../../contexts/app';
-import { DOCUMENTS_PATH, COMPANY_INTELLIGENCE_PATH } from '../../routes/constants';
+import { useCompany } from '../../contexts/company';
+import { DOCUMENTS_PATH, COMPANY_HUB_PATH } from '../../routes/constants';
 
 import '@awsui/global-styles/index.css';
 
@@ -34,6 +36,7 @@ const logger = new Logger('CompanySelect');
 const CompanySelect = () => {
   const history = useHistory();
   const { user } = useAppContext();
+  const { selectCompany } = useCompany();
 
   const [companyNumber, setCompanyNumber] = useState('');
   const [companyData, setCompanyData] = useState(null);
@@ -149,16 +152,19 @@ const CompanySelect = () => {
       setResearchStatusMessage(statusMessages[messageIndex]);
     }, 700);
 
-    // Store company selection
+    // Store company selection using CompanyProvider
     const companyContext = {
-      company_number: companyData.company_number,
-      company_name: companyData.company_name,
-      selected_at: new Date().toISOString(),
-      user_id: user?.username || 'unknown',
+      companyNumber: companyData.company_number,
+      companyName: companyData.company_name,
+      companyStatus: companyData.company_status,
+      dateOfCreation: companyData.date_of_creation,
+      registeredOfficeAddress: companyData.registered_office_address,
+      selectedAt: new Date().toISOString(),
+      userId: user?.username || 'unknown',
     };
 
-    localStorage.setItem('active_company', JSON.stringify(companyContext));
-    logger.debug('Company context saved:', companyContext);
+    selectCompany(companyContext);
+    logger.debug('Company context saved via CompanyProvider:', companyContext);
 
     // Register company in UserProfileTable for persistent storage
     try {
@@ -188,7 +194,8 @@ const CompanySelect = () => {
     // Redirect after 2.5 seconds of elegant loading
     setTimeout(() => {
       clearInterval(messageInterval);
-      history.push(DOCUMENTS_PATH);
+      const hubPath = COMPANY_HUB_PATH.replace(':companyNumber', companyData.company_number);
+      history.push(hubPath);
     }, 2500);
   };
 
@@ -311,44 +318,24 @@ const CompanySelect = () => {
   };
 
   // Handle viewing documents for a registered company
-  const handleViewCompanyDocuments = (company) => {
-    logger.info(`Viewing documents for company: ${company.company_number}`);
+  const handleOpenCompany = (company) => {
+    logger.info(`Opening company hub for: ${company.company_number}`);
 
-    // Store company context
+    // Store company context using CompanyProvider
     const companyContext = {
-      company_number: company.company_number,
-      company_name: company.company_name,
-      selected_at: new Date().toISOString(),
-      user_id: user?.username || 'unknown',
-      from_registered: true,
+      companyNumber: company.company_number,
+      companyName: company.company_name,
+      selectedAt: new Date().toISOString(),
+      userId: user?.username || 'unknown',
+      fromRegistered: true,
     };
 
-    localStorage.setItem('active_company', JSON.stringify(companyContext));
-    logger.debug('Company context saved:', companyContext);
+    selectCompany(companyContext);
+    logger.debug('Company context saved via CompanyProvider:', companyContext);
 
-    // Navigate to documents page
-    history.push(DOCUMENTS_PATH);
-  };
-
-  // Handle viewing intelligence for a registered company
-  const handleViewCompanyIntelligence = (company) => {
-    logger.info(`Viewing intelligence for company: ${company.company_number}`);
-
-    // Store company context
-    const companyContext = {
-      company_number: company.company_number,
-      company_name: company.company_name,
-      selected_at: new Date().toISOString(),
-      user_id: user?.username || 'unknown',
-      from_registered: true,
-    };
-
-    localStorage.setItem('active_company', JSON.stringify(companyContext));
-    logger.debug('Company context saved:', companyContext);
-
-    // Navigate to intelligence page
-    const intelligencePath = COMPANY_INTELLIGENCE_PATH.replace(':companyNumber', company.company_number);
-    history.push(intelligencePath);
+    // Navigate to company hub
+    const hubPath = COMPANY_HUB_PATH.replace(':companyNumber', company.company_number);
+    history.push(hubPath);
   };
 
   // Handle deleting a company
@@ -373,203 +360,205 @@ const CompanySelect = () => {
   };
 
   return (
-    <Box padding={{ top: 'xxxl' }}>
-      <SpaceBetween size="l">
-        {/* Registered Companies Section */}
-        {userCompanies && userCompanies.length > 0 && (
+    <>
+      <GenAIIDPTopNavigation />
+      <Box padding={{ top: 'xxxl' }}>
+        <SpaceBetween size="l">
+          {/* Registered Companies Section */}
+          {userCompanies && userCompanies.length > 0 && (
+            <Container
+              header={
+                <Header variant="h2" description="Companies you have registered documents for">
+                  Your Registered Companies
+                </Header>
+              }
+            >
+              {loadingCompanies && (
+                <Box textAlign="center" padding={{ vertical: 'l' }}>
+                  <Spinner size="large" />
+                  <Box variant="p" padding={{ top: 's' }}>
+                    Loading your companies...
+                  </Box>
+                </Box>
+              )}
+              {!loadingCompanies && companiesError && (
+                <Alert type="error" header="Failed to load companies">
+                  {companiesError}
+                </Alert>
+              )}
+              {!loadingCompanies && !companiesError && (
+                <Grid gridDefinition={[{ colspan: 4 }, { colspan: 4 }, { colspan: 4 }]}>
+                  {userCompanies.map((company) => (
+                    <CompanyCard
+                      key={company.company_number}
+                      company={company}
+                      onOpenCompany={handleOpenCompany}
+                      onDelete={handleDeleteCompany}
+                    />
+                  ))}
+                </Grid>
+              )}
+            </Container>
+          )}
+
           <Container
             header={
-              <Header variant="h2" description="Companies you have registered documents for">
-                Your Registered Companies
+              <Header variant="h1" description="Enter a UK Companies House number to get started">
+                {userCompanies && userCompanies.length > 0 ? 'Register Another Company' : 'Select Your Company'}
               </Header>
             }
           >
-            {loadingCompanies && (
-              <Box textAlign="center" padding={{ vertical: 'l' }}>
-                <Spinner size="large" />
-                <Box variant="p" padding={{ top: 's' }}>
-                  Loading your companies...
-                </Box>
-              </Box>
-            )}
-            {!loadingCompanies && companiesError && (
-              <Alert type="error" header="Failed to load companies">
-                {companiesError}
-              </Alert>
-            )}
-            {!loadingCompanies && !companiesError && (
-              <Grid gridDefinition={[{ colspan: 4 }, { colspan: 4 }, { colspan: 4 }]}>
-                {userCompanies.map((company) => (
-                  <CompanyCard
-                    key={company.company_number}
-                    company={company}
-                    onViewDocuments={handleViewCompanyDocuments}
-                    onViewIntelligence={handleViewCompanyIntelligence}
-                    onDelete={handleDeleteCompany}
-                  />
-                ))}
-              </Grid>
-            )}
-          </Container>
-        )}
+            <SpaceBetween size="l">
+              {/* Health Check Status */}
+              {healthCheckComplete && (
+                <Alert
+                  type={isDataCollectionAvailable ? 'success' : 'info'}
+                  statusIconAriaLabel={isDataCollectionAvailable ? 'Success' : 'Info'}
+                  header={isDataCollectionAvailable ? 'Deep research available' : 'Basic search available'}
+                >
+                  {isDataCollectionAvailable
+                    ? 'Background company research is enabled. You will receive a notification when complete.'
+                    : 'Background research is unavailable. You can still select your company and access documents.'}
+                </Alert>
+              )}
 
-        <Container
-          header={
-            <Header variant="h1" description="Enter a UK Companies House number to get started">
-              {userCompanies && userCompanies.length > 0 ? 'Register Another Company' : 'Select Your Company'}
-            </Header>
-          }
-        >
-          <SpaceBetween size="l">
-            {/* Health Check Status */}
-            {healthCheckComplete && (
-              <Alert
-                type={isDataCollectionAvailable ? 'success' : 'info'}
-                statusIconAriaLabel={isDataCollectionAvailable ? 'Success' : 'Info'}
-                header={isDataCollectionAvailable ? 'Deep research available' : 'Basic search available'}
+              {/* Search Form */}
+              <FormField
+                label="Company Number"
+                description="Enter the 8-digit UK Companies House registration number"
+                errorText={error}
               >
-                {isDataCollectionAvailable
-                  ? 'Background company research is enabled. You will receive a notification when complete.'
-                  : 'Background research is unavailable. You can still select your company and access documents.'}
-              </Alert>
-            )}
-
-            {/* Search Form */}
-            <FormField
-              label="Company Number"
-              description="Enter the 8-digit UK Companies House registration number"
-              errorText={error}
-            >
-              <SpaceBetween size="xs" direction="horizontal">
-                <Input
-                  value={companyNumber}
-                  onChange={handleCompanyNumberChange}
-                  onKeyDown={handleKeyPress}
-                  placeholder="12345678"
-                  disabled={isLoading}
-                  inputMode="text"
-                  maxLength={8}
-                />
-                <Button
-                  onClick={handleSearch}
-                  loading={isLoading}
-                  disabled={!companyNumber || companyNumber.length < 6}
-                  variant="primary"
-                >
-                  Search
-                </Button>
-              </SpaceBetween>
-            </FormField>
-
-            {/* Company Details */}
-            {companyData && (
-              <Container header={<Header variant="h2">Company Details</Header>}>
-                <SpaceBetween size="m">
-                  <ColumnLayout columns={2} variant="text-grid">
-                    <div>
-                      <Box variant="awsui-key-label">Company Name</Box>
-                      <div>{companyData.company_name}</div>
-                    </div>
-                    <div>
-                      <Box variant="awsui-key-label">Company Number</Box>
-                      <div>{companyData.company_number}</div>
-                    </div>
-                    <div>
-                      <Box variant="awsui-key-label">Status</Box>
-                      <div>
-                        <StatusIndicator type={companyData.company_status === 'active' ? 'success' : 'warning'}>
-                          {companyData.company_status?.toUpperCase() || 'UNKNOWN'}
-                        </StatusIndicator>
-                      </div>
-                    </div>
-                    <div>
-                      <Box variant="awsui-key-label">Incorporation Date</Box>
-                      <div>{companyData.date_of_creation || 'N/A'}</div>
-                    </div>
-                  </ColumnLayout>
-
-                  {companyData.registered_office_address && (
-                    <div>
-                      <Box variant="awsui-key-label">Registered Office</Box>
-                      <Box variant="p">
-                        {[
-                          companyData.registered_office_address.address_line_1,
-                          companyData.registered_office_address.address_line_2,
-                          companyData.registered_office_address.locality,
-                          companyData.registered_office_address.region,
-                          companyData.registered_office_address.postal_code,
-                        ]
-                          .filter(Boolean)
-                          .join(', ')}
-                      </Box>
-                    </div>
-                  )}
-
-                  {/* Risk Analysis Section */}
-                  {renderRiskAnalysis()}
-
-                  <Box textAlign="center" padding={{ top: 'l' }}>
-                    <SpaceBetween size="m" direction="vertical">
-                      {isResearching ? (
-                        <Box>
-                          <Spinner size="large" />
-                          <Box variant="p" padding={{ top: 's' }} fontSize="body-m" fontWeight="normal">
-                            {researchStatusMessage}
-                          </Box>
-                        </Box>
-                      ) : (
-                        <>
-                          <Button
-                            onClick={handleConfirmAndResearch}
-                            variant="primary"
-                            iconAlign="right"
-                            iconName="arrow-right"
-                          >
-                            Begin Background Research
-                          </Button>
-                          {isDataCollectionAvailable && (
-                            <Box variant="small" color="text-status-inactive">
-                              Our comprehensive verification includes: Corporate structure · Compliance screening ·
-                              Officer verification · Risk assessment
-                            </Box>
-                          )}
-                          {!isDataCollectionAvailable && (
-                            <Box variant="small" color="text-status-warning">
-                              Background research currently unavailable - you can still proceed
-                            </Box>
-                          )}
-                        </>
-                      )}
-                    </SpaceBetween>
-                  </Box>
+                <SpaceBetween size="xs" direction="horizontal">
+                  <Input
+                    value={companyNumber}
+                    onChange={handleCompanyNumberChange}
+                    onKeyDown={handleKeyPress}
+                    placeholder="12345678"
+                    disabled={isLoading}
+                    inputMode="text"
+                    maxLength={8}
+                  />
+                  <Button
+                    onClick={handleSearch}
+                    loading={isLoading}
+                    disabled={!companyNumber || companyNumber.length < 6}
+                    variant="primary"
+                  >
+                    Search
+                  </Button>
                 </SpaceBetween>
-              </Container>
-            )}
-          </SpaceBetween>
-        </Container>
+              </FormField>
 
-        {/* Help Section */}
-        <Container header={<Header variant="h3">Need help finding your company number?</Header>}>
-          <SpaceBetween size="xs">
-            <Box variant="p">You can find your company number on:</Box>
-            <ul>
-              <li>Your certificate of incorporation</li>
-              <li>Official company documents and correspondence</li>
-              <li>
-                The{' '}
-                <a
-                  href="https://find-and-update.company-information.service.gov.uk/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Companies House website
-                </a>
-              </li>
-            </ul>
-          </SpaceBetween>
-        </Container>
-      </SpaceBetween>
-    </Box>
+              {/* Company Details */}
+              {companyData && (
+                <Container header={<Header variant="h2">Company Details</Header>}>
+                  <SpaceBetween size="m">
+                    <ColumnLayout columns={2} variant="text-grid">
+                      <div>
+                        <Box variant="awsui-key-label">Company Name</Box>
+                        <div>{companyData.company_name}</div>
+                      </div>
+                      <div>
+                        <Box variant="awsui-key-label">Company Number</Box>
+                        <div>{companyData.company_number}</div>
+                      </div>
+                      <div>
+                        <Box variant="awsui-key-label">Status</Box>
+                        <div>
+                          <StatusIndicator type={companyData.company_status === 'active' ? 'success' : 'warning'}>
+                            {companyData.company_status?.toUpperCase() || 'UNKNOWN'}
+                          </StatusIndicator>
+                        </div>
+                      </div>
+                      <div>
+                        <Box variant="awsui-key-label">Incorporation Date</Box>
+                        <div>{companyData.date_of_creation || 'N/A'}</div>
+                      </div>
+                    </ColumnLayout>
+
+                    {companyData.registered_office_address && (
+                      <div>
+                        <Box variant="awsui-key-label">Registered Office</Box>
+                        <Box variant="p">
+                          {[
+                            companyData.registered_office_address.address_line_1,
+                            companyData.registered_office_address.address_line_2,
+                            companyData.registered_office_address.locality,
+                            companyData.registered_office_address.region,
+                            companyData.registered_office_address.postal_code,
+                          ]
+                            .filter(Boolean)
+                            .join(', ')}
+                        </Box>
+                      </div>
+                    )}
+
+                    {/* Risk Analysis Section */}
+                    {renderRiskAnalysis()}
+
+                    <Box textAlign="center" padding={{ top: 'l' }}>
+                      <SpaceBetween size="m" direction="vertical">
+                        {isResearching ? (
+                          <Box>
+                            <Spinner size="large" />
+                            <Box variant="p" padding={{ top: 's' }} fontSize="body-m" fontWeight="normal">
+                              {researchStatusMessage}
+                            </Box>
+                          </Box>
+                        ) : (
+                          <>
+                            <Button
+                              onClick={handleConfirmAndResearch}
+                              variant="primary"
+                              iconAlign="right"
+                              iconName="arrow-right"
+                            >
+                              Begin Background Research
+                            </Button>
+                            {isDataCollectionAvailable && (
+                              <Box variant="small" color="text-status-inactive">
+                                Our comprehensive verification includes: Corporate structure · Compliance screening ·
+                                Officer verification · Risk assessment
+                              </Box>
+                            )}
+                            {!isDataCollectionAvailable && (
+                              <Box variant="small" color="text-status-warning">
+                                Background research currently unavailable - you can still proceed
+                              </Box>
+                            )}
+                          </>
+                        )}
+                      </SpaceBetween>
+                    </Box>
+                  </SpaceBetween>
+                </Container>
+              )}
+            </SpaceBetween>
+          </Container>
+
+          {/* Help Section */}
+          <Container header={<Header variant="h3">Need help finding your company number?</Header>}>
+            <SpaceBetween size="xs">
+              <Box variant="p">You can find your company number on:</Box>
+              <ul>
+                <li>Your certificate of incorporation</li>
+                <li>Official company documents and correspondence</li>
+                <li>
+                  The{' '}
+                  <a
+                    href="https://find-and-update.company-information.service.gov.uk/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Companies House website
+                  </a>
+                </li>
+              </ul>
+            </SpaceBetween>
+          </Container>
+        </SpaceBetween>
+      </Box>
+    </>
   );
 };
 

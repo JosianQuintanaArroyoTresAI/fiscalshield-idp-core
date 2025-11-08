@@ -10,5 +10,12 @@ from documents using LLMs.
 
 from idp_common.extraction.models import ExtractedAttribute, ExtractionResult, PageInfo
 from idp_common.extraction.service import ExtractionService
+from idp_common.extraction.chunked_invoice_extractor import ChunkedInvoiceExtractor
 
-__all__ = ["ExtractionService", "ExtractedAttribute", "ExtractionResult", "PageInfo"]
+__all__ = [
+    "ExtractionService",
+    "ExtractedAttribute",
+    "ExtractionResult",
+    "PageInfo",
+    "ChunkedInvoiceExtractor",
+]
