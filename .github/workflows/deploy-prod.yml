@@ -118,11 +118,12 @@ jobs:
             --template-url "$TEMPLATE_URL" \
             --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
             --region eu-central-1 \
-            --parameters ParameterKey=AdminEmail,UsePreviousValue=true \
-                         ParameterKey=IDPPattern,UsePreviousValue=true \
-                         ParameterKey=Pattern2Configuration,UsePreviousValue=true \
-                         ParameterKey=DocumentKnowledgeBase,UsePreviousValue=true \
-                         ParameterKey=AllowedSignUpEmailDomain,ParameterValue="gmail.com,outlook.com,yahoo.com,hotmail.com,icloud.com,protonmail.com,duck.com"
+            --parameters \
+              ParameterKey=AdminEmail,UsePreviousValue=true \
+              ParameterKey=IDPPattern,UsePreviousValue=true \
+              ParameterKey=Pattern2Configuration,UsePreviousValue=true \
+              ParameterKey=DocumentKnowledgeBase,UsePreviousValue=true \
+              ParameterKey=AllowedSignUpEmailDomain,ParameterValue="gmail.com,outlook.com,yahoo.com,hotmail.com,icloud.com,protonmail.com,duck.com"
         else
           echo "🆕 Creating new stack..."
           # For new stack, use the same parameters as your samconfig.toml
