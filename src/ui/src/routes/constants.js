@@ -11,6 +11,7 @@ export const DOCUMENTS_ANALYTICS_PATH = `${DOCUMENTS_PATH}/agents`;
 export const CONFIGURATION_PATH = `${DOCUMENTS_PATH}/config`;
 export const UPLOAD_DOCUMENT_PATH = `${DOCUMENTS_PATH}/upload`;
 export const DISCOVERY_PATH = `${DOCUMENTS_PATH}/discovery`;
+export const COMPANY_HUB_PATH = '/company/:companyNumber/hub';
 export const COMPANY_INTELLIGENCE_PATH = '/company/:companyNumber/intelligence';
 export const COMPANY_ANALYSIS_PATH = '/company/:companyNumber/analysis';
 export const OVERVIEW_DASHBOARD_PATH = '/overview';

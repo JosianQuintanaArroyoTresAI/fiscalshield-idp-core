@@ -16,6 +16,7 @@ import {
 
 import { useCompany } from '../../contexts/company';
 import { COMPANY_SELECT_PATH } from '../../routes/constants';
+import GenAIIDPTopNavigation from '../genai-idp-top-navigation';
 
 import '@awsui/global-styles/index.css';
 
@@ -40,12 +41,15 @@ const InvoiceInsights = () => {
 
   if (loading) {
     return (
-      <Box textAlign="center" padding="xxl">
-        <Spinner size="large" />
-        <Box variant="p" color="text-body-secondary">
-          Loading invoice insights...
+      <>
+        <GenAIIDPTopNavigation />
+        <Box textAlign="center" padding="xxl">
+          <Spinner size="large" />
+          <Box variant="p" color="text-body-secondary">
+            Loading invoice insights...
+          </Box>
         </Box>
-      </Box>
+      </>
     );
   }
 
@@ -114,7 +118,9 @@ const InvoiceInsights = () => {
   );
 
   return (
-    <SpaceBetween size="l">
+    <>
+      <GenAIIDPTopNavigation />
+      <SpaceBetween size="l">
       <BreadcrumbGroup
         items={[
           { text: 'Company Select', href: `#${COMPANY_SELECT_PATH}` },
@@ -150,6 +156,7 @@ const InvoiceInsights = () => {
         ]}
       />
     </SpaceBetween>
+    </>
   );
 };
 

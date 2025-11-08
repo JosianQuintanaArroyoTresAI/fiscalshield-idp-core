@@ -17,6 +17,7 @@ import {
 
 import { useCompany } from '../../contexts/company';
 import { COMPANY_SELECT_PATH } from '../../routes/constants';
+import GenAIIDPTopNavigation from '../genai-idp-top-navigation';
 
 import '@awsui/global-styles/index.css';
 
@@ -40,12 +41,15 @@ const OverviewDashboard = () => {
 
   if (loading) {
     return (
-      <Box textAlign="center" padding="xxl">
-        <Spinner size="large" />
-        <Box variant="p" color="text-body-secondary">
-          Loading overview dashboard...
+      <>
+        <GenAIIDPTopNavigation />
+        <Box textAlign="center" padding="xxl">
+          <Spinner size="large" />
+          <Box variant="p" color="text-body-secondary">
+            Loading overview dashboard...
+          </Box>
         </Box>
-      </Box>
+      </>
     );
   }
 
@@ -54,7 +58,9 @@ const OverviewDashboard = () => {
   }
 
   return (
-    <SpaceBetween size="l">
+    <>
+      <GenAIIDPTopNavigation />
+      <SpaceBetween size="l">
       <BreadcrumbGroup
         items={[
           { text: 'Company Select', href: `#${COMPANY_SELECT_PATH}` },
@@ -139,6 +145,7 @@ const OverviewDashboard = () => {
         </ColumnLayout>
       </Container>
     </SpaceBetween>
+    </>
   );
 };
 

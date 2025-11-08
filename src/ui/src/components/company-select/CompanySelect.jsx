@@ -24,9 +24,10 @@ import { Logger } from 'aws-amplify';
 import { checkDataCollectionHealth, lookupCompany, triggerBackgroundResearch } from '../../services/dataCollection';
 import { fetchUserCompanies, registerCompany, deleteCompany } from '../../services/userCompanies';
 import CompanyCard from '../company-card/CompanyCard';
+import GenAIIDPTopNavigation from '../genai-idp-top-navigation';
 import useAppContext from '../../contexts/app';
 import { useCompany } from '../../contexts/company';
-import { DOCUMENTS_PATH, COMPANY_INTELLIGENCE_PATH, COMPANY_ANALYSIS_PATH } from '../../routes/constants';
+import { DOCUMENTS_PATH, COMPANY_HUB_PATH } from '../../routes/constants';
 
 import '@awsui/global-styles/index.css';
 
@@ -193,7 +194,8 @@ const CompanySelect = () => {
     // Redirect after 2.5 seconds of elegant loading
     setTimeout(() => {
       clearInterval(messageInterval);
-      history.push(DOCUMENTS_PATH);
+      const hubPath = COMPANY_HUB_PATH.replace(':companyNumber', companyData.company_number);
+      history.push(hubPath);
     }, 2500);
   };
 
@@ -316,8 +318,8 @@ const CompanySelect = () => {
   };
 
   // Handle viewing documents for a registered company
-  const handleViewCompanyDocuments = (company) => {
-    logger.info(`Viewing documents for company: ${company.company_number}`);
+  const handleOpenCompany = (company) => {
+    logger.info(`Opening company hub for: ${company.company_number}`);
 
     // Store company context using CompanyProvider
     const companyContext = {
@@ -331,51 +333,12 @@ const CompanySelect = () => {
     selectCompany(companyContext);
     logger.debug('Company context saved via CompanyProvider:', companyContext);
 
-    // Navigate to documents page
-    history.push(DOCUMENTS_PATH);
+    // Navigate to company hub
+    const hubPath = COMPANY_HUB_PATH.replace(':companyNumber', company.company_number);
+    history.push(hubPath);
   };
 
-  // Handle viewing company intelligence
-  const handleViewCompanyIntelligence = (company) => {
-    logger.debug('Viewing intelligence for company:', company.company_number);
-
-    // Set company context using CompanyProvider
-    const companyContext = {
-      companyNumber: company.company_number,
-      companyName: company.company_name,
-      selectedAt: new Date().toISOString(),
-      userId: user?.username || 'unknown',
-      fromRegistered: true,
-    };
-
-    selectCompany(companyContext);
-    logger.debug('Company context saved via CompanyProvider:', companyContext);
-
-    // Navigate to intelligence page
-    const intelligencePath = COMPANY_INTELLIGENCE_PATH.replace(':companyNumber', company.company_number);
-    history.push(intelligencePath);
-  };
-
-  // Handle viewing company analysis
-  const handleViewCompanyAnalysis = (company) => {
-    logger.debug('Viewing analysis for company:', company.company_number);
-
-    // Set company context using CompanyProvider
-    const companyContext = {
-      companyNumber: company.company_number,
-      companyName: company.company_name,
-      selectedAt: new Date().toISOString(),
-      userId: user?.username || 'unknown',
-      fromRegistered: true,
-    };
-
-    selectCompany(companyContext);
-    logger.debug('Company context saved via CompanyProvider:', companyContext);
-
-    // Navigate to analysis page
-    const analysisPath = COMPANY_ANALYSIS_PATH.replace(':companyNumber', company.company_number);
-    history.push(analysisPath);
-  }; // Handle deleting a company
+  // Handle deleting a company
   const handleDeleteCompany = async (company) => {
     logger.info(`Deleting company: ${company.company_number}`);
 
@@ -397,8 +360,10 @@ const CompanySelect = () => {
   };
 
   return (
-    <Box padding={{ top: 'xxxl' }}>
-      <SpaceBetween size="l">
+    <>
+      <GenAIIDPTopNavigation />
+      <Box padding={{ top: 'xxxl' }}>
+        <SpaceBetween size="l">
         {/* Registered Companies Section */}
         {userCompanies && userCompanies.length > 0 && (
           <Container
@@ -427,9 +392,7 @@ const CompanySelect = () => {
                   <CompanyCard
                     key={company.company_number}
                     company={company}
-                    onViewDocuments={handleViewCompanyDocuments}
-                    onViewIntelligence={handleViewCompanyIntelligence}
-                    onViewAnalysis={handleViewCompanyAnalysis}
+                    onOpenCompany={handleOpenCompany}
                     onDelete={handleDeleteCompany}
                   />
                 ))}
@@ -595,6 +558,7 @@ const CompanySelect = () => {
         </Container>
       </SpaceBetween>
     </Box>
+    </>
   );
 };
 

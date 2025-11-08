@@ -29,8 +29,10 @@ import '@awsui/global-styles/index.css';
  * - Director sanctions and PEP screening
  * - Company status and governance checks
  * - AML report generation
+ * 
+ * @param {boolean} embedded - If true, hides breadcrumbs and header (for use within tabs)
  */
-const ClientTakeOnAnalysis = () => {
+const ClientTakeOnAnalysis = ({ embedded = false }) => {
   const history = useHistory();
   const { activeCompany, isCompanySelected } = useCompany();
 
@@ -189,26 +191,44 @@ const ClientTakeOnAnalysis = () => {
 
   return (
     <SpaceBetween size="l">
-      <BreadcrumbGroup
-        items={[
-          { text: 'Company Select', href: `#${COMPANY_SELECT_PATH}` },
-          { text: activeCompany.companyName, href: '#' },
-          { text: 'Client Take-On Analysis', href: '#' },
-        ]}
-        ariaLabel="Breadcrumbs"
-      />
+      {!embedded && (
+        <>
+          <BreadcrumbGroup
+            items={[
+              { text: 'Company Select', href: `#${COMPANY_SELECT_PATH}` },
+              { text: activeCompany.companyName, href: '#' },
+              { text: 'Client Take-On Analysis', href: '#' },
+            ]}
+            ariaLabel="Breadcrumbs"
+          />
 
-      <Header
-        variant="h1"
-        description="Risks identified in client take on process"
-        actions={
-          <Button onClick={() => fetchIntelligence(true)} disabled={loading} iconName="refresh">
-            Refresh Analysis
-          </Button>
-        }
-      >
-        Client Take-On Analysis
-      </Header>
+          <Header
+            variant="h1"
+            description="Risks identified in client take on process"
+            actions={
+              <Button onClick={() => fetchIntelligence(true)} disabled={loading} iconName="refresh">
+                Refresh Analysis
+              </Button>
+            }
+          >
+            Client Take-On Analysis
+          </Header>
+        </>
+      )}
+
+      {embedded && (
+        <Header
+          variant="h2"
+          description="Risks identified in client take on process"
+          actions={
+            <Button onClick={() => fetchIntelligence(true)} disabled={loading} iconName="refresh">
+              Refresh Analysis
+            </Button>
+          }
+        >
+          Client Take-On Analysis
+        </Header>
+      )}
 
       <Container>
         <SpaceBetween size="l">

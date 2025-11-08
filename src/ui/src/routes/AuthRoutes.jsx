@@ -21,6 +21,7 @@ import { OverviewDashboard } from '../components/overview';
 import { ClientTakeOnAnalysis } from '../components/client-takeon';
 import { InvoiceInsights } from '../components/invoice-insights';
 import { BankStatementInsights } from '../components/bank-insights';
+import { CompanyHub } from '../components/company-hub';
 
 import {
   COMPANY_SELECT_PATH,
@@ -30,6 +31,7 @@ import {
   LOGOUT_PATH,
   DOCUMENTS_KB_QUERY_PATH,
   DOCUMENTS_ANALYTICS_PATH,
+  COMPANY_HUB_PATH,
   COMPANY_INTELLIGENCE_PATH,
   COMPANY_ANALYSIS_PATH,
   OVERVIEW_DASHBOARD_PATH,
@@ -56,6 +58,9 @@ const AuthRoutes = ({ redirectParam }) => {
       <Switch>
         <Route exact path={COMPANY_SELECT_PATH}>
           <CompanySelect />
+        </Route>
+        <Route exact path={COMPANY_HUB_PATH}>
+          <CompanyHub />
         </Route>
         <Route exact path={OVERVIEW_DASHBOARD_PATH}>
           <OverviewDashboard />

@@ -16,6 +16,7 @@ import {
   CONFIGURATION_PATH,
   DISCOVERY_PATH,
   COMPANY_SELECT_PATH,
+  COMPANY_HUB_PATH,
   COMPANY_ANALYSIS_PATH,
   OVERVIEW_DASHBOARD_PATH,
   CLIENT_TAKEON_PATH,
@@ -191,7 +192,7 @@ const Navigation = ({ header = documentsNavHeader, items = null, onFollowHandler
 
   return (
     <Switch>
-      <Route path={DOCUMENTS_PATH}>
+      <Route path={[DOCUMENTS_PATH, COMPANY_HUB_PATH, OVERVIEW_DASHBOARD_PATH, CLIENT_TAKEON_PATH, INVOICE_INSIGHTS_PATH, BANK_INSIGHTS_PATH]}>
         <SideNavigation
           items={navigationItems}
           header={header || documentsNavHeader}

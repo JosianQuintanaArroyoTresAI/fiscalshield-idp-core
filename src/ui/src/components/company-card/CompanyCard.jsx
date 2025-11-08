@@ -19,12 +19,10 @@ import { formatCompanyDate, formatRelativeTime } from '../../services/userCompan
  * CompanyCard component to display company information in a card format
  * @param {Object} props
  * @param {Object} props.company - Company data object
- * @param {Function} props.onViewDocuments - Callback when "View Documents" is clicked
- * @param {Function} props.onViewIntelligence - Callback when "View Intelligence" is clicked
- * @param {Function} props.onViewAnalysis - Callback when "View Analysis" is clicked
+ * @param {Function} props.onOpenCompany - Callback when "Open Company" is clicked
  * @param {Function} props.onDelete - Callback when "Delete" is clicked
  */
-const CompanyCard = ({ company, onViewDocuments, onViewIntelligence, onViewAnalysis, onDelete }) => {
+const CompanyCard = ({ company, onOpenCompany, onDelete }) => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const {
     company_number: companyNumber,
@@ -35,21 +33,9 @@ const CompanyCard = ({ company, onViewDocuments, onViewIntelligence, onViewAnaly
     document_types: documentTypes = [],
   } = company;
 
-  const handleViewDocuments = () => {
-    if (onViewDocuments) {
-      onViewDocuments(company);
-    }
-  };
-
-  const handleViewIntelligence = () => {
-    if (onViewIntelligence) {
-      onViewIntelligence(company);
-    }
-  };
-
-  const handleViewAnalysis = () => {
-    if (onViewAnalysis) {
-      onViewAnalysis(company);
+  const handleOpenCompany = () => {
+    if (onOpenCompany) {
+      onOpenCompany(company);
     }
   };
 
@@ -91,14 +77,8 @@ const CompanyCard = ({ company, onViewDocuments, onViewIntelligence, onViewAnaly
                 variant="icon"
                 ariaLabel="Company actions"
               />
-              <Button onClick={handleViewIntelligence} iconAlign="right" iconName="status-info">
-                View Intelligence
-              </Button>
-              <Button onClick={handleViewAnalysis} iconAlign="right" iconName="view-full">
-                View Analysis
-              </Button>
-              <Button variant="primary" onClick={handleViewDocuments} iconAlign="right" iconName="arrow-right">
-                View Documents
+              <Button variant="primary" onClick={handleOpenCompany} iconAlign="right" iconName="arrow-right">
+                Open Company
               </Button>
             </SpaceBetween>
           </Box>
@@ -195,14 +175,13 @@ CompanyCard.propTypes = {
     last_activity: PropTypes.number,
     document_types: PropTypes.arrayOf(PropTypes.string),
   }).isRequired,
-  onViewDocuments: PropTypes.func,
-  onViewIntelligence: PropTypes.func,
-  onViewAnalysis: PropTypes.func,
+  onOpenCompany: PropTypes.func,
   onDelete: PropTypes.func,
 };
 
 CompanyCard.defaultProps = {
-  onViewDocuments: null,
+  onOpenCompany: null,
+  onDelete: null,
 };
 
 export default CompanyCard;
