@@ -1910,8 +1910,8 @@ def write_invoices_to_dynamodb(
                 'InvoiceId': invoice_id,
                 'SectionId': section_id,
                 'ClientId': client_id,
-                'CompanyNumber': company_number or 'unknown',
-                'CompanyName': company_name or 'Unknown Company',
+                'CompanyNumber': company_number or 'unknown',  # User's company number from frontend
+                'CompanyName': company_name or 'Unknown Company',  # User's company name from frontend
                 'DocumentType': 'INVOICE',
 
                 # Invoice-specific fields
@@ -1920,9 +1920,8 @@ def write_invoices_to_dynamodb(
                 'ReferenceNumber': invoice_data['reference_number'],
                 'InvoiceDate': invoice_data['invoice_date'],
                 'DueDate': invoice_data['due_date'],
-                'SupplierName': invoice_data['supplier_name'],
-                'VendorName': invoice_data['vendor_name'],
-                'CompanyName': invoice_data['supplier_name'],  # For GSI3 queries
+                'SupplierName': invoice_data['supplier_name'],  # Extracted supplier from invoice
+                'VendorName': invoice_data['vendor_name'],  # Alias for SupplierName
                 'SupplierAddress': invoice_data['supplier_address'],
                 'TotalAmount': invoice_data['total_amount'],
                 'Currency': invoice_data['currency'],

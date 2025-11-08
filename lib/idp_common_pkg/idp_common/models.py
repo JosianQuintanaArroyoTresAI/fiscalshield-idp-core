@@ -261,6 +261,8 @@ class Document:
             "input_key": self.input_key,
             "output_bucket": self.output_bucket,
             "user_id": self.user_id,
+            "company_number": self.company_number,  # Company isolation
+            "company_name": self.company_name,  # Company display name
             "user_document_type": self.user_document_type,  # NEW
             "status": self.status.value,
             "initial_event_time": self.initial_event_time,
@@ -330,6 +332,8 @@ class Document:
             input_key=data.get("input_key"),
             output_bucket=data.get("output_bucket"),
             user_id=user_id,
+            company_number=data.get("company_number"),  # Company isolation
+            company_name=data.get("company_name"),  # Company display name
             user_document_type=data.get("user_document_type"),  # NEW
             num_pages=int(data.get("num_pages", 0)),  # Ensure num_pages is integer
             initial_event_time=data.get("initial_event_time"),
