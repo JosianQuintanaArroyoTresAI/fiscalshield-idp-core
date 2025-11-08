@@ -2,16 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import React, { useState, useEffect } from 'react';
 import { useHistory } from 'react-router-dom';
-import {
-  Container,
-  Header,
-  SpaceBetween,
-  Alert,
-  Box,
-  Spinner,
-  BreadcrumbGroup,
-  Button,
-} from '@awsui/components-react';
+import { Container, Header, SpaceBetween, Alert, Box, Spinner, BreadcrumbGroup, Button } from '@awsui/components-react';
 
 import { useCompany } from '../../contexts/company';
 import { COMPANY_SELECT_PATH } from '../../routes/constants';
@@ -21,7 +12,7 @@ import '@awsui/global-styles/index.css';
 
 /**
  * Client Take-On Analysis Component
- * 
+ *
  * Provides comprehensive analysis for new client onboarding including:
  * - Overall risk assessment
  * - Company adverse media screening
@@ -32,7 +23,7 @@ import '@awsui/global-styles/index.css';
 const ClientTakeOnAnalysis = () => {
   const history = useHistory();
   const { activeCompany, isCompanySelected } = useCompany();
-  
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [generatingReport, setGeneratingReport] = useState(false);
@@ -55,7 +46,7 @@ const ClientTakeOnAnalysis = () => {
   const fetchIntelligence = async (forceRefresh = false) => {
     setLoading(true);
     setError(null);
-    
+
     try {
       const data = await fetchCompanyIntelligence(activeCompany.companyNumber, forceRefresh);
       setIntelligence(data);
@@ -84,71 +75,74 @@ const ClientTakeOnAnalysis = () => {
   };
 
   // Risk Assessment Card Component
-  const RiskCard = ({ 
-    title, 
-    value, 
-    subtitle, 
-    status,
-    statusColor,
-    large = false 
-  }) => {
+  const RiskCard = ({ title, value, subtitle, status, statusColor, large = false }) => {
     return (
-      <div style={{
-        backgroundColor: 'white',
-        border: '1px solid #e5e7eb',
-        borderRadius: '12px',
-        padding: large ? '32px 24px' : '24px 20px',
-        height: large ? '220px' : '180px',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        alignItems: 'center',
-        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-        textAlign: 'center'
-      }}>
+      <div
+        style={{
+          backgroundColor: 'white',
+          border: '1px solid #e5e7eb',
+          borderRadius: '12px',
+          padding: large ? '32px 24px' : '24px 20px',
+          height: large ? '220px' : '180px',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          alignItems: 'center',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+          textAlign: 'center',
+        }}
+      >
         {/* Title */}
-        <div style={{
-          fontSize: '18px',
-          fontWeight: '600',
-          color: '#374151',
-          marginBottom: '16px'
-        }}>
+        <div
+          style={{
+            fontSize: '18px',
+            fontWeight: '600',
+            color: '#374151',
+            marginBottom: '16px',
+          }}
+        >
           {title}
         </div>
-        
+
         {/* Main Value */}
-        <div style={{
-          fontSize: large ? '32px' : '28px',
-          fontWeight: 'bold',
-          color: '#2c7873',
-          marginBottom: '12px',
-          lineHeight: '1.1'
-        }}>
+        <div
+          style={{
+            fontSize: large ? '32px' : '28px',
+            fontWeight: 'bold',
+            color: '#2c7873',
+            marginBottom: '12px',
+            lineHeight: '1.1',
+          }}
+        >
           {value}
         </div>
-        
+
         {/* Subtitle */}
         {subtitle && (
-          <div style={{
-            fontSize: '14px',
-            color: '#6b7280',
-            marginBottom: '12px'
-          }}>
+          <div
+            style={{
+              fontSize: '14px',
+              color: '#6b7280',
+              marginBottom: '12px',
+            }}
+          >
             {subtitle}
           </div>
         )}
-        
+
         {/* Status Badge */}
-        <div style={{
-          padding: '6px 16px',
-          borderRadius: '20px',
-          fontSize: '12px',
-          fontWeight: '600',
-          color: 'white',
-          backgroundColor: statusColor,
-          textTransform: 'uppercase',
-          letterSpacing: '0.5px'
-        }}>
+        <div
+          style={{
+            padding: '6px 16px',
+            borderRadius: '20px',
+            fontSize: '12px',
+            fontWeight: '600',
+            color: 'white',
+            backgroundColor: statusColor,
+            textTransform: 'uppercase',
+            letterSpacing: '0.5px',
+          }}
+        >
           {status}
         </div>
       </div>
@@ -198,11 +192,7 @@ const ClientTakeOnAnalysis = () => {
         variant="h1"
         description="Risks identified in client take on process"
         actions={
-          <Button
-            onClick={() => fetchIntelligence(true)}
-            disabled={loading}
-            iconName="refresh"
-          >
+          <Button onClick={() => fetchIntelligence(true)} disabled={loading} iconName="refresh">
             Refresh Analysis
           </Button>
         }
@@ -219,18 +209,13 @@ const ClientTakeOnAnalysis = () => {
           )}
 
           {reportSuccess && (
-            <Alert 
-              type="success" 
-              dismissible 
+            <Alert
+              type="success"
+              dismissible
               onDismiss={() => setReportSuccess(null)}
               action={
                 reportSuccess.downloadUrl && (
-                  <Button
-                    href={reportSuccess.downloadUrl}
-                    iconAlign="right"
-                    iconName="external"
-                    target="_blank"
-                  >
+                  <Button href={reportSuccess.downloadUrl} iconAlign="right" iconName="external" target="_blank">
                     Download Report
                   </Button>
                 )
@@ -242,22 +227,28 @@ const ClientTakeOnAnalysis = () => {
 
           {/* Company Name Section with Accent Bar */}
           {activeCompany && !loading && (
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              marginBottom: '24px'
-            }}>
-              <div style={{
-                width: '4px',
-                height: '40px',
-                backgroundColor: '#2c7873',
-                marginRight: '16px'
-              }} />
-              <div style={{
-                fontSize: '24px',
-                fontWeight: '600',
-                color: '#2c7873'
-              }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                marginBottom: '24px',
+              }}
+            >
+              <div
+                style={{
+                  width: '4px',
+                  height: '40px',
+                  backgroundColor: '#2c7873',
+                  marginRight: '16px',
+                }}
+              />
+              <div
+                style={{
+                  fontSize: '24px',
+                  fontWeight: '600',
+                  color: '#2c7873',
+                }}
+              >
                 {activeCompany.companyName}
               </div>
             </div>
@@ -287,68 +278,57 @@ const ClientTakeOnAnalysis = () => {
                 </Container>
 
                 {/* Screening Cards - 3 Column Grid */}
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-                  gap: '24px'
-                }}>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+                    gap: '24px',
+                  }}
+                >
                   {/* Company Adverse Media */}
                   <RiskCard
                     title="Company Adverse Media"
                     value={intelligence.reputational?.adverse_media_count || 0}
                     subtitle="Adverse Findings"
-                    status={
-                      intelligence.reputational?.has_adverse_media 
-                        ? 'REVIEW REQUIRED' 
-                        : 'CLEAN'
-                    }
+                    status={intelligence.reputational?.has_adverse_media ? 'REVIEW REQUIRED' : 'CLEAN'}
                     statusColor={getStatusColor(
                       intelligence.reputational?.has_adverse_media,
-                      intelligence.reputational?.adverse_media_risk === 'high'
+                      intelligence.reputational?.adverse_media_risk === 'high',
                     )}
                   />
-                  
+
                   {/* Director Sanctions/PEP */}
                   <RiskCard
                     title="Director Screening"
                     value={
-                      (intelligence.aml?.sanctioned_directors?.length || 0) + 
+                      (intelligence.aml?.sanctioned_directors?.length || 0) +
                       (intelligence.aml?.pep_directors?.length || 0)
                     }
                     subtitle="Sanctions & PEP Findings"
-                    status={
-                      intelligence.aml?.requires_enhanced_dd 
-                        ? 'ENHANCED DD REQUIRED' 
-                        : 'CLEAN'
-                    }
+                    status={intelligence.aml?.requires_enhanced_dd ? 'ENHANCED DD REQUIRED' : 'CLEAN'}
                     statusColor={getStatusColor(
-                      intelligence.aml?.sanctioned_directors?.length > 0 || 
-                      intelligence.aml?.pep_directors?.length > 0,
-                      intelligence.aml?.requires_enhanced_dd
+                      intelligence.aml?.sanctioned_directors?.length > 0 || intelligence.aml?.pep_directors?.length > 0,
+                      intelligence.aml?.requires_enhanced_dd,
                     )}
                   />
-                  
+
                   {/* Company Status/Governance */}
                   <RiskCard
                     title="Company Status"
                     value={intelligence.governance?.company_status || 'Unknown'}
                     subtitle={`${intelligence.governance?.active_officers || 0} Active Officers`}
                     status={
-                      intelligence.governance?.company_status === 'active' 
-                        ? 'ACTIVE' 
+                      intelligence.governance?.company_status === 'active'
+                        ? 'ACTIVE'
                         : intelligence.governance?.company_status?.toUpperCase() || 'UNKNOWN'
                     }
-                    statusColor={
-                      intelligence.governance?.company_status === 'active' 
-                        ? '#28a745' 
-                        : '#fd7e14'
-                    }
+                    statusColor={intelligence.governance?.company_status === 'active' ? '#28a745' : '#fd7e14'}
                   />
                 </div>
 
                 {/* Generate AML Report Button */}
                 <Box textAlign="center" margin={{ top: 'xl' }}>
-                  <Button 
+                  <Button
                     variant="primary"
                     onClick={handleGenerateReport}
                     disabled={generatingReport}
@@ -362,9 +342,7 @@ const ClientTakeOnAnalysis = () => {
                 {/* Additional Intelligence Insights */}
                 {intelligence.insights && (
                   <Container header={<Header variant="h2">AI-Generated Insights</Header>}>
-                    <Box variant="p">
-                      {intelligence.insights}
-                    </Box>
+                    <Box variant="p">{intelligence.insights}</Box>
                   </Container>
                 )}
               </SpaceBetween>
@@ -372,8 +350,7 @@ const ClientTakeOnAnalysis = () => {
           ) : (
             <Box textAlign="center" padding={{ vertical: 'xl' }}>
               <Box variant="p" color="text-body-secondary">
-                No intelligence data available for this company. 
-                Please ensure company data has been collected first.
+                No intelligence data available for this company. Please ensure company data has been collected first.
               </Box>
             </Box>
           )}
