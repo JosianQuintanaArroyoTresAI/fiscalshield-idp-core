@@ -8,7 +8,6 @@ import {
   SpaceBetween,
   Alert,
   Box,
-  Tabs,
   Spinner,
   BreadcrumbGroup,
   Button,
@@ -16,15 +15,29 @@ import {
 
 import { useCompany } from '../../contexts/company';
 import { COMPANY_SELECT_PATH } from '../../routes/constants';
+import { fetchCompanyIntelligence, generateAMLReport } from '../../services/analysisStack';
 
 import '@awsui/global-styles/index.css';
 
+/**
+ * Client Take-On Analysis Component
+ * 
+ * Provides comprehensive analysis for new client onboarding including:
+ * - Overall risk assessment
+ * - Company adverse media screening
+ * - Director sanctions and PEP screening
+ * - Company status and governance checks
+ * - AML report generation
+ */
 const ClientTakeOnAnalysis = () => {
   const history = useHistory();
   const { activeCompany, isCompanySelected } = useCompany();
-
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('aml');
+  
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [generatingReport, setGeneratingReport] = useState(false);
+  const [reportSuccess, setReportSuccess] = useState(null);
+  const [intelligence, setIntelligence] = useState(null);
 
   useEffect(() => {
     // Redirect if no company selected
@@ -33,79 +46,142 @@ const ClientTakeOnAnalysis = () => {
       return;
     }
 
-    // Simulate loading
-    const timer = setTimeout(() => setLoading(false), 500);
-    return () => clearTimeout(timer);
-  }, [isCompanySelected, history]);
+    // Fetch intelligence data
+    if (activeCompany?.companyNumber) {
+      fetchIntelligence();
+    }
+  }, [isCompanySelected, activeCompany?.companyNumber, history]);
 
-  if (loading) {
+  const fetchIntelligence = async (forceRefresh = false) => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const data = await fetchCompanyIntelligence(activeCompany.companyNumber, forceRefresh);
+      setIntelligence(data);
+    } catch (err) {
+      console.error('Error fetching company intelligence:', err);
+      setError(err.message || 'Failed to load company intelligence');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGenerateReport = async () => {
+    setGeneratingReport(true);
+    setReportSuccess(null);
+    setError(null);
+
+    try {
+      const result = await generateAMLReport(activeCompany.companyNumber);
+      setReportSuccess(result);
+    } catch (err) {
+      console.error('Error generating AML report:', err);
+      setError(err.message || 'Failed to generate AML report');
+    } finally {
+      setGeneratingReport(false);
+    }
+  };
+
+  // Risk Assessment Card Component
+  const RiskCard = ({ 
+    title, 
+    value, 
+    subtitle, 
+    status,
+    statusColor,
+    large = false 
+  }) => {
     return (
-      <Box textAlign="center" padding="xxl">
-        <Spinner size="large" />
-        <Box variant="p" color="text-body-secondary">
-          Loading client take-on analysis...
-        </Box>
-      </Box>
+      <div style={{
+        backgroundColor: 'white',
+        border: '1px solid #e5e7eb',
+        borderRadius: '12px',
+        padding: large ? '32px 24px' : '24px 20px',
+        height: large ? '220px' : '180px',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
+        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+        textAlign: 'center'
+      }}>
+        {/* Title */}
+        <div style={{
+          fontSize: '18px',
+          fontWeight: '600',
+          color: '#374151',
+          marginBottom: '16px'
+        }}>
+          {title}
+        </div>
+        
+        {/* Main Value */}
+        <div style={{
+          fontSize: large ? '32px' : '28px',
+          fontWeight: 'bold',
+          color: '#2c7873',
+          marginBottom: '12px',
+          lineHeight: '1.1'
+        }}>
+          {value}
+        </div>
+        
+        {/* Subtitle */}
+        {subtitle && (
+          <div style={{
+            fontSize: '14px',
+            color: '#6b7280',
+            marginBottom: '12px'
+          }}>
+            {subtitle}
+          </div>
+        )}
+        
+        {/* Status Badge */}
+        <div style={{
+          padding: '6px 16px',
+          borderRadius: '20px',
+          fontSize: '12px',
+          fontWeight: '600',
+          color: 'white',
+          backgroundColor: statusColor,
+          textTransform: 'uppercase',
+          letterSpacing: '0.5px'
+        }}>
+          {status}
+        </div>
+      </div>
     );
-  }
+  };
+
+  // Get status color based on risk level or findings
+  const getRiskColor = (riskLevel) => {
+    switch (riskLevel?.toUpperCase()) {
+      case 'HIGH':
+      case 'CRITICAL':
+        return '#dc3545';
+      case 'MEDIUM':
+      case 'ELEVATED':
+        return '#fd7e14';
+      case 'LOW':
+      case 'MINIMAL':
+        return '#28a745';
+      default:
+        return '#6c757d';
+    }
+  };
+
+  const getStatusColor = (hasFindings, requiresReview) => {
+    if (requiresReview || hasFindings) {
+      return '#fd7e14'; // Orange for review required
+    }
+    return '#28a745'; // Green for clean
+  };
 
   if (!activeCompany) {
     return null;
   }
-
-  const renderAMLTab = () => (
-    <Container>
-      <Alert type="info" header="AML Analysis Not Available">
-        <SpaceBetween size="s">
-          <Box>Anti-Money Laundering analysis will be available once integrated with the Analysis Stack.</Box>
-          <Box variant="small">This will include:</Box>
-          <ul>
-            <li>Sanctions screening results</li>
-            <li>PEP (Politically Exposed Persons) checks</li>
-            <li>Adverse media monitoring</li>
-            <li>Ultimate Beneficial Owner (UBO) identification</li>
-            <li>Risk scoring and recommendations</li>
-          </ul>
-        </SpaceBetween>
-      </Alert>
-    </Container>
-  );
-
-  const renderKYCTab = () => (
-    <Container>
-      <Alert type="info" header="KYC Verification Not Available">
-        <SpaceBetween size="s">
-          <Box>Know Your Customer verification will be available once integrated with the Analysis Stack.</Box>
-          <Box variant="small">This will include:</Box>
-          <ul>
-            <li>Identity verification status</li>
-            <li>Document verification (ID, proof of address)</li>
-            <li>Business verification</li>
-            <li>Source of funds documentation</li>
-            <li>Enhanced due diligence where required</li>
-          </ul>
-        </SpaceBetween>
-      </Alert>
-    </Container>
-  );
-
-  const renderComplianceTab = () => (
-    <Container>
-      <Alert type="info" header="Compliance Check Not Available">
-        <SpaceBetween size="s">
-          <Box>Compliance verification will be available once integrated with Companies House data.</Box>
-          <Box variant="small">This will include:</Box>
-          <ul>
-            <li>Filing compliance history</li>
-            <li>Director disqualifications check</li>
-            <li>Insolvency history</li>
-            <li>Charges and mortgages</li>
-            <li>Company status verification</li>
-          </ul>
-        </SpaceBetween>
-      </Alert>
-    </Container>
-  );
 
   return (
     <SpaceBetween size="l">
@@ -120,37 +196,189 @@ const ClientTakeOnAnalysis = () => {
 
       <Header
         variant="h1"
-        description={`Company Number: ${activeCompany.companyNumber}`}
+        description="Risks identified in client take on process"
         actions={
-          <Button variant="primary" disabled>
-            Generate Report
+          <Button
+            onClick={() => fetchIntelligence(true)}
+            disabled={loading}
+            iconName="refresh"
+          >
+            Refresh Analysis
           </Button>
         }
       >
-        Client Take-On Analysis: {activeCompany.companyName}
+        Client Take-On Analysis
       </Header>
 
-      <Tabs
-        activeTabId={activeTab}
-        onChange={({ detail }) => setActiveTab(detail.activeTabId)}
-        tabs={[
-          {
-            id: 'aml',
-            label: 'AML Screening',
-            content: renderAMLTab(),
-          },
-          {
-            id: 'kyc',
-            label: 'KYC Verification',
-            content: renderKYCTab(),
-          },
-          {
-            id: 'compliance',
-            label: 'Compliance Check',
-            content: renderComplianceTab(),
-          },
-        ]}
-      />
+      <Container>
+        <SpaceBetween size="l">
+          {error && (
+            <Alert type="error" dismissible onDismiss={() => setError(null)}>
+              {error}
+            </Alert>
+          )}
+
+          {reportSuccess && (
+            <Alert 
+              type="success" 
+              dismissible 
+              onDismiss={() => setReportSuccess(null)}
+              action={
+                reportSuccess.downloadUrl && (
+                  <Button
+                    href={reportSuccess.downloadUrl}
+                    iconAlign="right"
+                    iconName="external"
+                    target="_blank"
+                  >
+                    Download Report
+                  </Button>
+                )
+              }
+            >
+              {reportSuccess.message || 'AML report generated successfully'}
+            </Alert>
+          )}
+
+          {/* Company Name Section with Accent Bar */}
+          {activeCompany && !loading && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              marginBottom: '24px'
+            }}>
+              <div style={{
+                width: '4px',
+                height: '40px',
+                backgroundColor: '#2c7873',
+                marginRight: '16px'
+              }} />
+              <div style={{
+                fontSize: '24px',
+                fontWeight: '600',
+                color: '#2c7873'
+              }}>
+                {activeCompany.companyName}
+              </div>
+            </div>
+          )}
+
+          {loading ? (
+            <Box textAlign="center" padding={{ top: 'xl', bottom: 'xl' }}>
+              <Spinner size="large" />
+              <Box variant="p" padding={{ top: 's' }}>
+                Loading client take-on analysis...
+              </Box>
+            </Box>
+          ) : intelligence ? (
+            <>
+              {/* Risk Assessment Cards */}
+              <SpaceBetween size="l">
+                {/* Overall Risk Card - Full Width */}
+                <Container>
+                  <RiskCard
+                    title="Overall Risk Assessment"
+                    value={intelligence.risk_assessment?.risk_level || 'Unknown'}
+                    subtitle={`Risk Score: ${intelligence.risk_assessment?.overall_risk_score || 'N/A'}`}
+                    status={intelligence.risk_assessment?.risk_level || 'Unknown'}
+                    statusColor={getRiskColor(intelligence.risk_assessment?.risk_level)}
+                    large={true}
+                  />
+                </Container>
+
+                {/* Screening Cards - 3 Column Grid */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+                  gap: '24px'
+                }}>
+                  {/* Company Adverse Media */}
+                  <RiskCard
+                    title="Company Adverse Media"
+                    value={intelligence.reputational?.adverse_media_count || 0}
+                    subtitle="Adverse Findings"
+                    status={
+                      intelligence.reputational?.has_adverse_media 
+                        ? 'REVIEW REQUIRED' 
+                        : 'CLEAN'
+                    }
+                    statusColor={getStatusColor(
+                      intelligence.reputational?.has_adverse_media,
+                      intelligence.reputational?.adverse_media_risk === 'high'
+                    )}
+                  />
+                  
+                  {/* Director Sanctions/PEP */}
+                  <RiskCard
+                    title="Director Screening"
+                    value={
+                      (intelligence.aml?.sanctioned_directors?.length || 0) + 
+                      (intelligence.aml?.pep_directors?.length || 0)
+                    }
+                    subtitle="Sanctions & PEP Findings"
+                    status={
+                      intelligence.aml?.requires_enhanced_dd 
+                        ? 'ENHANCED DD REQUIRED' 
+                        : 'CLEAN'
+                    }
+                    statusColor={getStatusColor(
+                      intelligence.aml?.sanctioned_directors?.length > 0 || 
+                      intelligence.aml?.pep_directors?.length > 0,
+                      intelligence.aml?.requires_enhanced_dd
+                    )}
+                  />
+                  
+                  {/* Company Status/Governance */}
+                  <RiskCard
+                    title="Company Status"
+                    value={intelligence.governance?.company_status || 'Unknown'}
+                    subtitle={`${intelligence.governance?.active_officers || 0} Active Officers`}
+                    status={
+                      intelligence.governance?.company_status === 'active' 
+                        ? 'ACTIVE' 
+                        : intelligence.governance?.company_status?.toUpperCase() || 'UNKNOWN'
+                    }
+                    statusColor={
+                      intelligence.governance?.company_status === 'active' 
+                        ? '#28a745' 
+                        : '#fd7e14'
+                    }
+                  />
+                </div>
+
+                {/* Generate AML Report Button */}
+                <Box textAlign="center" margin={{ top: 'xl' }}>
+                  <Button 
+                    variant="primary"
+                    onClick={handleGenerateReport}
+                    disabled={generatingReport}
+                    loading={generatingReport}
+                    iconName="download"
+                  >
+                    {generatingReport ? 'Generating Report...' : 'Generate Full AML Report'}
+                  </Button>
+                </Box>
+
+                {/* Additional Intelligence Insights */}
+                {intelligence.insights && (
+                  <Container header={<Header variant="h2">AI-Generated Insights</Header>}>
+                    <Box variant="p">
+                      {intelligence.insights}
+                    </Box>
+                  </Container>
+                )}
+              </SpaceBetween>
+            </>
+          ) : (
+            <Box textAlign="center" padding={{ vertical: 'xl' }}>
+              <Box variant="p" color="text-body-secondary">
+                No intelligence data available for this company. 
+                Please ensure company data has been collected first.
+              </Box>
+            </Box>
+          )}
+        </SpaceBetween>
+      </Container>
     </SpaceBetween>
   );
 };
