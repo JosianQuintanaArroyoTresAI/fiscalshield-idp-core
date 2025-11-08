@@ -114,39 +114,48 @@ jobs:
         
         if [ "${{ steps.check_stack.outputs.stack_exists }}" == "true" ]; then
           echo "🔄 Updating existing stack..."
+          PARAM_FILE=$(mktemp)
+          printf '%s\n' \
+            '[' \
+            "  {\"ParameterKey\": \"AdminEmail\", \"UsePreviousValue\": true}," \
+            "  {\"ParameterKey\": \"IDPPattern\", \"UsePreviousValue\": true}," \
+            "  {\"ParameterKey\": \"Pattern2Configuration\", \"UsePreviousValue\": true}," \
+            "  {\"ParameterKey\": \"DocumentKnowledgeBase\", \"UsePreviousValue\": true}," \
+            "  {\"ParameterKey\": \"AllowedSignUpEmailDomain\", \"ParameterValue\": \"${ALLOWED_DOMAINS}\"}" \
+            ']' > "$PARAM_FILE"
           aws cloudformation update-stack \
             --stack-name fiscalshield-idp-prod \
             --template-url "$TEMPLATE_URL" \
             --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
             --region eu-central-1 \
-            --parameters \
-              "ParameterKey=AdminEmail,UsePreviousValue=true" \
-              "ParameterKey=IDPPattern,UsePreviousValue=true" \
-              "ParameterKey=Pattern2Configuration,UsePreviousValue=true" \
-              "ParameterKey=DocumentKnowledgeBase,UsePreviousValue=true" \
-              "ParameterKey=AllowedSignUpEmailDomain,ParameterValue=${ALLOWED_DOMAINS}"
+            --parameters file://$PARAM_FILE
+          rm -f "$PARAM_FILE"
         else
           echo "🆕 Creating new stack..."
           ALLOWED_DOMAINS_NEW="gmail.com,outlook.com,yahoo.com,hotmail.com,icloud.com,protonmail.com,duck.com,tresai.ai"
-          # For new stack, use the same parameters as your samconfig.toml
+          PARAM_FILE=$(mktemp)
+          printf '%s\n' \
+            '[' \
+            "  {\"ParameterKey\": \"AdminEmail\", \"ParameterValue\": \"josian@protonmail.com\"}," \
+            "  {\"ParameterKey\": \"IDPPattern\", \"ParameterValue\": \"Pattern2 - Packet processing with Textract and Bedrock\"}," \
+            "  {\"ParameterKey\": \"Pattern1Configuration\", \"ParameterValue\": \"lending-package-sample\"}," \
+            "  {\"ParameterKey\": \"Pattern2Configuration\", \"ParameterValue\": \"rvl-cdip-package-sample\"}," \
+            "  {\"ParameterKey\": \"Pattern3Configuration\", \"ParameterValue\": \"rvl-cdip-package-sample\"}," \
+            "  {\"ParameterKey\": \"DocumentKnowledgeBase\", \"ParameterValue\": \"DISABLED\"}," \
+            "  {\"ParameterKey\": \"AllowedSignUpEmailDomain\", \"ParameterValue\": \"${ALLOWED_DOMAINS_NEW}\"}," \
+            "  {\"ParameterKey\": \"EnableHITL\", \"ParameterValue\": \"true\"}," \
+            "  {\"ParameterKey\": \"LogLevel\", \"ParameterValue\": \"INFO\"}," \
+            "  {\"ParameterKey\": \"LogRetentionDays\", \"ParameterValue\": \"30\"}," \
+            "  {\"ParameterKey\": \"DataRetentionInDays\", \"ParameterValue\": \"30\"}," \
+            "  {\"ParameterKey\": \"MaxConcurrentWorkflows\", \"ParameterValue\": \"10\"}" \
+            ']' > "$PARAM_FILE"
           aws cloudformation create-stack \
             --stack-name fiscalshield-idp-prod \
             --template-url "$TEMPLATE_URL" \
             --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
             --region eu-central-1 \
-            --parameters \
-              "ParameterKey=AdminEmail,ParameterValue=josian@protonmail.com" \
-              "ParameterKey=IDPPattern,ParameterValue=Pattern2 - Packet processing with Textract and Bedrock" \
-              "ParameterKey=Pattern1Configuration,ParameterValue=lending-package-sample" \
-              "ParameterKey=Pattern2Configuration,ParameterValue=rvl-cdip-package-sample" \
-              "ParameterKey=Pattern3Configuration,ParameterValue=rvl-cdip-package-sample" \
-              "ParameterKey=DocumentKnowledgeBase,ParameterValue=DISABLED" \
-              "ParameterKey=AllowedSignUpEmailDomain,ParameterValue=${ALLOWED_DOMAINS_NEW}" \
-              "ParameterKey=EnableHITL,ParameterValue=true" \
-              "ParameterKey=LogLevel,ParameterValue=INFO" \
-              "ParameterKey=LogRetentionDays,ParameterValue=30" \
-              "ParameterKey=DataRetentionInDays,ParameterValue=30" \
-              "ParameterKey=MaxConcurrentWorkflows,ParameterValue=10"
+            --parameters file://$PARAM_FILE
+          rm -f "$PARAM_FILE"
         fi
     
     - name: Wait for deployment to complete
