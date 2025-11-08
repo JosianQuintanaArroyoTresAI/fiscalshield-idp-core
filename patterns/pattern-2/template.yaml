@@ -1736,6 +1736,7 @@ Resources:
           CHUNK_SIZE: "60000"              # 60k chars = ~15k tokens (optimized for Claude 3.5 context)
           OVERLAP_SIZE: "5000"             # 5k overlap covers 3-page invoices, minimal duplicates (8%)
           USE_PROMPT_CACHING: "false"      # Disabled - current Bedrock model doesn't support prompt caching
+          USE_SEMANTIC_CHUNKING: "true"    # Enabled - UK invoice boundary detection for better extraction accuracy
       LoggingConfig:
         LogGroup: !Ref InvoiceExtractionFunctionLogGroup
       Policies:

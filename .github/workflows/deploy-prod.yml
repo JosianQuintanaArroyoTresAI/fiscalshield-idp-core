@@ -83,7 +83,18 @@ jobs:
     
     - name: Build and publish
       run: |
+        echo "🔨 Building and packaging Lambda functions, UI, and CloudFormation templates..."
         python3 publish.py fiscalshield-prod idp eu-central-1 --lint off
+        
+        if [ $? -ne 0 ]; then
+          echo "❌ Build and publish failed!"
+          exit 1
+        fi
+        
+        echo "✅ Build completed successfully"
+        echo "📦 Lambda packages uploaded to S3"
+        echo "🌐 UI built and uploaded to S3"
+        echo "📋 CloudFormation templates uploaded to S3"
     
     - name: Check if stack exists
       id: check_stack
@@ -159,7 +170,7 @@ jobs:
     
     - name: Reload configuration to DynamoDB
       run: |
-        echo "📋 Reloading configuration from S3..."
+        echo "📋 Reloading configuration from S3 to DynamoDB..."
         
         # Get stack outputs
         CONFIG_BUCKET=$(aws cloudformation describe-stacks \
@@ -174,52 +185,88 @@ jobs:
           --query 'Stacks[0].Outputs[?OutputKey==`UpdateConfigurationFunctionName`].OutputValue' \
           --output text 2>/dev/null || echo "")
         
-        if [ -n "$CONFIG_BUCKET" ] && [ -n "$UPDATE_FUNCTION" ]; then
-          echo "  Configuration Bucket: $CONFIG_BUCKET"
-          echo "  Update Function: $UPDATE_FUNCTION"
-          
-          # Upload config to S3
-          CONFIG_FILE="config_library/pattern-2/lending-package-sample/config.yaml"
-          S3_KEY="pattern-2/lending-package-sample/config.yaml"
-          
-          if [ -f "$CONFIG_FILE" ]; then
-            echo "Uploading configuration to S3..."
-            aws s3 cp "$CONFIG_FILE" "s3://$CONFIG_BUCKET/$S3_KEY" --region eu-central-1
-            echo "  ✅ Uploaded to s3://$CONFIG_BUCKET/$S3_KEY"
-            
-            # Trigger configuration reload
-            echo "Triggering configuration reload..."
-            aws lambda invoke \
-              --function-name "$UPDATE_FUNCTION" \
-              --region eu-central-1 \
-              --payload "{\"s3_uri\": \"s3://$CONFIG_BUCKET/$S3_KEY\"}" \
-              /tmp/config-reload-response.json > /dev/null 2>&1
-            
-            if [ $? -eq 0 ]; then
-              echo "  ✅ Configuration reloaded successfully!"
-              echo ""
-              echo "Key Settings Active:"
-              echo "  ✅ trust_user_hint: true (Skip LLM classification when user selects type)"
-              echo "  ✅ USE_SEMANTIC_CHUNKING: true (Invoice boundary detection enabled)"
-            else
-              echo "  ⚠️ Configuration reload had issues (non-critical)"
-            fi
-          else
-            echo "  ⚠️ Config file not found: $CONFIG_FILE"
-          fi
-        else
-          echo "  ⚠️ Could not retrieve stack outputs"
+        if [ -z "$CONFIG_BUCKET" ] || [ -z "$UPDATE_FUNCTION" ]; then
+          echo "❌ Could not retrieve stack outputs (ConfigurationBucket or UpdateConfigurationFunction)"
+          echo "   CONFIG_BUCKET: $CONFIG_BUCKET"
+          echo "   UPDATE_FUNCTION: $UPDATE_FUNCTION"
+          exit 1
         fi
-      continue-on-error: true
+        
+        echo "  Configuration Bucket: $CONFIG_BUCKET"
+        echo "  Update Function: $UPDATE_FUNCTION"
+        
+        # Upload config to S3
+        CONFIG_FILE="config_library/pattern-2/lending-package-sample/config.yaml"
+        S3_KEY="pattern-2/lending-package-sample/config.yaml"
+        
+        if [ ! -f "$CONFIG_FILE" ]; then
+          echo "❌ Config file not found: $CONFIG_FILE"
+          exit 1
+        fi
+        
+        echo "Uploading configuration to S3..."
+        aws s3 cp "$CONFIG_FILE" "s3://$CONFIG_BUCKET/$S3_KEY" --region eu-central-1
+        
+        if [ $? -ne 0 ]; then
+          echo "❌ Failed to upload configuration to S3"
+          exit 1
+        fi
+        
+        echo "  ✅ Uploaded to s3://$CONFIG_BUCKET/$S3_KEY"
+        
+        # Trigger configuration reload
+        echo "Triggering configuration reload via Lambda..."
+        aws lambda invoke \
+          --function-name "$UPDATE_FUNCTION" \
+          --region eu-central-1 \
+          --payload "{\"s3_uri\": \"s3://$CONFIG_BUCKET/$S3_KEY\"}" \
+          /tmp/config-reload-response.json
+        
+        if [ $? -ne 0 ]; then
+          echo "❌ Lambda invocation failed"
+          cat /tmp/config-reload-response.json 2>/dev/null || true
+          exit 1
+        fi
+        
+        echo "  ✅ Configuration reloaded successfully!"
+        echo ""
+        echo "Key Settings Active in DynamoDB:"
+        echo "  ✅ trust_user_hint: true (Skip LLM when user selects document type)"
+        echo "  ✅ validate_hint_on_mismatch: true (Drift detection enabled)"
+        
+        # Verify config was loaded
+        CONFIG_TABLE=$(aws cloudformation describe-stacks \
+          --stack-name fiscalshield-idp-prod \
+          --region eu-central-1 \
+          --query 'Stacks[0].Outputs[?OutputKey==`ConfigurationTable`].OutputValue' \
+          --output text 2>/dev/null || echo "")
+        
+        if [ -n "$CONFIG_TABLE" ]; then
+          ITEM_COUNT=$(aws dynamodb scan --table-name "$CONFIG_TABLE" --select COUNT --region eu-central-1 --query 'Count' --output text)
+          echo "  📊 Configuration items in DynamoDB: $ITEM_COUNT"
+          
+          if [ "$ITEM_COUNT" -eq "0" ]; then
+            echo "⚠️  WARNING: DynamoDB table is empty after reload!"
+            exit 1
+          fi
+        fi
       env:
         AWS_DEFAULT_REGION: eu-central-1
     
     - name: Force update Lambda functions (bypass CloudFormation caching)
-      continue-on-error: true
       run: |
         echo "🔄 Force updating Lambda functions with latest code..."
+        echo "This ensures Lambda code changes are deployed even if CloudFormation doesn't detect them"
         chmod +x scripts/force-update-lambdas.sh
-        ./scripts/force-update-lambdas.sh || echo "⚠️ Some functions failed to update, but deployment continues"
+        ./scripts/force-update-lambdas.sh
+        
+        if [ $? -ne 0 ]; then
+          echo "❌ Force update Lambda functions failed!"
+          echo "Lambda functions may not have the latest code"
+          exit 1
+        fi
+        
+        echo "✅ All Lambda functions updated with latest code"
       env:
         STACK_NAME: fiscalshield-idp-prod
         REGION: eu-central-1
