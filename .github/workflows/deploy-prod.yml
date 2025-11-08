@@ -172,21 +172,20 @@ jobs:
       run: |
         echo "📋 Reloading configuration from S3 to DynamoDB..."
         
-        # Get stack outputs
+        # Get stack outputs (using correct output key names)
         CONFIG_BUCKET=$(aws cloudformation describe-stacks \
           --stack-name fiscalshield-idp-prod \
           --region eu-central-1 \
-          --query 'Stacks[0].Outputs[?OutputKey==`ConfigurationBucket`].OutputValue' \
+          --query 'Stacks[0].Outputs[?OutputKey==`S3ConfigurationBucketName`].OutputValue' \
           --output text 2>/dev/null || echo "")
         
-        UPDATE_FUNCTION=$(aws cloudformation describe-stacks \
-          --stack-name fiscalshield-idp-prod \
-          --region eu-central-1 \
-          --query 'Stacks[0].Outputs[?OutputKey==`UpdateConfigurationFunctionName`].OutputValue' \
-          --output text 2>/dev/null || echo "")
+        # Function name not in outputs, so we look it up directly
+        UPDATE_FUNCTION=$(aws lambda list-functions \
+          --query 'Functions[?contains(FunctionName, `fiscalshield-idp-prod`) && contains(FunctionName, `UpdateConfiguration`)].FunctionName' \
+          --output text 2>/dev/null | head -1 || echo "")
         
         if [ -z "$CONFIG_BUCKET" ] || [ -z "$UPDATE_FUNCTION" ]; then
-          echo "❌ Could not retrieve stack outputs (ConfigurationBucket or UpdateConfigurationFunction)"
+          echo "❌ Could not retrieve required resources"
           echo "   CONFIG_BUCKET: $CONFIG_BUCKET"
           echo "   UPDATE_FUNCTION: $UPDATE_FUNCTION"
           exit 1
@@ -238,8 +237,8 @@ jobs:
         CONFIG_TABLE=$(aws cloudformation describe-stacks \
           --stack-name fiscalshield-idp-prod \
           --region eu-central-1 \
-          --query 'Stacks[0].Outputs[?OutputKey==`ConfigurationTable`].OutputValue' \
-          --output text 2>/dev/null || echo "")
+          --query 'Stacks[0].Outputs[?contains(OutputKey, `ConfigurationTable`)].OutputValue' \
+          --output text 2>/dev/null | grep -o 'fiscalshield-idp-prod-ConfigurationTable-[A-Z0-9]*' | head -1 || echo "")
         
         if [ -n "$CONFIG_TABLE" ]; then
           ITEM_COUNT=$(aws dynamodb scan --table-name "$CONFIG_TABLE" --select COUNT --region eu-central-1 --query 'Count' --output text)
