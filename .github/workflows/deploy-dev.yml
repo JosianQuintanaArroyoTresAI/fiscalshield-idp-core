@@ -143,20 +143,21 @@ jobs:
           --query 'Stacks[0].Outputs[?OutputKey==`S3ConfigurationBucketName`].OutputValue' \
           --output text 2>/dev/null || echo "")
         
-        # Function name not in outputs, so we look it up directly
-        UPDATE_FUNCTION=$(aws lambda list-functions \
-          --query 'Functions[?contains(FunctionName, `fiscalshield-idp-dev`) && contains(FunctionName, `UpdateConfiguration`)].FunctionName' \
-          --output text 2>/dev/null | head -1 || echo "")
+        CONFIG_TABLE=$(aws cloudformation describe-stacks \
+          --stack-name fiscalshield-idp-dev \
+          --region eu-central-1 \
+          --query 'Stacks[0].Outputs[?contains(OutputKey, `ConfigurationTable`)].OutputValue' \
+          --output text 2>/dev/null | grep -o 'fiscalshield-idp-dev-ConfigurationTable-[A-Z0-9]*' | head -1 || echo "")
         
-        if [ -z "$CONFIG_BUCKET" ] || [ -z "$UPDATE_FUNCTION" ]; then
+        if [ -z "$CONFIG_BUCKET" ] || [ -z "$CONFIG_TABLE" ]; then
           echo "❌ Could not retrieve required resources"
           echo "   CONFIG_BUCKET: $CONFIG_BUCKET"
-          echo "   UPDATE_FUNCTION: $UPDATE_FUNCTION"
+          echo "   CONFIG_TABLE: $CONFIG_TABLE"
           exit 1
         fi
         
         echo "  Configuration Bucket: $CONFIG_BUCKET"
-        echo "  Update Function: $UPDATE_FUNCTION"
+        echo "  Configuration Table: $CONFIG_TABLE"
         
         # Upload config to S3
         CONFIG_FILE="config_library/pattern-2/lending-package-sample/config.yaml"
@@ -177,42 +178,56 @@ jobs:
         
         echo "  ✅ Uploaded to s3://$CONFIG_BUCKET/$S3_KEY"
         
-        # Trigger configuration reload
-        echo "Triggering configuration reload via Lambda..."
-        PAYLOAD=$(echo -n "{\"s3_uri\": \"s3://$CONFIG_BUCKET/$S3_KEY\"}" | base64 -w 0)
-        aws lambda invoke \
-          --function-name "$UPDATE_FUNCTION" \
-          --region eu-central-1 \
-          --payload "$PAYLOAD" \
-          /tmp/config-reload-response.json
+        # Load configuration to DynamoDB using Python (correct schema)
+        echo "Loading configuration to DynamoDB..."
+        python3 << 'EOF'
+        import boto3
+        import yaml
+        import sys
+        
+        try:
+            # Load config from file
+            with open('config_library/pattern-2/lending-package-sample/config.yaml', 'r') as f:
+                config = yaml.safe_load(f)
+            
+            # Write to DynamoDB with correct schema (Configuration as partition key)
+            dynamodb = boto3.resource('dynamodb', region_name='eu-central-1')
+            table = dynamodb.Table('$CONFIG_TABLE')
+            
+            table.put_item(Item={
+                'Configuration': 'pattern-2/lending-package-sample',
+                'classification': config.get('classification', {}),
+                'extraction': config.get('extraction', {}),
+                'ocr': config.get('ocr', {}),
+                'summarization': config.get('summarization', {}),
+                'assessment': config.get('assessment', {})
+            })
+            
+            trust_hint = config.get('classification', {}).get('trust_user_hint', False)
+            validate_hint = config.get('classification', {}).get('validate_hint_on_mismatch', False)
+            
+            print(f"  ✅ Configuration loaded to DynamoDB successfully!")
+            print(f"  ✅ trust_user_hint: {trust_hint}")
+            print(f"  ✅ validate_hint_on_mismatch: {validate_hint}")
+            
+        except Exception as e:
+            print(f"❌ Failed to load configuration: {e}")
+            sys.exit(1)
+        EOF
         
         if [ $? -ne 0 ]; then
-          echo "❌ Lambda invocation failed"
-          cat /tmp/config-reload-response.json 2>/dev/null || true
+          echo "❌ Configuration load failed"
           exit 1
         fi
         
-        echo "  ✅ Configuration reloaded successfully!"
-        echo ""
-        echo "Key Settings Active in DynamoDB:"
-        echo "  ✅ trust_user_hint: true (Skip LLM when user selects document type)"
-        echo "  ✅ validate_hint_on_mismatch: true (Drift detection enabled)"
-        
         # Verify config was loaded
-        CONFIG_TABLE=$(aws cloudformation describe-stacks \
-          --stack-name fiscalshield-idp-dev \
-          --region eu-central-1 \
-          --query 'Stacks[0].Outputs[?contains(OutputKey, `ConfigurationTable`)].OutputValue' \
-          --output text 2>/dev/null | grep -o 'fiscalshield-idp-dev-ConfigurationTable-[A-Z0-9]*' | head -1 || echo "")
+        ITEM_COUNT=$(aws dynamodb scan --table-name "$CONFIG_TABLE" --select COUNT --region eu-central-1 --query 'Count' --output text)
+        echo "  📊 Configuration items in DynamoDB: $ITEM_COUNT"
         
-        if [ -n "$CONFIG_TABLE" ]; then
-          ITEM_COUNT=$(aws dynamodb scan --table-name "$CONFIG_TABLE" --select COUNT --region eu-central-1 --query 'Count' --output text)
-          echo "  📊 Configuration items in DynamoDB: $ITEM_COUNT"
-          
-          if [ "$ITEM_COUNT" -eq "0" ]; then
-            echo "⚠️  WARNING: DynamoDB table is empty after reload!"
-            exit 1
-          fi
+        if [ "$ITEM_COUNT" -eq "0" ]; then
+          echo "⚠️  WARNING: DynamoDB table is empty after reload!"
+          exit 1
+        fi
         fi
       env:
         AWS_DEFAULT_REGION: eu-central-1

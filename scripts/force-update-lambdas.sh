@@ -67,7 +67,7 @@ ALL_FUNCTIONS=(
     "OCRFunction:fiscalshield-idp-dev-PATTERN2STACK-12AZHXIRN6HYB:patterns/pattern-2/.aws-sam/build/OCRFunction"
     "ClassificationFunction:fiscalshield-idp-dev-PATTERN2STACK-12AZHXIRN6HYB:patterns/pattern-2/.aws-sam/build/ClassificationFunction"
     "ExtractionFunction:fiscalshield-idp-dev-PATTERN2STACK-12AZHXIRN6HYB:patterns/pattern-2/.aws-sam/build/ExtractionFunction"
-    "InvoiceExtractionFunction:fiscalshield-idp-dev-PATTERN2STACK-12AZHXIRN6HYB:patterns/pattern-2/lambdas/invoice_extraction"
+    "InvoiceExtractionFunction:fiscalshield-idp-dev-PATTERN2STACK-12AZHXIRN6HYB:patterns/pattern-2/.aws-sam/build/InvoiceExtractionFunction"
     "AssessmentFunction:fiscalshield-idp-dev-PATTERN2STACK-12AZHXIRN6HYB:patterns/pattern-2/.aws-sam/build/AssessmentFunction"
     "ProcessResultsFunction:fiscalshield-idp-dev-PATTERN2STACK-12AZHXIRN6HYB:patterns/pattern-2/.aws-sam/build/ProcessResultsFunction"
     "SummarizationFunction:fiscalshield-idp-dev-PATTERN2STACK-12AZHXIRN6HYB:patterns/pattern-2/.aws-sam/build/SummarizationFunction"

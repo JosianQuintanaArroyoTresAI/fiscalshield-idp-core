@@ -1693,6 +1693,7 @@ Resources:
   InvoiceExtractionFunction:
     Type: AWS::Serverless::Function
     Metadata:
+      BuildMethod: python3.12  # Force SAM to build this function
       cfn_nag:
         rules_to_suppress:
           - id: W89
