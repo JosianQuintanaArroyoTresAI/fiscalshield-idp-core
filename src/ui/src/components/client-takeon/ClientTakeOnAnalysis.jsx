@@ -2,7 +2,17 @@
 // SPDX-License-Identifier: Apache-2.0
 import React, { useState, useEffect } from 'react';
 import { useHistory } from 'react-router-dom';
-import { Container, Header, SpaceBetween, Alert, Box, Spinner, BreadcrumbGroup, Button } from '@awsui/components-react';
+import { 
+  Container, 
+  Header, 
+  SpaceBetween, 
+  Alert, 
+  Box, 
+  Spinner, 
+  BreadcrumbGroup, 
+  Button,
+  ExpandableSection 
+} from '@awsui/components-react';
 
 import { useCompany } from '../../contexts/company';
 import { COMPANY_SELECT_PATH } from '../../routes/constants';
@@ -265,66 +275,120 @@ const ClientTakeOnAnalysis = () => {
             <>
               {/* Risk Assessment Cards */}
               <SpaceBetween size="l">
-                {/* Overall Risk Card - Full Width */}
-                <Container>
-                  <RiskCard
-                    title="Overall Risk Assessment"
-                    value={intelligence.risk_assessment?.risk_level || 'Unknown'}
-                    subtitle={`Risk Score: ${intelligence.risk_assessment?.overall_risk_score || 'N/A'}`}
-                    status={intelligence.risk_assessment?.risk_level || 'Unknown'}
-                    statusColor={getRiskColor(intelligence.risk_assessment?.risk_level)}
-                    large={true}
-                  />
-                </Container>
+                {/* Top Section: Overall Risk - Full Width */}
+                <RiskCard
+                  title="Overall Risk Assessment"
+                  value={intelligence.risk_assessment?.risk_level || 'Unknown'}
+                  subtitle={`Risk Score: ${intelligence.risk_assessment?.overall_risk_score || 'N/A'}`}
+                  status={intelligence.risk_assessment?.risk_level || 'Unknown'}
+                  statusColor={getRiskColor(intelligence.risk_assessment?.risk_level)}
+                  large={true}
+                />
 
                 {/* Screening Cards - 3 Column Grid */}
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-                    gap: '24px',
-                  }}
-                >
-                  {/* Company Adverse Media */}
-                  <RiskCard
-                    title="Company Adverse Media"
-                    value={intelligence.reputational?.adverse_media_count || 0}
-                    subtitle="Adverse Findings"
-                    status={intelligence.reputational?.has_adverse_media ? 'REVIEW REQUIRED' : 'CLEAN'}
-                    statusColor={getStatusColor(
-                      intelligence.reputational?.has_adverse_media,
-                      intelligence.reputational?.adverse_media_risk === 'high',
-                    )}
-                  />
+                <Container header={<Header variant="h2">Screening Results</Header>}>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+                      gap: '24px',
+                    }}
+                  >
+                    {/* Company Adverse Media */}
+                    <RiskCard
+                      title="Company Adverse Media"
+                      value={intelligence.reputational?.adverse_media_count || 0}
+                      subtitle="Adverse Findings"
+                      status={intelligence.reputational?.has_adverse_media ? 'REVIEW REQUIRED' : 'CLEAN'}
+                      statusColor={getStatusColor(
+                        intelligence.reputational?.has_adverse_media,
+                        intelligence.reputational?.adverse_media_risk === 'high',
+                      )}
+                    />
 
-                  {/* Director Sanctions/PEP */}
-                  <RiskCard
-                    title="Director Screening"
-                    value={
-                      (intelligence.aml?.sanctioned_directors?.length || 0) +
-                      (intelligence.aml?.pep_directors?.length || 0)
-                    }
-                    subtitle="Sanctions & PEP Findings"
-                    status={intelligence.aml?.requires_enhanced_dd ? 'ENHANCED DD REQUIRED' : 'CLEAN'}
-                    statusColor={getStatusColor(
-                      intelligence.aml?.sanctioned_directors?.length > 0 || intelligence.aml?.pep_directors?.length > 0,
-                      intelligence.aml?.requires_enhanced_dd,
-                    )}
-                  />
+                    {/* Director Sanctions/PEP */}
+                    <RiskCard
+                      title="Director Screening"
+                      value={
+                        (intelligence.aml?.sanctioned_directors?.length || 0) +
+                        (intelligence.aml?.pep_directors?.length || 0)
+                      }
+                      subtitle="Sanctions & PEP Findings"
+                      status={intelligence.aml?.requires_enhanced_dd ? 'ENHANCED DD REQUIRED' : 'CLEAN'}
+                      statusColor={getStatusColor(
+                        intelligence.aml?.sanctioned_directors?.length > 0 ||
+                          intelligence.aml?.pep_directors?.length > 0,
+                        intelligence.aml?.requires_enhanced_dd,
+                      )}
+                    />
 
-                  {/* Company Status/Governance */}
-                  <RiskCard
-                    title="Company Status"
-                    value={intelligence.governance?.company_status || 'Unknown'}
-                    subtitle={`${intelligence.governance?.active_officers || 0} Active Officers`}
-                    status={
-                      intelligence.governance?.company_status === 'active'
-                        ? 'ACTIVE'
-                        : intelligence.governance?.company_status?.toUpperCase() || 'UNKNOWN'
-                    }
-                    statusColor={intelligence.governance?.company_status === 'active' ? '#28a745' : '#fd7e14'}
-                  />
-                </div>
+                    {/* Company Status/Governance */}
+                    <RiskCard
+                      title="Company Status"
+                      value={intelligence.governance?.company_status || 'Unknown'}
+                      subtitle={`${intelligence.governance?.active_officers || 0} Active Officers`}
+                      status={
+                        intelligence.governance?.company_status === 'active'
+                          ? 'ACTIVE'
+                          : intelligence.governance?.company_status?.toUpperCase() || 'UNKNOWN'
+                      }
+                      statusColor={intelligence.governance?.company_status === 'active' ? '#28a745' : '#fd7e14'}
+                    />
+                  </div>
+                </Container>
+
+                {/* Key Metrics Summary Cards */}
+                {intelligence.insights && (
+                  <Container header={<Header variant="h2">Analysis Summary</Header>}>
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+                        gap: '20px',
+                      }}
+                    >
+                      {/* Red Flags Count */}
+                      <RiskCard
+                        title="Red Flags"
+                        value={intelligence.insights.red_flags?.length || 0}
+                        subtitle="Critical Issues"
+                        status={
+                          intelligence.insights.red_flags?.length > 0
+                            ? `${intelligence.insights.red_flags.length} FOUND`
+                            : 'NONE'
+                        }
+                        statusColor={intelligence.insights.red_flags?.length > 0 ? '#dc3545' : '#28a745'}
+                      />
+
+                      {/* Recommendations Count */}
+                      <RiskCard
+                        title="Recommendations"
+                        value={intelligence.insights.recommendations?.length || 0}
+                        subtitle="Action Items"
+                        status={intelligence.insights.recommendations?.length > 0 ? 'REVIEW' : 'NONE'}
+                        statusColor={intelligence.insights.recommendations?.length > 0 ? '#0972d3' : '#6c757d'}
+                      />
+
+                      {/* Mitigating Factors */}
+                      <RiskCard
+                        title="Mitigating Factors"
+                        value={intelligence.insights.mitigating_factors?.length || 0}
+                        subtitle="Positive Indicators"
+                        status={intelligence.insights.mitigating_factors?.length > 0 ? 'PRESENT' : 'NONE'}
+                        statusColor={intelligence.insights.mitigating_factors?.length > 0 ? '#037f0c' : '#6c757d'}
+                      />
+
+                      {/* Enhanced DD Required */}
+                      <RiskCard
+                        title="Enhanced Due Diligence"
+                        value={intelligence.aml?.requires_enhanced_dd ? 'REQUIRED' : 'NOT REQUIRED'}
+                        subtitle="AML Compliance"
+                        status={intelligence.aml?.requires_enhanced_dd ? 'ACTION NEEDED' : 'STANDARD'}
+                        statusColor={intelligence.aml?.requires_enhanced_dd ? '#fd7e14' : '#28a745'}
+                      />
+                    </div>
+                  </Container>
+                )}
 
                 {/* Generate AML Report Button */}
                 <Box textAlign="center" margin={{ top: 'xl' }}>
@@ -339,66 +403,23 @@ const ClientTakeOnAnalysis = () => {
                   </Button>
                 </Box>
 
-                {/* Additional Intelligence Insights */}
+                {/* Detailed Intelligence Insights - Expandable Sections */}
                 {intelligence.insights && (
-                  <Container header={<Header variant="h2">AI-Generated Insights</Header>}>
+                  <Container header={<Header variant="h2">Detailed Analysis</Header>}>
                     <SpaceBetween size="m">
                       {/* Overall Summary */}
                       {intelligence.insights.overall_summary && (
-                        <Box>
-                          <Box variant="h3" padding={{ bottom: 'xs' }}>
-                            Overall Summary
-                          </Box>
+                        <ExpandableSection headerText="Overall Summary" variant="container">
                           <Box variant="p">{intelligence.insights.overall_summary}</Box>
-                        </Box>
+                        </ExpandableSection>
                       )}
 
-                      {/* Governance Insight */}
-                      {intelligence.insights.governance_insight && (
-                        <Box>
-                          <Box variant="h3" padding={{ bottom: 'xs' }}>
-                            Governance Analysis
-                          </Box>
-                          <Box variant="p">{intelligence.insights.governance_insight}</Box>
-                        </Box>
-                      )}
-
-                      {/* AML Insight */}
-                      {intelligence.insights.aml_insight && (
-                        <Box>
-                          <Box variant="h3" padding={{ bottom: 'xs' }}>
-                            AML/Sanctions Analysis
-                          </Box>
-                          <Box variant="p">{intelligence.insights.aml_insight}</Box>
-                        </Box>
-                      )}
-
-                      {/* Reputational Insight */}
-                      {intelligence.insights.reputational_insight && (
-                        <Box>
-                          <Box variant="h3" padding={{ bottom: 'xs' }}>
-                            Reputational Analysis
-                          </Box>
-                          <Box variant="p">{intelligence.insights.reputational_insight}</Box>
-                        </Box>
-                      )}
-
-                      {/* Financial Insight */}
-                      {intelligence.insights.financial_insight && (
-                        <Box>
-                          <Box variant="h3" padding={{ bottom: 'xs' }}>
-                            Financial Analysis
-                          </Box>
-                          <Box variant="p">{intelligence.insights.financial_insight}</Box>
-                        </Box>
-                      )}
-
-                      {/* Red Flags */}
+                      {/* Red Flags - Expandable */}
                       {intelligence.insights.red_flags && intelligence.insights.red_flags.length > 0 && (
-                        <Box>
-                          <Box variant="h3" padding={{ bottom: 'xs' }}>
-                            Red Flags
-                          </Box>
+                        <ExpandableSection
+                          headerText={`Red Flags (${intelligence.insights.red_flags.length})`}
+                          variant="container"
+                        >
                           <ul style={{ margin: 0, paddingLeft: '20px' }}>
                             {intelligence.insights.red_flags.map((flag, index) => (
                               <li key={index} style={{ marginBottom: '8px', color: '#d13212' }}>
@@ -406,15 +427,15 @@ const ClientTakeOnAnalysis = () => {
                               </li>
                             ))}
                           </ul>
-                        </Box>
+                        </ExpandableSection>
                       )}
 
-                      {/* Recommendations */}
+                      {/* Recommendations - Expandable */}
                       {intelligence.insights.recommendations && intelligence.insights.recommendations.length > 0 && (
-                        <Box>
-                          <Box variant="h3" padding={{ bottom: 'xs' }}>
-                            Recommendations
-                          </Box>
+                        <ExpandableSection
+                          headerText={`Recommendations (${intelligence.insights.recommendations.length})`}
+                          variant="container"
+                        >
                           <ul style={{ margin: 0, paddingLeft: '20px' }}>
                             {intelligence.insights.recommendations.map((rec, index) => (
                               <li key={index} style={{ marginBottom: '8px', color: '#0972d3' }}>
@@ -422,16 +443,16 @@ const ClientTakeOnAnalysis = () => {
                               </li>
                             ))}
                           </ul>
-                        </Box>
+                        </ExpandableSection>
                       )}
 
-                      {/* Mitigating Factors */}
+                      {/* Mitigating Factors - Expandable */}
                       {intelligence.insights.mitigating_factors &&
                         intelligence.insights.mitigating_factors.length > 0 && (
-                          <Box>
-                            <Box variant="h3" padding={{ bottom: 'xs' }}>
-                              Mitigating Factors
-                            </Box>
+                          <ExpandableSection
+                            headerText={`Mitigating Factors (${intelligence.insights.mitigating_factors.length})`}
+                            variant="container"
+                          >
                             <ul style={{ margin: 0, paddingLeft: '20px' }}>
                               {intelligence.insights.mitigating_factors.map((factor, index) => (
                                 <li key={index} style={{ marginBottom: '8px', color: '#037f0c' }}>
@@ -439,8 +460,36 @@ const ClientTakeOnAnalysis = () => {
                                 </li>
                               ))}
                             </ul>
-                          </Box>
+                          </ExpandableSection>
                         )}
+
+                      {/* Governance Insight */}
+                      {intelligence.insights.governance_insight && (
+                        <ExpandableSection headerText="Governance Analysis" variant="container">
+                          <Box variant="p">{intelligence.insights.governance_insight}</Box>
+                        </ExpandableSection>
+                      )}
+
+                      {/* AML Insight */}
+                      {intelligence.insights.aml_insight && (
+                        <ExpandableSection headerText="AML/Sanctions Analysis" variant="container">
+                          <Box variant="p">{intelligence.insights.aml_insight}</Box>
+                        </ExpandableSection>
+                      )}
+
+                      {/* Reputational Insight */}
+                      {intelligence.insights.reputational_insight && (
+                        <ExpandableSection headerText="Reputational Analysis" variant="container">
+                          <Box variant="p">{intelligence.insights.reputational_insight}</Box>
+                        </ExpandableSection>
+                      )}
+
+                      {/* Financial Insight */}
+                      {intelligence.insights.financial_insight && (
+                        <ExpandableSection headerText="Financial Analysis" variant="container">
+                          <Box variant="p">{intelligence.insights.financial_insight}</Box>
+                        </ExpandableSection>
+                      )}
                     </SpaceBetween>
                   </Container>
                 )}
