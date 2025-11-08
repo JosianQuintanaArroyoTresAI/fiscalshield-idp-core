@@ -264,7 +264,6 @@ jobs:
           echo "⚠️  WARNING: DynamoDB table is empty after reload!"
           exit 1
         fi
-        fi
       env:
         AWS_DEFAULT_REGION: eu-central-1
     
