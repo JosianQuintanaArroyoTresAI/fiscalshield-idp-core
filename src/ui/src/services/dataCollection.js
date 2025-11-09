@@ -21,6 +21,32 @@ const HEALTH_CHECK_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 let healthCheckCache = null;
 let lastHealthCheck = 0;
 
+const buildQueryString = (params = {}) => {
+  const query = new URLSearchParams();
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === null) {
+      return;
+    }
+
+    if (typeof value === 'boolean') {
+      if (value) {
+        query.append(key, 'true');
+      }
+      return;
+    }
+
+    if (value === '') {
+      return;
+    }
+
+    query.append(key, value);
+  });
+
+  const queryString = query.toString();
+  return queryString ? `?${queryString}` : '';
+};
+
 /**
  * Fetch Data Collection API URL from Parameter Store
  * Cached after first successful fetch
@@ -147,7 +173,7 @@ export const checkDataCollectionHealth = async () => {
  * @param {string} companyNumber - 6-8 character UK company number
  * @returns {Promise<Object>} Company data
  */
-export const lookupCompany = async (companyNumber) => {
+export const lookupCompany = async (companyNumber, options = {}) => {
   if (!companyNumber || companyNumber.length < 6) {
     throw new Error('Invalid company number. Must be 6-8 characters.');
   }
@@ -157,7 +183,8 @@ export const lookupCompany = async (companyNumber) => {
   try {
     const apiUrl = await getDataCollectionApiUrl();
 
-    const response = await fetch(`${apiUrl}/company/${companyNumber}`, {
+    const queryString = buildQueryString({ refresh: options.refresh });
+    const response = await fetch(`${apiUrl}/company/${companyNumber}${queryString}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -186,7 +213,7 @@ export const lookupCompany = async (companyNumber) => {
  * @param {string} companyNumber - 6-8 character UK company number
  * @returns {Promise<Object>} Officers data with risk analysis
  */
-export const lookupOfficers = async (companyNumber) => {
+export const lookupOfficers = async (companyNumber, options = {}) => {
   if (!companyNumber || companyNumber.length < 6) {
     throw new Error('Invalid company number. Must be 6-8 characters.');
   }
@@ -196,7 +223,8 @@ export const lookupOfficers = async (companyNumber) => {
   try {
     const apiUrl = await getDataCollectionApiUrl();
 
-    const response = await fetch(`${apiUrl}/officers/${companyNumber}`, {
+    const queryString = buildQueryString({ refresh: options.refresh });
+    const response = await fetch(`${apiUrl}/officers/${companyNumber}${queryString}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -225,7 +253,7 @@ export const lookupOfficers = async (companyNumber) => {
  * @param {string} companyNumber - 6-8 character UK company number
  * @returns {Promise<Object>} Filing history with compliance analysis
  */
-export const checkFilingHistory = async (companyNumber) => {
+export const checkFilingHistory = async (companyNumber, options = {}) => {
   if (!companyNumber || companyNumber.length < 6) {
     throw new Error('Invalid company number. Must be 6-8 characters.');
   }
@@ -235,7 +263,8 @@ export const checkFilingHistory = async (companyNumber) => {
   try {
     const apiUrl = await getDataCollectionApiUrl();
 
-    const response = await fetch(`${apiUrl}/filing-history/${companyNumber}`, {
+    const queryString = buildQueryString({ refresh: options.refresh, summary: options.summary });
+    const response = await fetch(`${apiUrl}/filing-history/${companyNumber}${queryString}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
