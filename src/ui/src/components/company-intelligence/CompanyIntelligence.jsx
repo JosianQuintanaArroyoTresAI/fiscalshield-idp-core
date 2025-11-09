@@ -177,8 +177,7 @@ const CompanyIntelligence = () => {
     return (
       <AppLayoutWrapper breadcrumbs={breadcrumbs}>
         <Alert type="warning" header="Analysis Stack Not Available">
-          The Analysis Stack is not deployed or not accessible. Company intelligence features are currently
-          unavailable.
+          The Analysis Stack is not deployed or not accessible. Company intelligence features are currently unavailable.
         </Alert>
       </AppLayoutWrapper>
     );
@@ -223,7 +222,6 @@ const CompanyIntelligence = () => {
   return (
     <AppLayoutWrapper breadcrumbs={breadcrumbs}>
       <SpaceBetween size="l">
-
         {/* Hero Banner - Risk Assessment */}
         <Container
           header={

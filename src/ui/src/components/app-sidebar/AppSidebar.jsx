@@ -125,7 +125,7 @@ const AppSidebar = () => {
             info: '🔍',
           },
         ],
-      }
+      },
     );
   }
 
@@ -137,7 +137,7 @@ const AppSidebar = () => {
       text: 'Switch Company',
       href: COMPANY_SELECT_PATH,
       info: '🔄',
-    }
+    },
   );
 
   const handleFollow = (event) => {

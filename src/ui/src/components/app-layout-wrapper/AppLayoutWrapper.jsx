@@ -55,7 +55,7 @@ AppLayoutWrapper.propTypes = {
       content: PropTypes.node,
       dismissible: PropTypes.bool,
       onDismiss: PropTypes.func,
-    })
+    }),
   ),
   breadcrumbs: PropTypes.node,
   headerSelector: PropTypes.string,
