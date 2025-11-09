@@ -24,6 +24,17 @@ COMPANY_INTELLIGENCE_TABLE = f'fiscalshield-analysis-{ENVIRONMENT}-CompanyIntell
 DC_COMPANY_EVENTS_TABLE = f'fiscalshield-dc-{ENVIRONMENT}-CompanyEvents'
 
 
+def decimal_to_float(obj):
+    """Convert Decimal objects to float for JSON serialization"""
+    if isinstance(obj, Decimal):
+        return float(obj)
+    elif isinstance(obj, dict):
+        return {k: decimal_to_float(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [decimal_to_float(item) for item in obj]
+    return obj
+
+
 class ReportGenerator:
     """Generates professional AML CDD reports using Claude via Amazon Bedrock"""
     
@@ -33,6 +44,9 @@ class ReportGenerator:
         
         # Use Claude 3.7 Sonnet via cross-region inference (eu. prefix for eu-central-1)
         self.model_id = "eu.anthropic.claude-3-7-sonnet-20250219-v1:0"
+        
+        # Cache configuration - align with intelligence data cache (24 hours)
+        self.cache_ttl_seconds = 24 * 60 * 60
         
         # System prompt for UK accountant context
         self.system_prompt = """You are a senior AML compliance officer and UK chartered accountant with deep expertise in Money Laundering Regulations 2017 (MLR 2017). 
@@ -99,6 +113,112 @@ Always maintain professional skepticism while being fair and objective."""
         except Exception as e:
             print(f"Failed to retrieve intelligence data: {str(e)}")
             raise
+    
+    def get_cached_report(self, company_number: str) -> Optional[Dict]:
+        """
+        Check if a recent AML report exists in cache
+        
+        Returns:
+            Dict with report metadata if found and fresh (< 24h)
+            None if no cache or expired
+        """
+        try:
+            # Query for most recent AML_REPORT entry
+            response = self.intelligence_table.query(
+                KeyConditionExpression="company_number = :num AND begins_with(intelligence_type_timestamp, :type)",
+                ExpressionAttributeValues={
+                    ":num": company_number,
+                    ":type": "AML_REPORT#"
+                },
+                ScanIndexForward=False,  # Most recent first
+                Limit=1
+            )
+            
+            if not response.get('Items'):
+                print(f"No cached report found for {company_number}")
+                return None
+            
+            item = response['Items'][0]
+            
+            # Check if cache is still fresh
+            generated_at_str = item.get('generated_at', '2000-01-01T00:00:00')
+            try:
+                # Handle both ISO format with and without microseconds
+                if '.' in generated_at_str:
+                    generated_at = datetime.fromisoformat(generated_at_str.replace('Z', '+00:00'))
+                else:
+                    generated_at = datetime.fromisoformat(generated_at_str)
+            except Exception as e:
+                print(f"Error parsing timestamp: {e}")
+                return None
+            
+            age_seconds = (datetime.utcnow() - generated_at.replace(tzinfo=None)).total_seconds()
+            age_hours = age_seconds / 3600
+            
+            if age_seconds > self.cache_ttl_seconds:
+                print(f"Cached report expired (age: {age_hours:.1f}h > 24h)")
+                return None
+            
+            print(f"✅ Found fresh cached report (age: {age_hours:.1f}h)")
+            
+            # Return cached report metadata
+            data = item.get('data', {})
+            return {
+                'report_id': data.get('report_id'),
+                's3_key': data.get('s3_key'),
+                'company_name': data.get('company_name'),
+                'risk_level': data.get('risk_level'),
+                'generated_at': item.get('generated_at'),
+                'tokens_used': data.get('tokens_used', {}),
+                'valid_until': item.get('ttl'),
+                'age_hours': age_hours
+            }
+            
+        except Exception as e:
+            print(f"Error checking report cache: {e}")
+            import traceback
+            print(traceback.format_exc())
+            return None
+    
+    def cache_report_metadata(self, company_number: str, report_data: Dict, storage_info: Dict):
+        """
+        Store report metadata in CompanyIntelligenceTable for caching
+        
+        This enables future requests to return the same report without regenerating
+        """
+        try:
+            now = datetime.utcnow()
+            ttl = int(now.timestamp()) + self.cache_ttl_seconds
+            
+            item = {
+                'company_number': company_number,
+                'intelligence_type_timestamp': f"AML_REPORT#{now.isoformat()}",
+                'ttl': ttl,
+                'analysis_timestamp': int(now.timestamp()),
+                'generated_at': now.isoformat(),
+                'last_updated': now.isoformat(),
+                'data': {
+                    'report_id': storage_info['report_id'],
+                    's3_key': storage_info['s3_key'],
+                    'company_name': report_data.get('company_name', 'Unknown'),
+                    'risk_level': report_data.get('risk_level', 'UNKNOWN'),
+                    'model_used': report_data.get('model_id'),
+                    'tokens_used': {
+                        'input': report_data.get('input_tokens', 0),
+                        'output': report_data.get('output_tokens', 0),
+                        'total': report_data.get('input_tokens', 0) + report_data.get('output_tokens', 0)
+                    }
+                }
+            }
+            
+            self.intelligence_table.put_item(Item=item)
+            print(f"✅ Cached report metadata for {company_number} (TTL: 24h, expires: {datetime.fromtimestamp(ttl).isoformat()})")
+            
+        except Exception as e:
+            print(f"⚠️  Failed to cache report metadata (non-blocking): {e}")
+            import traceback
+            print(traceback.format_exc())
+            # Don't fail the request if caching fails
     
     def prepare_data_for_llm(self, data: Dict) -> str:
         """Format intelligence data into a structured prompt for the LLM"""
@@ -570,41 +690,85 @@ def lambda_handler(event, context):
                 })
             }
         
-        print(f"Starting AML report generation for company {company_number}")
+        # Check for force refresh parameter
+        query_params = event.get('queryStringParameters') or {}
+        force_refresh = query_params.get('force_refresh', 'false').lower() == 'true'
+        
+        if force_refresh:
+            print(f"Force refresh requested for {company_number} - bypassing cache")
+        
+        print(f"AML report requested for company {company_number}")
         
         generator = ReportGenerator()
         
-        # Step 1: Retrieve intelligence data
+        # Helper function to construct download URL
+        def construct_download_url(report_id: str) -> str:
+            headers = event.get('headers', {})
+            host = headers.get('Host') or headers.get('host', '')
+            stage = event.get('requestContext', {}).get('stage', 'Prod')
+            
+            if host:
+                return f"https://{host}/{stage}/company/{company_number}/report/{report_id}"
+            return f"s3://{REPORTS_BUCKET}/aml-reports/{company_number}/{report_id}.md"
+        
+        # STEP 1: Check for cached report (unless force refresh)
+        cached_report = None if force_refresh else generator.get_cached_report(company_number)
+        
+        if cached_report:
+            print(f"✅ Cache HIT - Returning cached report for {company_number}")
+            print(f"   Report ID: {cached_report['report_id']}")
+            print(f"   Age: {cached_report['age_hours']:.1f} hours")
+            print(f"   Tokens saved: {cached_report.get('tokens_used', {}).get('total', 0)}")
+            
+            # Return cached report (instant response)
+            return {
+                'statusCode': 200,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Headers': 'Content-Type',
+                    'Access-Control-Allow-Methods': 'POST,OPTIONS'
+                },
+                'body': json.dumps(decimal_to_float({
+                    'success': True,
+                    'cached': True,
+                    'cache_age_hours': round(cached_report['age_hours'], 1),
+                    'company_number': company_number,
+                    'company_name': cached_report.get('company_name', 'Unknown'),
+                    'risk_level': cached_report.get('risk_level', 'UNKNOWN'),
+                    'report_id': cached_report['report_id'],
+                    's3_key': cached_report['s3_key'],
+                    'download_url': construct_download_url(cached_report['report_id']),
+                    'tokens_used': cached_report.get('tokens_used', {}),
+                    'generated_at': cached_report['generated_at'],
+                    'valid_until': cached_report.get('valid_until', 0) * 1000  # Convert to milliseconds
+                }))
+            }
+        
+        print(f"❌ Cache MISS - Generating new report for {company_number}")
+        
+        # STEP 2: Retrieve intelligence data
         data = generator.retrieve_intelligence_data(company_number)
         
-        # Step 2: Generate report with Claude
+        # STEP 3: Generate report with Claude
         report_data = generator.generate_report_with_claude(data)
         
-        # Step 3: Store report in S3
+        # STEP 4: Store report in S3
         storage_info = generator.store_report(company_number, report_data)
         
-        # Construct API Gateway download URL (avoid presigned URL issues)
-        # Extract API Gateway base URL from the event
-        headers = event.get('headers', {})
-        host = headers.get('Host') or headers.get('host', '')
-        stage = event.get('requestContext', {}).get('stage', 'Prod')
-        
-        # Construct the download URL through API Gateway
-        if host:
-            download_url = f"https://{host}/{stage}/company/{company_number}/report/{storage_info['report_id']}"
-        else:
-            # Fallback to presigned URL if we can't construct API URL
-            download_url = storage_info['presigned_url']
+        # STEP 5: Cache the report metadata for future requests
+        generator.cache_report_metadata(company_number, report_data, storage_info)
         
         # Prepare response
         response_data = {
             'success': True,
+            'cached': False,
             'company_number': company_number,
             'company_name': report_data.get('company_name', 'Unknown'),
             'risk_level': report_data.get('risk_level', 'LOW'),
             'report_id': storage_info['report_id'],
             's3_key': storage_info['s3_key'],
-            'download_url': download_url,
+            'download_url': construct_download_url(storage_info['report_id']),
             'model_used': report_data.get('model_id'),
             'tokens_used': {
                 'input': report_data.get('input_tokens', 0),
@@ -616,6 +780,7 @@ def lambda_handler(event, context):
         }
         
         print(f"Report generation completed for {company_number}: {storage_info['report_id']}")
+
         
         return {
             'statusCode': 200,
