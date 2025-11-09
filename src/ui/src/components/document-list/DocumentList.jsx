@@ -367,20 +367,12 @@ const DocumentList = () => {
         },
         {
           id: 'invoices',
-          label: (
-            <Badge color="grey">
-              Invoices (0)
-            </Badge>
-          ),
+          label: <Badge color="grey">Invoices (0)</Badge>,
           content: renderInvoicesTablePlaceholder(),
         },
         {
           id: 'statements',
-          label: (
-            <Badge color="grey">
-              Bank Statements (0)
-            </Badge>
-          ),
+          label: <Badge color="grey">Bank Statements (0)</Badge>,
           content: renderBankStatementsTablePlaceholder(),
         },
       ]}
