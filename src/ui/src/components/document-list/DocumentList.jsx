@@ -19,8 +19,16 @@ import { Logger } from 'aws-amplify';
 
 import useDocumentsContext from '../../contexts/documents';
 import useSettingsContext from '../../contexts/settings';
+import { useCompany } from '../../contexts/CompanyProvider';
 
 import mapDocumentsAttributes from '../common/map-document-attributes';
+import {
+  fetchExtractionResults,
+  formatInvoiceData,
+  formatBankStatementData,
+  getStatusVariant,
+  DOCUMENT_TYPES,
+} from '../../services/extractionService';
 import { paginationLabels } from '../common/labels';
 import useLocalStorage from '../common/local-storage';
 import { exportToExcel } from '../common/download-func';
@@ -48,6 +56,16 @@ const DocumentList = () => {
   const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
   const [isReprocessModalVisible, setIsReprocessModalVisible] = useState(false);
   const [activeTabId, setActiveTabId] = useState('documents');
+  
+  // Extraction results state
+  const [invoices, setInvoices] = useState([]);
+  const [bankStatements, setBankStatements] = useState([]);
+  const [isLoadingInvoices, setIsLoadingInvoices] = useState(false);
+  const [isLoadingBankStatements, setIsLoadingBankStatements] = useState(false);
+  const [invoicesNextToken, setInvoicesNextToken] = useState(null);
+  const [bankStatementsNextToken, setBankStatementsNextToken] = useState(null);
+  
+  const { activeCompany, isCompanySelected } = useCompany();
   const { settings } = useSettingsContext();
 
   const {
@@ -95,6 +113,80 @@ const DocumentList = () => {
     setSelectedItems(collectionProps.selectedItems);
   }, [collectionProps.selectedItems]);
 
+  // Load invoices when company is selected and tab is active
+  useEffect(() => {
+    const loadInvoices = async () => {
+      if (!isCompanySelected || !activeCompany?.companyNumber) {
+        logger.debug('No company selected, skipping invoice load');
+        setInvoices([]);
+        return;
+      }
+
+      if (activeTabId !== 'invoices') {
+        return; // Only load when tab is active
+      }
+
+      setIsLoadingInvoices(true);
+      try {
+        logger.debug(`Loading invoices for company ${activeCompany.companyNumber}`);
+        const result = await fetchExtractionResults(
+          activeCompany.companyNumber,
+          DOCUMENT_TYPES.INVOICE,
+          50,
+        );
+        
+        const formattedInvoices = result.items.map(formatInvoiceData);
+        setInvoices(formattedInvoices);
+        setInvoicesNextToken(result.nextToken);
+        logger.debug(`Loaded ${formattedInvoices.length} invoices`);
+      } catch (error) {
+        logger.error('Error loading invoices:', error);
+        setInvoices([]);
+      } finally {
+        setIsLoadingInvoices(false);
+      }
+    };
+
+    loadInvoices();
+  }, [isCompanySelected, activeCompany?.companyNumber, activeTabId]);
+
+  // Load bank statements when company is selected and tab is active
+  useEffect(() => {
+    const loadBankStatements = async () => {
+      if (!isCompanySelected || !activeCompany?.companyNumber) {
+        logger.debug('No company selected, skipping bank statements load');
+        setBankStatements([]);
+        return;
+      }
+
+      if (activeTabId !== 'statements') {
+        return; // Only load when tab is active
+      }
+
+      setIsLoadingBankStatements(true);
+      try {
+        logger.debug(`Loading bank statements for company ${activeCompany.companyNumber}`);
+        const result = await fetchExtractionResults(
+          activeCompany.companyNumber,
+          DOCUMENT_TYPES.BANK_STATEMENT,
+          50,
+        );
+        
+        const formattedStatements = result.items.map(formatBankStatementData);
+        setBankStatements(formattedStatements);
+        setBankStatementsNextToken(result.nextToken);
+        logger.debug(`Loaded ${formattedStatements.length} bank statements`);
+      } catch (error) {
+        logger.error('Error loading bank statements:', error);
+        setBankStatements([]);
+      } finally {
+        setIsLoadingBankStatements(false);
+      }
+    };
+
+    loadBankStatements();
+  }, [isCompanySelected, activeCompany?.companyNumber, activeTabId]);
+
   const handleDeleteConfirm = async () => {
     const objectKeys = collectionProps.selectedItems.map((item) => item.objectKey);
     logger.debug('Deleting documents', objectKeys);
@@ -123,69 +215,71 @@ const DocumentList = () => {
     actions.setSelectedItems([]);
   };
 
-  // Placeholder: Invoice Table Component
-  const renderInvoicesTablePlaceholder = () => (
+  // Invoices Table Component
+  const renderInvoicesTable = () => (
     <Table
       columnDefinitions={[
         {
-          id: 'vendor',
-          header: 'Vendor',
-          cell: () => '-',
-          width: 150,
+          id: 'invoiceNumber',
+          header: 'Invoice #',
+          cell: (item) => item.invoiceNumber,
+          width: 120,
+          sortingField: 'invoiceNumber',
         },
         {
-          id: 'invoice_date',
+          id: 'vendor',
+          header: 'Vendor',
+          cell: (item) => item.vendor,
+          width: 180,
+          sortingField: 'vendor',
+        },
+        {
+          id: 'date',
           header: 'Invoice Date',
-          cell: () => '-',
+          cell: (item) => item.date,
           width: 120,
+          sortingField: 'date',
+        },
+        {
+          id: 'dueDate',
+          header: 'Due Date',
+          cell: (item) => item.dueDate,
+          width: 120,
+          sortingField: 'dueDate',
         },
         {
           id: 'amount',
           header: 'Amount',
-          cell: () => '-',
+          cell: (item) => item.amount,
+          width: 120,
+          sortingField: 'amount',
+        },
+        {
+          id: 'status',
+          header: 'Status',
+          cell: (item) => <Badge color={getStatusVariant(item.status)}>{item.status}</Badge>,
+          width: 120,
+          sortingField: 'status',
+        },
+        {
+          id: 'confidence',
+          header: 'Confidence',
+          cell: (item) => item.confidence,
           width: 100,
-        },
-        {
-          id: 'category',
-          header: 'Category',
-          cell: () => '-',
-          width: 130,
-        },
-        {
-          id: 'compliance_score',
-          header: 'Compliance Score',
-          cell: () => '-',
-          width: 130,
-        },
-        {
-          id: 'risk_factors',
-          header: 'Risk Factors',
-          cell: () => '-',
-          width: 130,
-        },
-        {
-          id: 'bim37000',
-          header: 'BIM37000',
-          cell: () => '-',
-          width: 100,
-        },
-        {
-          id: 'action',
-          header: 'Action',
-          cell: () => '-',
-          width: 100,
+          sortingField: 'confidence',
         },
       ]}
-      items={[]}
-      loading={false}
+      items={invoices}
+      loading={isLoadingInvoices}
       loadingText="Loading invoices"
+      sortingDisabled={false}
       header={
         <Header
-          counter="(0)"
-          info={
-            <Box variant="p" color="text-status-info">
-              Backend integration in progress
-            </Box>
+          counter={`(${invoices.length})`}
+          description={
+            isCompanySelected
+              ? `Extracted invoices for ${activeCompany?.companyName || 'selected company'}`
+              : 'Select a company to view invoices'
           }
         >
           Invoices
@@ -194,102 +288,125 @@ const DocumentList = () => {
       empty={
         <Box margin={{ vertical: 'xs' }} textAlign="center" color="inherit">
           <SpaceBetween size="m">
-            <Box variant="h3">Invoice Extraction - Coming Soon</Box>
-            <Box variant="p" color="text-body-secondary">
-              Extracted invoice records will appear here once the Analysis Stack is deployed.
-              <br />
-              Each invoice will show vendor, amount, category, compliance scores, and risk factors.
+            <Box variant="h3">
+              {isCompanySelected ? 'No invoices found' : 'No company selected'}
             </Box>
-            <StatusIndicator type="info">Backend API not available yet</StatusIndicator>
+            <Box variant="p" color="text-body-secondary">
+              {isCompanySelected
+                ? 'No extracted invoices available for this company yet.'
+                : 'Please select a company from the dropdown to view invoices.'}
+            </Box>
           </SpaceBetween>
         </Box>
       }
-      pagination={<Pagination currentPageIndex={1} pagesCount={1} disabled />}
+      pagination={
+        <Pagination
+          currentPageIndex={1}
+          pagesCount={1}
+          disabled={!invoicesNextToken}
+        />
+      }
     />
   );
 
-  // Placeholder: Bank Statements Table Component
-  const renderBankStatementsTablePlaceholder = () => (
+  // Bank Statements Table Component
+  const renderBankStatementsTable = () => (
     <Table
       columnDefinitions={[
         {
-          id: 'transaction_date',
-          header: 'Date',
-          cell: () => '-',
-          width: 120,
-        },
-        {
-          id: 'description',
-          header: 'Description',
-          cell: () => '-',
-          width: 200,
-        },
-        {
-          id: 'counterparty',
-          header: 'Counterparty',
-          cell: () => '-',
+          id: 'bankName',
+          header: 'Bank',
+          cell: (item) => item.bankName,
           width: 150,
+          sortingField: 'bankName',
         },
         {
-          id: 'amount',
-          header: 'Amount',
-          cell: () => '-',
-          width: 100,
+          id: 'accountNumber',
+          header: 'Account',
+          cell: (item) => item.accountNumber,
+          width: 130,
+          sortingField: 'accountNumber',
         },
         {
-          id: 'type',
-          header: 'Type',
-          cell: () => '-',
-          width: 80,
+          id: 'statementDate',
+          header: 'Statement Date',
+          cell: (item) => item.statementDate,
+          width: 130,
+          sortingField: 'statementDate',
         },
         {
-          id: 'balance',
-          header: 'Balance',
-          cell: () => '-',
-          width: 100,
+          id: 'statementPeriod',
+          header: 'Period',
+          cell: (item) => item.statementPeriod,
+          width: 150,
+          sortingField: 'statementPeriod',
         },
         {
-          id: 'category',
-          header: 'Category',
-          cell: () => '-',
+          id: 'openingBalance',
+          header: 'Opening Balance',
+          cell: (item) => item.openingBalance,
+          width: 140,
+          sortingField: 'openingBalance',
+        },
+        {
+          id: 'closingBalance',
+          header: 'Closing Balance',
+          cell: (item) => item.closingBalance,
+          width: 140,
+          sortingField: 'closingBalance',
+        },
+        {
+          id: 'status',
+          header: 'Status',
+          cell: (item) => <Badge color={getStatusVariant(item.status)}>{item.status}</Badge>,
           width: 120,
+          sortingField: 'status',
         },
         {
-          id: 'compliance_score',
-          header: 'Compliance Score',
-          cell: () => '-',
+          id: 'confidence',
+          header: 'Confidence',
+          cell: (item) => item.confidence,
           width: 100,
+          sortingField: 'confidence',
         },
       ]}
-      items={[]}
-      loading={false}
-      loadingText="Loading bank transactions"
+      items={bankStatements}
+      loading={isLoadingBankStatements}
+      loadingText="Loading bank statements"
+      sortingDisabled={false}
       header={
         <Header
-          counter="(0)"
-          info={
-            <Box variant="p" color="text-status-info">
-              Backend integration in progress
-            </Box>
+          counter={`(${bankStatements.length})`}
+          description={
+            isCompanySelected
+              ? `Extracted bank statements for ${activeCompany?.companyName || 'selected company'}`
+              : 'Select a company to view bank statements'
           }
         >
-          Bank Transactions
+          Bank Statements
         </Header>
       }
       empty={
         <Box margin={{ vertical: 'xs' }} textAlign="center" color="inherit">
           <SpaceBetween size="m">
-            <Box variant="h3">Bank Statement Extraction - Coming Soon</Box>
-            <Box variant="p" color="text-body-secondary">
-              Extracted bank transaction records will appear here once the Analysis Stack is deployed.
-              <br />
-              Each transaction will show date, description, counterparty, amount, and compliance scores.
+            <Box variant="h3">
+              {isCompanySelected ? 'No bank statements found' : 'No company selected'}
             </Box>
-            <StatusIndicator type="info">Backend API not available yet</StatusIndicator>
+            <Box variant="p" color="text-body-secondary">
+              {isCompanySelected
+                ? 'No extracted bank statements available for this company yet.'
+                : 'Please select a company from the dropdown to view bank statements.'}
+            </Box>
           </SpaceBetween>
         </Box>
       }
-      pagination={<Pagination currentPageIndex={1} pagesCount={1} disabled />}
+      pagination={
+        <Pagination
+          currentPageIndex={1}
+          pagesCount={1}
+          disabled={!bankStatementsNextToken}
+        />
+      }
     />
   );
 
@@ -367,13 +484,21 @@ const DocumentList = () => {
         },
         {
           id: 'invoices',
-          label: <Badge color="grey">Invoices (0)</Badge>,
-          content: renderInvoicesTablePlaceholder(),
+          label: (
+            <Badge color={invoices.length > 0 ? 'blue' : 'grey'}>
+              Invoices ({invoices.length})
+            </Badge>
+          ),
+          content: renderInvoicesTable(),
         },
         {
           id: 'statements',
-          label: <Badge color="grey">Bank Statements (0)</Badge>,
-          content: renderBankStatementsTablePlaceholder(),
+          label: (
+            <Badge color={bankStatements.length > 0 ? 'blue' : 'grey'}>
+              Bank Statements ({bankStatements.length})
+            </Badge>
+          ),
+          content: renderBankStatementsTable(),
         },
       ]}
     />
