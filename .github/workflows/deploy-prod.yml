@@ -110,8 +110,6 @@ jobs:
     - name: Deploy to production stack
       run: |
         TEMPLATE_URL="https://s3.eu-central-1.amazonaws.com/fiscalshield-prod-eu-central-1/idp/idp-main.yaml"
-        ALLOWED_DOMAINS="gmail.com,outlook.com,yahoo.com,hotmail.com,icloud.com,protonmail.com,duck.com"
-        
         if [ "${{ steps.check_stack.outputs.stack_exists }}" == "true" ]; then
           echo "🔄 Updating existing stack..."
           PARAM_FILE=$(mktemp)
@@ -121,7 +119,7 @@ jobs:
             "  {\"ParameterKey\": \"IDPPattern\", \"UsePreviousValue\": true}," \
             "  {\"ParameterKey\": \"Pattern2Configuration\", \"UsePreviousValue\": true}," \
             "  {\"ParameterKey\": \"DocumentKnowledgeBase\", \"UsePreviousValue\": true}," \
-            "  {\"ParameterKey\": \"AllowedSignUpEmailDomain\", \"ParameterValue\": \"${ALLOWED_DOMAINS}\"}" \
+            "  {\"ParameterKey\": \"AllowedSignUpEmailDomain\", \"UsePreviousValue\": true}" \
             ']' > "$PARAM_FILE"
           aws cloudformation update-stack \
             --stack-name fiscalshield-idp-prod \
