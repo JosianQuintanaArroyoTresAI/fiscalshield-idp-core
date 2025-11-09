@@ -1,7 +1,19 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 import React, { useEffect, useState } from 'react';
-import { Table, Pagination, TextFilter } from '@awsui/components-react';
+import {
+  Table,
+  Pagination,
+  TextFilter,
+  Tabs,
+  Badge,
+  Container,
+  Box,
+  SpaceBetween,
+  Header,
+  StatusIndicator,
+  Button,
+} from '@awsui/components-react';
 import { useCollection } from '@awsui/collection-hooks';
 import { Logger } from 'aws-amplify';
 
@@ -35,6 +47,7 @@ const DocumentList = () => {
   const [documentList, setDocumentList] = useState([]);
   const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
   const [isReprocessModalVisible, setIsReprocessModalVisible] = useState(false);
+  const [activeTabId, setActiveTabId] = useState('documents');
   const { settings } = useSettingsContext();
 
   const {
@@ -110,8 +123,178 @@ const DocumentList = () => {
     actions.setSelectedItems([]);
   };
 
-  /* eslint-disable react/jsx-props-no-spreading */
-  return (
+  // Placeholder: Invoice Table Component
+  const renderInvoicesTablePlaceholder = () => (
+    <Table
+      columnDefinitions={[
+        {
+          id: 'vendor',
+          header: 'Vendor',
+          cell: () => '-',
+          width: 150,
+        },
+        {
+          id: 'invoice_date',
+          header: 'Invoice Date',
+          cell: () => '-',
+          width: 120,
+        },
+        {
+          id: 'amount',
+          header: 'Amount',
+          cell: () => '-',
+          width: 100,
+        },
+        {
+          id: 'category',
+          header: 'Category',
+          cell: () => '-',
+          width: 130,
+        },
+        {
+          id: 'compliance_score',
+          header: 'Compliance Score',
+          cell: () => '-',
+          width: 130,
+        },
+        {
+          id: 'risk_factors',
+          header: 'Risk Factors',
+          cell: () => '-',
+          width: 130,
+        },
+        {
+          id: 'bim37000',
+          header: 'BIM37000',
+          cell: () => '-',
+          width: 100,
+        },
+        {
+          id: 'action',
+          header: 'Action',
+          cell: () => '-',
+          width: 100,
+        },
+      ]}
+      items={[]}
+      loading={false}
+      loadingText="Loading invoices"
+      header={
+        <Header
+          counter="(0)"
+          info={
+            <Box variant="p" color="text-status-info">
+              Backend integration in progress
+            </Box>
+          }
+        >
+          Invoices
+        </Header>
+      }
+      empty={
+        <Box margin={{ vertical: 'xs' }} textAlign="center" color="inherit">
+          <SpaceBetween size="m">
+            <Box variant="h3">Invoice Extraction - Coming Soon</Box>
+            <Box variant="p" color="text-body-secondary">
+              Extracted invoice records will appear here once the Analysis Stack is deployed.
+              <br />
+              Each invoice will show vendor, amount, category, compliance scores, and risk factors.
+            </Box>
+            <StatusIndicator type="info">Backend API not available yet</StatusIndicator>
+          </SpaceBetween>
+        </Box>
+      }
+      pagination={<Pagination currentPageIndex={1} pagesCount={1} disabled />}
+    />
+  );
+
+  // Placeholder: Bank Statements Table Component
+  const renderBankStatementsTablePlaceholder = () => (
+    <Table
+      columnDefinitions={[
+        {
+          id: 'transaction_date',
+          header: 'Date',
+          cell: () => '-',
+          width: 120,
+        },
+        {
+          id: 'description',
+          header: 'Description',
+          cell: () => '-',
+          width: 200,
+        },
+        {
+          id: 'counterparty',
+          header: 'Counterparty',
+          cell: () => '-',
+          width: 150,
+        },
+        {
+          id: 'amount',
+          header: 'Amount',
+          cell: () => '-',
+          width: 100,
+        },
+        {
+          id: 'type',
+          header: 'Type',
+          cell: () => '-',
+          width: 80,
+        },
+        {
+          id: 'balance',
+          header: 'Balance',
+          cell: () => '-',
+          width: 100,
+        },
+        {
+          id: 'category',
+          header: 'Category',
+          cell: () => '-',
+          width: 120,
+        },
+        {
+          id: 'compliance_score',
+          header: 'Compliance Score',
+          cell: () => '-',
+          width: 100,
+        },
+      ]}
+      items={[]}
+      loading={false}
+      loadingText="Loading bank transactions"
+      header={
+        <Header
+          counter="(0)"
+          info={
+            <Box variant="p" color="text-status-info">
+              Backend integration in progress
+            </Box>
+          }
+        >
+          Bank Transactions
+        </Header>
+      }
+      empty={
+        <Box margin={{ vertical: 'xs' }} textAlign="center" color="inherit">
+          <SpaceBetween size="m">
+            <Box variant="h3">Bank Statement Extraction - Coming Soon</Box>
+            <Box variant="p" color="text-body-secondary">
+              Extracted bank transaction records will appear here once the Analysis Stack is deployed.
+              <br />
+              Each transaction will show date, description, counterparty, amount, and compliance scores.
+            </Box>
+            <StatusIndicator type="info">Backend API not available yet</StatusIndicator>
+          </SpaceBetween>
+        </Box>
+      }
+      pagination={<Pagination currentPageIndex={1} pagesCount={1} disabled />}
+    />
+  );
+
+  // Documents Table (existing implementation)
+  const renderDocumentsTable = () => (
     <>
       <Table
         {...collectionProps}
@@ -169,6 +352,31 @@ const DocumentList = () => {
         selectedItems={collectionProps.selectedItems}
       />
     </>
+  );
+
+  /* eslint-disable react/jsx-props-no-spreading */
+  return (
+    <Tabs
+      activeTabId={activeTabId}
+      onChange={({ detail }) => setActiveTabId(detail.activeTabId)}
+      tabs={[
+        {
+          id: 'documents',
+          label: 'Documents',
+          content: renderDocumentsTable(),
+        },
+        {
+          id: 'invoices',
+          label: <Badge color="grey">Invoices (0)</Badge>,
+          content: renderInvoicesTablePlaceholder(),
+        },
+        {
+          id: 'statements',
+          label: <Badge color="grey">Bank Statements (0)</Badge>,
+          content: renderBankStatementsTablePlaceholder(),
+        },
+      ]}
+    />
   );
 };
 
