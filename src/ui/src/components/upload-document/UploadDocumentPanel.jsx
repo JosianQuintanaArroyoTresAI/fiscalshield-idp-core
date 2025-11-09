@@ -17,9 +17,11 @@ import {
 import { API, graphqlOperation } from 'aws-amplify';
 import uploadDocument from '../../graphql/queries/uploadDocument';
 import useSettingsContext from '../../contexts/settings';
+import { useCompany } from '../../contexts/company';
 
 const UploadDocumentPanel = () => {
   const { settings } = useSettingsContext();
+  const { activeCompany, isCompanySelected } = useCompany();
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState([]);
@@ -89,17 +91,14 @@ const UploadDocumentPanel = () => {
     setUploadStatus([]);
     setError(null);
 
-    // Get active company context from localStorage
-    const activeCompanyStr = localStorage.getItem('active_company');
-    const activeCompany = activeCompanyStr ? JSON.parse(activeCompanyStr) : null;
-
-    if (!activeCompany || !activeCompany.company_number) {
+    // Check if company is selected using the context
+    if (!isCompanySelected || !activeCompany?.companyNumber) {
       setError('No company selected. Please select a company from the landing page first.');
       setIsUploading(false);
       return;
     }
 
-    console.log('Uploading documents for company:', activeCompany.company_name, activeCompany.company_number);
+    console.log('Uploading documents for company:', activeCompany.companyName, activeCompany.companyNumber);
 
     const newUploadStatus = [];
 
@@ -112,15 +111,15 @@ const UploadDocumentPanel = () => {
           // Step 1: Get presigned URL data
           console.log(`Getting upload credentials for ${file.name}...`);
           console.log(`Document type: ${documentType}`);
-          console.log(`Company: ${activeCompany.company_name} (${activeCompany.company_number})`);
+          console.log(`Company: ${activeCompany.companyName} (${activeCompany.companyNumber})`);
 
           const response = await API.graphql(
             graphqlOperation(uploadDocument, {
               fileName: file.name,
               contentType: file.type,
               bucket: settings.InputBucket, // Explicitly pass the input bucket
-              companyNumber: activeCompany.company_number, // Pass company number for isolation
-              companyName: activeCompany.company_name, // Pass company name for metadata
+              companyNumber: activeCompany.companyNumber, // Pass company number for isolation
+              companyName: activeCompany.companyName, // Pass company name for metadata
               documentType: documentType, // NEW: Pass the selected document type
             }),
           );
