@@ -376,8 +376,7 @@ const CompanyAnalysis = () => {
             <CompactRiskCard
               title="Director Screening"
               value={
-                (intelligence.aml?.sanctioned_directors?.length || 0) +
-                (intelligence.aml?.pep_directors?.length || 0)
+                (intelligence.aml?.sanctioned_directors?.length || 0) + (intelligence.aml?.pep_directors?.length || 0)
               }
               status={intelligence.aml?.requires_enhanced_dd ? 'ENHANCED DD' : 'CLEAN'}
               statusColor={intelligence.aml?.requires_enhanced_dd ? '#fd7e14' : '#28a745'}
@@ -505,7 +504,9 @@ const CompanyAnalysis = () => {
     const accountsOverdue =
       intelligence?.financial?.accounts_overdue ?? companyProfile?.accounts?.accounts_overdue ?? false;
     const confirmationOverdue =
-      intelligence?.financial?.confirmation_statement_overdue ?? companyProfile?.confirmation_statement_overdue ?? false;
+      intelligence?.financial?.confirmation_statement_overdue ??
+      companyProfile?.confirmation_statement_overdue ??
+      false;
     const recentFilings = filingHistory?.recent_filings || [];
     const latestFiling = recentFilings.length ? recentFilings[0] : null;
 
@@ -624,7 +625,10 @@ const CompanyAnalysis = () => {
         {!filingLoading && !filingHistory && !filingError ? (
           <Box textAlign="center" padding="xxl">
             <TextContent>
-              <p>No filing history data available yet. Trigger background research from the landing page to populate this view.</p>
+              <p>
+                No filing history data available yet. Trigger background research from the landing page to populate this
+                view.
+              </p>
             </TextContent>
           </Box>
         ) : null}
@@ -740,8 +744,8 @@ const CompanyAnalysis = () => {
               header={`Directors risk level: ${intelligence?.risk_assessment?.risk_level || 'Unknown'}`}
             >
               <div>
-                <strong>Total officers:</strong> {officersData.total_results || officerRows.length}{' '}
-                ({officersData.active_count || (officersData.active_officers || []).length} active)
+                <strong>Total officers:</strong> {officersData.total_results || officerRows.length} (
+                {officersData.active_count || (officersData.active_officers || []).length} active)
               </div>
               {intelligence?.risk_assessment?.summary && (
                 <div style={{ marginTop: '8px' }}>{intelligence.risk_assessment.summary}</div>
