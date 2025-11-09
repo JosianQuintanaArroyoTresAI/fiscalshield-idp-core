@@ -2,12 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 const listExtractionResults = /* GraphQL */ `
-  query ListExtractionResults(
-    $companyNumber: String!
-    $documentType: String!
-    $limit: Int
-    $nextToken: String
-  ) {
+  query ListExtractionResults($companyNumber: String!, $documentType: String!, $limit: Int, $nextToken: String) {
     listExtractionResults(
       companyNumber: $companyNumber
       documentType: $documentType

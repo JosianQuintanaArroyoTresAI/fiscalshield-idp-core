@@ -26,16 +26,9 @@ export const DOCUMENT_TYPES = {
  * @param {string} nextToken - Pagination token for next page
  * @returns {Promise<{items: Array, nextToken: string|null}>} Extraction results
  */
-export const fetchExtractionResults = async (
-  companyNumber,
-  documentType,
-  limit = 50,
-  nextToken = null,
-) => {
+export const fetchExtractionResults = async (companyNumber, documentType, limit = 50, nextToken = null) => {
   try {
-    logger.debug(
-      `Fetching ${documentType} extraction results for company ${companyNumber}`,
-    );
+    logger.debug(`Fetching ${documentType} extraction results for company ${companyNumber}`);
 
     const response = await API.graphql(
       graphqlOperation(listExtractionResultsQuery, {
@@ -48,9 +41,7 @@ export const fetchExtractionResults = async (
 
     const result = response?.data?.listExtractionResults || { items: [] };
 
-    logger.debug(
-      `Fetched ${result.items.length} extraction results, hasMore: ${!!result.nextToken}`,
-    );
+    logger.debug(`Fetched ${result.items.length} extraction results, hasMore: ${!!result.nextToken}`);
 
     return {
       items: result.items || [],
@@ -74,14 +65,9 @@ export const formatInvoiceData = (extractionResult) => {
     vendor: extractionResult.VendorName || 'Unknown Vendor',
     date: formatDate(extractionResult.InvoiceDate),
     dueDate: formatDate(extractionResult.DueDate),
-    amount: formatCurrency(
-      extractionResult.TotalAmount,
-      extractionResult.Currency,
-    ),
+    amount: formatCurrency(extractionResult.TotalAmount, extractionResult.Currency),
     status: extractionResult.ExtractionStatus || 'UNKNOWN',
-    confidence: extractionResult.ConfidenceScore
-      ? (extractionResult.ConfidenceScore * 100).toFixed(1) + '%'
-      : 'N/A',
+    confidence: extractionResult.ConfidenceScore ? (extractionResult.ConfidenceScore * 100).toFixed(1) + '%' : 'N/A',
     supplierAddress: extractionResult.SupplierAddress || 'N/A',
     processedAt: extractionResult.ProcessedAt,
     s3Uri: extractionResult.S3Uri,
@@ -98,23 +84,13 @@ export const formatBankStatementData = (extractionResult) => {
   return {
     id: extractionResult.DocumentId,
     bankName: extractionResult.BankName || 'Unknown Bank',
-    accountNumber: extractionResult.AccountNumber
-      ? maskAccountNumber(extractionResult.AccountNumber)
-      : 'N/A',
+    accountNumber: extractionResult.AccountNumber ? maskAccountNumber(extractionResult.AccountNumber) : 'N/A',
     statementDate: formatDate(extractionResult.StatementDate),
     statementPeriod: extractionResult.StatementPeriod || 'N/A',
-    openingBalance: formatCurrency(
-      extractionResult.OpeningBalance,
-      extractionResult.Currency,
-    ),
-    closingBalance: formatCurrency(
-      extractionResult.ClosingBalance,
-      extractionResult.Currency,
-    ),
+    openingBalance: formatCurrency(extractionResult.OpeningBalance, extractionResult.Currency),
+    closingBalance: formatCurrency(extractionResult.ClosingBalance, extractionResult.Currency),
     status: extractionResult.ExtractionStatus || 'UNKNOWN',
-    confidence: extractionResult.ConfidenceScore
-      ? (extractionResult.ConfidenceScore * 100).toFixed(1) + '%'
-      : 'N/A',
+    confidence: extractionResult.ConfidenceScore ? (extractionResult.ConfidenceScore * 100).toFixed(1) + '%' : 'N/A',
     processedAt: extractionResult.ProcessedAt,
     s3Uri: extractionResult.S3Uri,
     rawData: extractionResult,

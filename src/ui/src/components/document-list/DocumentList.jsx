@@ -56,7 +56,7 @@ const DocumentList = () => {
   const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
   const [isReprocessModalVisible, setIsReprocessModalVisible] = useState(false);
   const [activeTabId, setActiveTabId] = useState('documents');
-  
+
   // Extraction results state
   const [invoices, setInvoices] = useState([]);
   const [bankStatements, setBankStatements] = useState([]);
@@ -64,7 +64,7 @@ const DocumentList = () => {
   const [isLoadingBankStatements, setIsLoadingBankStatements] = useState(false);
   const [invoicesNextToken, setInvoicesNextToken] = useState(null);
   const [bankStatementsNextToken, setBankStatementsNextToken] = useState(null);
-  
+
   const { activeCompany, isCompanySelected } = useCompany();
   const { settings } = useSettingsContext();
 
@@ -129,12 +129,8 @@ const DocumentList = () => {
       setIsLoadingInvoices(true);
       try {
         logger.debug(`Loading invoices for company ${activeCompany.companyNumber}`);
-        const result = await fetchExtractionResults(
-          activeCompany.companyNumber,
-          DOCUMENT_TYPES.INVOICE,
-          50,
-        );
-        
+        const result = await fetchExtractionResults(activeCompany.companyNumber, DOCUMENT_TYPES.INVOICE, 50);
+
         const formattedInvoices = result.items.map(formatInvoiceData);
         setInvoices(formattedInvoices);
         setInvoicesNextToken(result.nextToken);
@@ -166,12 +162,8 @@ const DocumentList = () => {
       setIsLoadingBankStatements(true);
       try {
         logger.debug(`Loading bank statements for company ${activeCompany.companyNumber}`);
-        const result = await fetchExtractionResults(
-          activeCompany.companyNumber,
-          DOCUMENT_TYPES.BANK_STATEMENT,
-          50,
-        );
-        
+        const result = await fetchExtractionResults(activeCompany.companyNumber, DOCUMENT_TYPES.BANK_STATEMENT, 50);
+
         const formattedStatements = result.items.map(formatBankStatementData);
         setBankStatements(formattedStatements);
         setBankStatementsNextToken(result.nextToken);
@@ -288,9 +280,7 @@ const DocumentList = () => {
       empty={
         <Box margin={{ vertical: 'xs' }} textAlign="center" color="inherit">
           <SpaceBetween size="m">
-            <Box variant="h3">
-              {isCompanySelected ? 'No invoices found' : 'No company selected'}
-            </Box>
+            <Box variant="h3">{isCompanySelected ? 'No invoices found' : 'No company selected'}</Box>
             <Box variant="p" color="text-body-secondary">
               {isCompanySelected
                 ? 'No extracted invoices available for this company yet.'
@@ -299,13 +289,7 @@ const DocumentList = () => {
           </SpaceBetween>
         </Box>
       }
-      pagination={
-        <Pagination
-          currentPageIndex={1}
-          pagesCount={1}
-          disabled={!invoicesNextToken}
-        />
-      }
+      pagination={<Pagination currentPageIndex={1} pagesCount={1} disabled={!invoicesNextToken} />}
     />
   );
 
@@ -389,9 +373,7 @@ const DocumentList = () => {
       empty={
         <Box margin={{ vertical: 'xs' }} textAlign="center" color="inherit">
           <SpaceBetween size="m">
-            <Box variant="h3">
-              {isCompanySelected ? 'No bank statements found' : 'No company selected'}
-            </Box>
+            <Box variant="h3">{isCompanySelected ? 'No bank statements found' : 'No company selected'}</Box>
             <Box variant="p" color="text-body-secondary">
               {isCompanySelected
                 ? 'No extracted bank statements available for this company yet.'
@@ -400,13 +382,7 @@ const DocumentList = () => {
           </SpaceBetween>
         </Box>
       }
-      pagination={
-        <Pagination
-          currentPageIndex={1}
-          pagesCount={1}
-          disabled={!bankStatementsNextToken}
-        />
-      }
+      pagination={<Pagination currentPageIndex={1} pagesCount={1} disabled={!bankStatementsNextToken} />}
     />
   );
 
@@ -484,19 +460,13 @@ const DocumentList = () => {
         },
         {
           id: 'invoices',
-          label: (
-            <Badge color={invoices.length > 0 ? 'blue' : 'grey'}>
-              Invoices ({invoices.length})
-            </Badge>
-          ),
+          label: <Badge color={invoices.length > 0 ? 'blue' : 'grey'}>Invoices ({invoices.length})</Badge>,
           content: renderInvoicesTable(),
         },
         {
           id: 'statements',
           label: (
-            <Badge color={bankStatements.length > 0 ? 'blue' : 'grey'}>
-              Bank Statements ({bankStatements.length})
-            </Badge>
+            <Badge color={bankStatements.length > 0 ? 'blue' : 'grey'}>Bank Statements ({bankStatements.length})</Badge>
           ),
           content: renderBankStatementsTable(),
         },
