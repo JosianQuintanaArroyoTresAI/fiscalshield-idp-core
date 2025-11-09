@@ -21,6 +21,7 @@ import { Logger } from 'aws-amplify';
 
 import { checkAnalysisStackHealth, fetchCompanyIntelligence, generateAMLReport } from '../../services/analysisStack';
 import { COMPANY_SELECT_PATH } from '../../routes/constants';
+import AppLayoutWrapper from '../app-layout-wrapper';
 
 import '@awsui/global-styles/index.css';
 
@@ -159,70 +160,51 @@ const CompanyIntelligence = () => {
     return days === 1 ? '1 day ago' : `${days} days ago`;
   };
 
+  const breadcrumbs = (
+    <BreadcrumbGroup
+      items={[
+        { text: 'Company Select', href: COMPANY_SELECT_PATH },
+        { text: intelligence?.company_name || companyNumber, href: '#' },
+      ]}
+      onFollow={(event) => {
+        event.preventDefault();
+        history.push(event.detail.href);
+      }}
+    />
+  );
+
   if (isAnalysisStackAvailable === false) {
     return (
-      <Box padding="xxl">
-        <SpaceBetween size="l">
-          <BreadcrumbGroup
-            items={[
-              { text: 'Company Select', href: COMPANY_SELECT_PATH },
-              { text: 'Company Intelligence', href: '#' },
-            ]}
-            onFollow={(event) => {
-              event.preventDefault();
-              history.push(event.detail.href);
-            }}
-          />
-          <Alert type="warning" header="Analysis Stack Not Available">
-            The Analysis Stack is not deployed or not accessible. Company intelligence features are currently
-            unavailable.
-          </Alert>
-        </SpaceBetween>
-      </Box>
+      <AppLayoutWrapper breadcrumbs={breadcrumbs}>
+        <Alert type="warning" header="Analysis Stack Not Available">
+          The Analysis Stack is not deployed or not accessible. Company intelligence features are currently
+          unavailable.
+        </Alert>
+      </AppLayoutWrapper>
     );
   }
 
   if (isLoading) {
     return (
-      <Box padding="xxl" textAlign="center">
-        <SpaceBetween size="l">
-          <BreadcrumbGroup
-            items={[
-              { text: 'Company Select', href: COMPANY_SELECT_PATH },
-              { text: 'Company Intelligence', href: '#' },
-            ]}
-            onFollow={(event) => {
-              event.preventDefault();
-              history.push(event.detail.href);
-            }}
-          />
+      <AppLayoutWrapper breadcrumbs={breadcrumbs}>
+        <Box textAlign="center" padding="xxl">
           <Spinner size="large" />
           <Box variant="p">Loading company intelligence...</Box>
-        </SpaceBetween>
-      </Box>
+        </Box>
+      </AppLayoutWrapper>
     );
   }
 
   if (error && !intelligence) {
     return (
-      <Box padding="xxl">
+      <AppLayoutWrapper breadcrumbs={breadcrumbs}>
         <SpaceBetween size="l">
-          <BreadcrumbGroup
-            items={[
-              { text: 'Company Select', href: COMPANY_SELECT_PATH },
-              { text: 'Company Intelligence', href: '#' },
-            ]}
-            onFollow={(event) => {
-              event.preventDefault();
-              history.push(event.detail.href);
-            }}
-          />
           <Alert type="error" header="Error Loading Intelligence">
             {error}
           </Alert>
           <Button onClick={() => history.push(COMPANY_SELECT_PATH)}>Back to Company Select</Button>
         </SpaceBetween>
-      </Box>
+      </AppLayoutWrapper>
     );
   }
 
@@ -239,19 +221,8 @@ const CompanyIntelligence = () => {
   const insights = intelligence.insights || null;
 
   return (
-    <Box padding="xxl">
+    <AppLayoutWrapper breadcrumbs={breadcrumbs}>
       <SpaceBetween size="l">
-        {/* Breadcrumb */}
-        <BreadcrumbGroup
-          items={[
-            { text: 'Company Select', href: COMPANY_SELECT_PATH },
-            { text: intelligence.company_name || companyNumber, href: '#' },
-          ]}
-          onFollow={(event) => {
-            event.preventDefault();
-            history.push(event.detail.href);
-          }}
-        />
 
         {/* Hero Banner - Risk Assessment */}
         <Container
@@ -646,7 +617,7 @@ const CompanyIntelligence = () => {
           </ColumnLayout>
         </ExpandableSection>
       </SpaceBetween>
-    </Box>
+    </AppLayoutWrapper>
   );
 };
 

@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import React, { useState } from 'react';
 import { Switch, Route, useRouteMatch } from 'react-router-dom';
-import { AppLayout, Flashbar } from '@awsui/components-react';
 
 import { Logger } from 'aws-amplify';
 
@@ -18,14 +17,12 @@ import DocumentsQueryLayout from '../document-kb-query-layout';
 import DocumentsAgentsLayout from '../document-agents-layout/DocumentsAgentsLayout';
 import UploadDocumentPanel from '../upload-document';
 import DiscoveryPanel from '../discovery/DiscoveryPanel';
-import { appLayoutLabels } from '../common/labels';
 
-import Navigation from './navigation';
 import Breadcrumbs from './breadcrumbs';
-import ToolsPanel from './tools-panel';
 import SplitPanel from './documents-split-panel';
 import ConfigurationLayout from '../configuration-layout';
 import RequireAdmin from '../RequireAdmin';
+import AppLayoutWrapper from '../app-layout-wrapper';
 
 import { DOCUMENT_LIST_SHARDS_PER_DAY, PERIODS_TO_LOAD_STORAGE_KEY } from '../document-list/documents-table-config';
 import { UPLOAD_DOCUMENT_PATH, DISCOVERY_PATH } from '../../routes/constants';
@@ -35,13 +32,10 @@ import useAppContext from '../../contexts/app';
 const logger = new Logger('GenAIIDPLayout');
 
 const GenAIIDPLayout = () => {
-  const { navigationOpen, setNavigationOpen } = useAppContext();
-
   const { path } = useRouteMatch();
   logger.debug('path', path);
 
   const notifications = useNotifications();
-  const [toolsOpen, setToolsOpen] = useState(false);
   const [selectedItems, setSelectedItems] = useState([]);
 
   const getInitialPeriodsToLoad = () => {
@@ -90,62 +84,43 @@ const GenAIIDPLayout = () => {
     selectedItems,
     setIsDocumentsListLoading,
     setPeriodsToLoad,
-    setToolsOpen,
     setSelectedItems,
     periodsToLoad,
-    toolsOpen,
     deleteDocuments,
     reprocessDocuments,
   };
 
   return (
     <DocumentsContext.Provider value={documentsContextValue}>
-      <AppLayout
-        headerSelector="#top-navigation"
-        navigation={<Navigation />}
-        navigationOpen={navigationOpen}
-        onNavigationChange={({ detail }) => setNavigationOpen(detail.open)}
-        breadcrumbs={<Breadcrumbs />}
-        notifications={<Flashbar items={notifications} />}
-        tools={<ToolsPanel />}
-        toolsOpen={toolsOpen}
-        onToolsChange={({ detail }) => setToolsOpen(detail.open)}
-        splitPanelOpen={splitPanelOpen}
-        onSplitPanelToggle={onSplitPanelToggle}
-        splitPanelSize={splitPanelSize}
-        onSplitPanelResize={onSplitPanelResize}
-        splitPanel={<SplitPanel />}
-        content={
-          <Switch>
-            <Route exact path={path}>
-              <DocumentList />
-            </Route>
-            <Route path={`${path}/query`}>
-              <DocumentsQueryLayout />
-            </Route>
-            <Route path={`${path}/agents`}>
-              <DocumentsAgentsLayout />
-            </Route>
-            <Route path={`${path}/config`}>
-              <RequireAdmin>
-                <ConfigurationLayout />
-              </RequireAdmin>
-            </Route>
-            <Route path={UPLOAD_DOCUMENT_PATH}>
-              <UploadDocumentPanel />
-            </Route>
-            <Route path={DISCOVERY_PATH}>
-              <RequireAdmin>
-                <DiscoveryPanel />
-              </RequireAdmin>
-            </Route>
-            <Route path={`${path}/:objectKey`}>
-              <DocumentDetails />
-            </Route>
-          </Switch>
-        }
-        ariaLabels={appLayoutLabels}
-      />
+      <AppLayoutWrapper notifications={notifications} breadcrumbs={<Breadcrumbs />}>
+        <Switch>
+          <Route exact path={path}>
+            <DocumentList />
+          </Route>
+          <Route path={`${path}/query`}>
+            <DocumentsQueryLayout />
+          </Route>
+          <Route path={`${path}/agents`}>
+            <DocumentsAgentsLayout />
+          </Route>
+          <Route path={`${path}/config`}>
+            <RequireAdmin>
+              <ConfigurationLayout />
+            </RequireAdmin>
+          </Route>
+          <Route path={UPLOAD_DOCUMENT_PATH}>
+            <UploadDocumentPanel />
+          </Route>
+          <Route path={DISCOVERY_PATH}>
+            <RequireAdmin>
+              <DiscoveryPanel />
+            </RequireAdmin>
+          </Route>
+          <Route path={`${path}/:objectKey`}>
+            <DocumentDetails />
+          </Route>
+        </Switch>
+      </AppLayoutWrapper>
     </DocumentsContext.Provider>
   );
 };

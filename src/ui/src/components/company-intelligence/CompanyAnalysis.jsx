@@ -23,6 +23,7 @@ import { COMPANY_SELECT_PATH } from '../../routes/constants';
 import { useCompany } from '../../contexts/company';
 import { fetchCompanyIntelligence, generateAMLReport } from '../../services/analysisStack';
 import { lookupCompany, checkFilingHistory, lookupOfficers } from '../../services/dataCollection';
+import AppLayoutWrapper from '../app-layout-wrapper';
 
 import '@awsui/global-styles/index.css';
 
@@ -1006,88 +1007,94 @@ const CompanyAnalysis = () => {
     </SpaceBetween>
   );
 
+  const breadcrumbs = (
+    <BreadcrumbGroup
+      items={[
+        { text: 'Company select', href: `#${COMPANY_SELECT_PATH}` },
+        { text: companyDisplayName, href: '#' },
+      ]}
+      ariaLabel="Breadcrumbs"
+    />
+  );
+
   if (loading) {
     return (
-      <Box textAlign="center" padding="xxl">
-        <Spinner size="large" />
-        <Box variant="p" color="text-body-secondary">
-          Loading company analysis...
+      <AppLayoutWrapper breadcrumbs={breadcrumbs}>
+        <Box textAlign="center" padding="xxl">
+          <Spinner size="large" />
+          <Box variant="p" color="text-body-secondary">
+            Loading company analysis...
+          </Box>
         </Box>
-      </Box>
+      </AppLayoutWrapper>
     );
   }
 
   return (
-    <SpaceBetween size="l">
-      <BreadcrumbGroup
-        items={[
-          { text: 'Company select', href: `#${COMPANY_SELECT_PATH}` },
-          { text: companyDisplayName, href: '#' },
-        ]}
-        ariaLabel="Breadcrumbs"
-      />
-
-      <Header
-        variant="h1"
-        description={`Company number: ${companyProfile?.company_number || companyNumber}`}
-        actions={
-          <SpaceBetween direction="horizontal" size="s">
-            <Button iconName="external" onClick={() => history.push(COMPANY_SELECT_PATH)}>
-              Choose another company
-            </Button>
-            <Button onClick={handleRefreshAll} loading={isRefreshing} iconName="refresh">
-              Refresh all data
-            </Button>
-          </SpaceBetween>
-        }
-      >
-        Company analysis: {companyDisplayName}
-      </Header>
-
-      {reportSuccess && activeTab !== 'aml_report' && (
-        <Alert
-          type="success"
-          dismissible
-          onDismiss={() => setReportSuccess(null)}
-          action={
-            reportSuccess.downloadUrl && (
-              <Button href={reportSuccess.downloadUrl} iconAlign="right" iconName="external" target="_blank">
-                Download report
+    <AppLayoutWrapper breadcrumbs={breadcrumbs}>
+      <SpaceBetween size="l">
+        <Header
+          variant="h1"
+          description={`Company number: ${companyProfile?.company_number || companyNumber}`}
+          actions={
+            <SpaceBetween direction="horizontal" size="s">
+              <Button iconName="external" onClick={() => history.push(COMPANY_SELECT_PATH)}>
+                Choose another company
               </Button>
-            )
+              <Button onClick={handleRefreshAll} loading={isRefreshing} iconName="refresh">
+                Refresh all data
+              </Button>
+            </SpaceBetween>
           }
         >
-          {reportSuccess.message || 'AML report generated successfully'}
-        </Alert>
-      )}
+          Company analysis: {companyDisplayName}
+        </Header>
 
-      <Tabs
-        activeTabId={activeTab}
-        onChange={({ detail }) => setActiveTab(detail.activeTabId)}
-        tabs={[
-          {
-            id: 'overview',
-            label: 'Overview',
-            content: renderOverview(),
-          },
-          {
-            id: 'filing_history',
-            label: 'Filing History',
-            content: renderFilingHistory(),
-          },
-          {
-            id: 'officers',
-            label: 'Officers',
-            content: renderOfficers(),
-          },
-          {
-            id: 'aml_report',
-            label: 'AML Report',
-            content: renderAMLReport(),
-          },
-        ]}
-      />
-    </SpaceBetween>
+        {reportSuccess && activeTab !== 'aml_report' && (
+          <Alert
+            type="success"
+            dismissible
+            onDismiss={() => setReportSuccess(null)}
+            action={
+              reportSuccess.downloadUrl && (
+                <Button href={reportSuccess.downloadUrl} iconAlign="right" iconName="external" target="_blank">
+                  Download report
+                </Button>
+              )
+            }
+          >
+            {reportSuccess.message || 'AML report generated successfully'}
+          </Alert>
+        )}
+
+        <Tabs
+          activeTabId={activeTab}
+          onChange={({ detail }) => setActiveTab(detail.activeTabId)}
+          tabs={[
+            {
+              id: 'overview',
+              label: 'Overview',
+              content: renderOverview(),
+            },
+            {
+              id: 'filing_history',
+              label: 'Filing History',
+              content: renderFilingHistory(),
+            },
+            {
+              id: 'officers',
+              label: 'Officers',
+              content: renderOfficers(),
+            },
+            {
+              id: 'aml_report',
+              label: 'AML Report',
+              content: renderAMLReport(),
+            },
+          ]}
+        />
+      </SpaceBetween>
+    </AppLayoutWrapper>
   );
 };
 
