@@ -22,6 +22,7 @@ import { ClientTakeOnAnalysis } from '../components/client-takeon';
 import { InvoiceInsights } from '../components/invoice-insights';
 import { BankStatementInsights } from '../components/bank-insights';
 import { CompanyHub } from '../components/company-hub';
+import RequireCompany from '../components/RequireCompany';
 
 import {
   COMPANY_SELECT_PATH,
@@ -60,28 +61,44 @@ const AuthRoutes = ({ redirectParam }) => {
           <CompanySelect />
         </Route>
         <Route exact path={COMPANY_HUB_PATH}>
-          <CompanyHub />
+          <RequireCompany>
+            <CompanyHub />
+          </RequireCompany>
         </Route>
         <Route exact path={OVERVIEW_DASHBOARD_PATH}>
-          <OverviewDashboard />
+          <RequireCompany>
+            <OverviewDashboard />
+          </RequireCompany>
         </Route>
         <Route exact path={CLIENT_TAKEON_PATH}>
-          <ClientTakeOnAnalysis />
+          <RequireCompany>
+            <ClientTakeOnAnalysis />
+          </RequireCompany>
         </Route>
         <Route exact path={INVOICE_INSIGHTS_PATH}>
-          <InvoiceInsights />
+          <RequireCompany>
+            <InvoiceInsights />
+          </RequireCompany>
         </Route>
         <Route exact path={BANK_INSIGHTS_PATH}>
-          <BankStatementInsights />
+          <RequireCompany>
+            <BankStatementInsights />
+          </RequireCompany>
         </Route>
         <Route path={COMPANY_INTELLIGENCE_PATH}>
-          <CompanyIntelligence />
+          <RequireCompany>
+            <CompanyIntelligence />
+          </RequireCompany>
         </Route>
         <Route path={COMPANY_ANALYSIS_PATH}>
-          <CompanyAnalysis />
+          <RequireCompany>
+            <CompanyAnalysis />
+          </RequireCompany>
         </Route>
         <Route path={DOCUMENTS_PATH}>
-          <DocumentsRoutes />
+          <RequireCompany>
+            <DocumentsRoutes />
+          </RequireCompany>
         </Route>
         <Route path={LOGIN_PATH}>
           <Redirect to={!redirectParam || redirectParam === LOGIN_PATH ? DEFAULT_PATH : `${redirectParam}`} />
@@ -90,10 +107,14 @@ const AuthRoutes = ({ redirectParam }) => {
           <Button onClick={signOut}>Sign Out</Button>
         </Route>
         <Route path={DOCUMENTS_KB_QUERY_PATH}>
-          <DocumentsQueryRoutes />
+          <RequireCompany>
+            <DocumentsQueryRoutes />
+          </RequireCompany>
         </Route>
         <Route path={DOCUMENTS_ANALYTICS_PATH}>
-          <DocumentsAnalyticsRoutes />
+          <RequireCompany>
+            <DocumentsAnalyticsRoutes />
+          </RequireCompany>
         </Route>
         <Route>
           <Redirect to={DEFAULT_PATH} />
