@@ -4576,6 +4576,7 @@ Resources:
                 Resource:
                   - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${SettingsParameter}"
                   - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/fiscalshield/data-collection/*/api-url"
+                  - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/fiscalshield/analysis/*/api-url"
         - PolicyName: GraphQL
           PolicyDocument:
             Version: 2012-10-17
