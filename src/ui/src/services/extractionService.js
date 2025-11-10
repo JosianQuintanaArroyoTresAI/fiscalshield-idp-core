@@ -60,7 +60,7 @@ export const fetchExtractionResults = async (companyNumber, documentType, limit 
  */
 export const formatInvoiceData = (extractionResult) => {
   const compositeConf = extractionResult.CompositeConfidence || extractionResult.ConfidenceScore;
-  
+
   return {
     id: extractionResult.DocumentId,
     invoiceNumber: extractionResult.InvoiceNumber || 'N/A',

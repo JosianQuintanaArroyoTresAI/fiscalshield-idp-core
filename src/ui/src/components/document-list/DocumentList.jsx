@@ -284,10 +284,10 @@ const DocumentList = () => {
                 item.qualityTier === 'EXCELLENT'
                   ? 'green'
                   : item.qualityTier === 'GOOD'
-                    ? 'blue'
-                    : item.qualityTier === 'ACCEPTABLE'
-                      ? 'grey'
-                      : 'red'
+                  ? 'blue'
+                  : item.qualityTier === 'ACCEPTABLE'
+                  ? 'grey'
+                  : 'red'
               }
             >
               {item.confidence}
@@ -305,10 +305,10 @@ const DocumentList = () => {
                 item.qualityTier === 'EXCELLENT'
                   ? 'green'
                   : item.qualityTier === 'GOOD'
-                    ? 'blue'
-                    : item.qualityTier === 'ACCEPTABLE'
-                      ? 'grey'
-                      : 'red'
+                  ? 'blue'
+                  : item.qualityTier === 'ACCEPTABLE'
+                  ? 'grey'
+                  : 'red'
               }
             >
               {item.qualityTier}
@@ -321,11 +321,7 @@ const DocumentList = () => {
           id: 'hitl',
           header: 'Review',
           cell: (item) =>
-            item.hitlRequired ? (
-              <Badge color="red">HITL Required</Badge>
-            ) : (
-              <Badge color="green">Auto-approved</Badge>
-            ),
+            item.hitlRequired ? <Badge color="red">HITL Required</Badge> : <Badge color="green">Auto-approved</Badge>,
           width: 130,
           sortingField: 'hitlRequired',
         },
