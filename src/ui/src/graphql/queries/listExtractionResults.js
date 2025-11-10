@@ -21,6 +21,7 @@ const listExtractionResults = /* GraphQL */ `
         ProcessedAt
         SectionId
         ConfidenceScore
+        InvoiceType
         InvoiceNumber
         InvoiceDate
         DueDate
@@ -37,7 +38,6 @@ const listExtractionResults = /* GraphQL */ `
         S3Uri
         ModelUsed
         ExtractedData
-        InvoiceType
         InvoiceTypeConfidence
         SupplierNameConfidence
         TotalAmountConfidence

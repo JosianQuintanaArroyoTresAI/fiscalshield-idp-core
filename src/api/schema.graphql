@@ -258,6 +258,7 @@ type ExtractionResult @aws_cognito_user_pools @aws_iam {
   SectionId: String
   ConfidenceScore: Float
   # Invoice-specific fields
+  InvoiceType: String
   InvoiceNumber: String
   InvoiceDate: String
   DueDate: String
@@ -276,6 +277,19 @@ type ExtractionResult @aws_cognito_user_pools @aws_iam {
   S3Uri: String
   ModelUsed: String
   ExtractedData: AWSJSON
+  # Field-level confidence scores
+  InvoiceTypeConfidence: Float
+  SupplierNameConfidence: Float
+  TotalAmountConfidence: Float
+  InvoiceNumberConfidence: Float
+  VATNumberConfidence: Float
+  InvoiceDateConfidence: Float
+  # Composite confidence and quality metrics
+  CompositeConfidence: Float
+  QualityTier: String
+  # HITL (Human-In-The-Loop) flags
+  HITLRequired: Boolean
+  HITLReason: String
 }
 
 type ExtractionResultsConnection @aws_cognito_user_pools @aws_iam {
