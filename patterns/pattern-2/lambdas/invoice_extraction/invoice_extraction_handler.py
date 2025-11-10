@@ -1356,7 +1356,7 @@ INCOMPLETE INVOICE DETECTION:
    → Still extract what you can, but flag uncertainty
    → The system will attempt to reconstruct from adjacent chunks
 
-CONFIDENCE LEVELS:
+CONFIDENCE LEVELS (Document-Level):
 - <extraction_confidence>high</extraction_confidence>: All key fields present and clearly labeled
 - <extraction_confidence>medium</extraction_confidence>: Most fields present, some minor ambiguity
 - <extraction_confidence>low</extraction_confidence>: Missing key fields, text truncated, or ambiguous numbers
@@ -1366,6 +1366,45 @@ Use "low" confidence when:
   * Might be mixing data from multiple invoices
   * Text appears truncated or incomplete
   * Supplier name or total amount not clearly identifiable
+
+FIELD-LEVEL CONFIDENCE SCORES (CRITICAL FOR QUALITY CONTROL):
+For each critical field, provide a confidence score (0.0 to 1.0) indicating extraction certainty:
+
+**Add these confidence fields to EVERY invoice:**
+- <invoice_type_confidence>0.95</invoice_type_confidence>  (How sure are you this is SUPPLIER_INVOICE vs EXPENSE_CLAIM?)
+- <supplier_name_confidence>0.90</supplier_name_confidence>  (How confident in the vendor/merchant name?)
+- <total_amount_confidence>0.98</total_amount_confidence>  (How confident in the total amount?)
+- <invoice_number_confidence>0.85</invoice_number_confidence>  (How confident this is the correct invoice #?)
+- <vat_number_confidence>0.92</vat_number_confidence>  (How confident in the VAT registration #?)
+- <invoice_date_confidence>0.88</invoice_date_confidence>  (How confident in the invoice date?)
+
+**Confidence Score Guidelines:**
+- **0.95-1.0 (Very High)**: Field explicitly labeled, clear value, no ambiguity
+  Example: "Invoice Number: INV-60778" → invoice_number_confidence=0.98
+  
+- **0.80-0.94 (High)**: Field labeled but minor formatting variations or slight ambiguity
+  Example: "Ref: 12345" (labeled as Ref not Invoice Number) → invoice_number_confidence=0.85
+  
+- **0.60-0.79 (Medium)**: Field inferred from context, not explicitly labeled, or multiple candidates
+  Example: Multiple numbers near top, chose most likely → invoice_number_confidence=0.70
+  
+- **0.40-0.59 (Low)**: Significant ambiguity, guessing between multiple values
+  Example: VAT number and invoice number look similar → invoice_number_confidence=0.50
+  
+- **0.0-0.39 (Very Low)**: Field missing or completely ambiguous, placeholder value used
+  Example: No invoice number found, leaving empty → invoice_number_confidence=0.20
+
+**When to Flag Low Confidence:**
+- Invoice type unclear (expense claim vs supplier invoice) → invoice_type_confidence < 0.70
+- Multiple similar numbers, unclear which is invoice # → invoice_number_confidence < 0.60
+- VAT number might be confused with other ID → vat_number_confidence < 0.70
+- Amount unclear or multiple totals shown → total_amount_confidence < 0.75
+- Vendor name ambiguous (individual vs company) → supplier_name_confidence < 0.65
+
+**HITL Triggering Thresholds (for future implementation):**
+- If ANY critical field has confidence < 0.60 → Flag for human review
+- If invoice_type_confidence < 0.70 → Uncertain classification, needs review
+- If total_amount_confidence < 0.75 → Financial risk, requires validation
 
 MULTIPLE INVOICE HANDLING:
 - If you find 5 invoices → output 5 separate <invoice> blocks
@@ -1403,17 +1442,23 @@ CRITICAL: Extract EVERY invoice/expense claim in the text. Do not stop after fin
 
 Required XML format (repeat <invoice> block for each invoice/claim found):
 <invoices>
-<!-- EXAMPLE 1: Supplier Invoice -->
+<!-- EXAMPLE 1: Supplier Invoice with High Confidence -->
 <invoice>
 <extraction_confidence>high</extraction_confidence>
 <invoice_type>SUPPLIER_INVOICE</invoice_type>
+<invoice_type_confidence>0.98</invoice_type_confidence>
 <invoice_number>INV-60778</invoice_number>
+<invoice_number_confidence>0.95</invoice_number_confidence>
 <vat_number>201630957</vat_number>
+<vat_number_confidence>0.92</vat_number_confidence>
 <reference_number>PO-5678</reference_number>
 <invoice_date>2024-06-30</invoice_date>
+<invoice_date_confidence>0.98</invoice_date_confidence>
 <due_date>2024-07-15</due_date>
 <supplier_name>Edozo</supplier_name>
+<supplier_name_confidence>0.97</supplier_name_confidence>
 <total_amount>296.74</total_amount>
+<total_amount_confidence>0.99</total_amount_confidence>
 <currency>GBP</currency>
 <vat_amount>49.46</vat_amount>
 <net_amount>247.28</net_amount>
@@ -1423,17 +1468,23 @@ Required XML format (repeat <invoice> block for each invoice/claim found):
 <source_page>1</source_page>
 </invoice>
 
-<!-- EXAMPLE 2: Expense Claim -->
+<!-- EXAMPLE 2: Expense Claim with High Confidence -->
 <invoice>
 <extraction_confidence>high</extraction_confidence>
 <invoice_type>EXPENSE_CLAIM</invoice_type>
+<invoice_type_confidence>0.99</invoice_type_confidence>
 <invoice_number></invoice_number>
+<invoice_number_confidence>0.95</invoice_number_confidence>
 <vat_number></vat_number>
+<vat_number_confidence>0.95</vat_number_confidence>
 <reference_number>Expense Claims</reference_number>
 <invoice_date>2024-06-30</invoice_date>
+<invoice_date_confidence>0.90</invoice_date_confidence>
 <due_date>2024-06-30</due_date>
 <supplier_name>O2</supplier_name>
+<supplier_name_confidence>0.93</supplier_name_confidence>
 <total_amount>18.00</total_amount>
+<total_amount_confidence>0.96</total_amount_confidence>
 <currency>GBP</currency>
 <vat_amount>0.00</vat_amount>
 <net_amount>18.00</net_amount>
@@ -1445,17 +1496,23 @@ Required XML format (repeat <invoice> block for each invoice/claim found):
 <source_page>2</source_page>
 </invoice>
 
-<!-- EXAMPLE 3: Another Supplier Invoice -->
+<!-- EXAMPLE 3: Supplier Invoice with Medium Confidence (ambiguous invoice number) -->
 <invoice>
-<extraction_confidence>high</extraction_confidence>
+<extraction_confidence>medium</extraction_confidence>
 <invoice_type>SUPPLIER_INVOICE</invoice_type>
+<invoice_type_confidence>0.95</invoice_type_confidence>
 <invoice_number>INV-0144</invoice_number>
+<invoice_number_confidence>0.72</invoice_number_confidence>
 <vat_number>GB302792712</vat_number>
+<vat_number_confidence>0.88</vat_number_confidence>
 <reference_number></reference_number>
 <invoice_date>2024-06-30</invoice_date>
+<invoice_date_confidence>0.94</invoice_date_confidence>
 <due_date>2024-07-30</due_date>
 <supplier_name>Ceri Evans Marketing & Communications Ltd</supplier_name>
+<supplier_name_confidence>0.96</supplier_name_confidence>
 <total_amount>5568.00</total_amount>
+<total_amount_confidence>0.97</total_amount_confidence>
 <currency>GBP</currency>
 <vat_amount>927.99</vat_amount>
 <net_amount>4640.01</net_amount>
@@ -1774,7 +1831,10 @@ def parse_invoices_from_xml(xml_content: str) -> List[Dict[str, Any]]:
 
         # Create standardized invoice record
         invoice_record = {
+            # Document-level confidence
             'extraction_confidence': row_data.get('extraction_confidence', 'high'),  # Track extraction quality
+            
+            # Core fields
             'invoice_type': row_data.get('invoice_type', 'SUPPLIER_INVOICE'),
             'invoice_number': row_data.get('invoice_number', ''),
             'vat_number': row_data.get('vat_number', ''),  # VAT registration number (supplier invoices only)
@@ -1792,11 +1852,112 @@ def parse_invoices_from_xml(xml_content: str) -> List[Dict[str, Any]]:
             'payment_terms': row_data.get('payment_terms', ''),
             'claimant_name': row_data.get('claimant_name', ''),  # Expense claims only
             'claimant_email': row_data.get('claimant_email', ''),  # Expense claims only
-            'source_page': source_page
+            'source_page': source_page,
+            
+            # Field-level confidence scores (0.0-1.0)
+            'invoice_type_confidence': safe_decimal_convert(row_data.get('invoice_type_confidence', '0.95')),
+            'supplier_name_confidence': safe_decimal_convert(row_data.get('supplier_name_confidence', '0.90')),
+            'total_amount_confidence': safe_decimal_convert(row_data.get('total_amount_confidence', '0.90')),
+            'invoice_number_confidence': safe_decimal_convert(row_data.get('invoice_number_confidence', '0.85')),
+            'vat_number_confidence': safe_decimal_convert(row_data.get('vat_number_confidence', '0.85')),
+            'invoice_date_confidence': safe_decimal_convert(row_data.get('invoice_date_confidence', '0.90')),
         }
 
         invoices.append(invoice_record)
 
+    return invoices
+
+
+def calculate_composite_confidence_and_flags(invoices: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Calculate composite confidence scores and HITL flags for extracted invoices
+    
+    This function:
+    1. Calculates weighted average confidence across all critical fields
+    2. Determines if record should be flagged for Human-In-The-Loop review
+    3. Adds quality metrics for monitoring and decision-making
+    
+    Args:
+        invoices: List of invoice dictionaries with field-level confidence scores
+        
+    Returns:
+        Same list with added fields: composite_confidence, hitl_required, hitl_reasons
+    """
+    for invoice in invoices:
+        # Extract field-level confidence scores (default to 0.85 if missing)
+        invoice_type_conf = float(invoice.get('invoice_type_confidence', Decimal('0.85')))
+        supplier_name_conf = float(invoice.get('supplier_name_confidence', Decimal('0.85')))
+        total_amount_conf = float(invoice.get('total_amount_confidence', Decimal('0.85')))
+        invoice_number_conf = float(invoice.get('invoice_number_confidence', Decimal('0.85')))
+        vat_number_conf = float(invoice.get('vat_number_confidence', Decimal('0.85')))
+        invoice_date_conf = float(invoice.get('invoice_date_confidence', Decimal('0.85')))
+        
+        # Weighted average - critical fields have higher weight
+        # Total amount and invoice type are most critical for business decisions
+        composite_confidence = (
+            total_amount_conf * 0.30 +      # 30% - Financial impact
+            invoice_type_conf * 0.25 +      # 25% - Classification accuracy
+            supplier_name_conf * 0.20 +     # 20% - Vendor identification
+            invoice_number_conf * 0.15 +    # 15% - Uniqueness/tracking
+            invoice_date_conf * 0.05 +      # 5% - Temporal accuracy
+            vat_number_conf * 0.05          # 5% - Tax compliance
+        )
+        
+        invoice['composite_confidence'] = Decimal(str(round(composite_confidence, 3)))
+        
+        # HITL triggering logic
+        hitl_required = False
+        hitl_reasons = []
+        
+        # Critical field thresholds (as defined in prompt)
+        if invoice_type_conf < 0.70:
+            hitl_required = True
+            hitl_reasons.append(f"invoice_type_confidence={invoice_type_conf:.2f} < 0.70 (classification uncertain)")
+        
+        if total_amount_conf < 0.75:
+            hitl_required = True
+            hitl_reasons.append(f"total_amount_confidence={total_amount_conf:.2f} < 0.75 (financial risk)")
+        
+        if supplier_name_conf < 0.65:
+            hitl_required = True
+            hitl_reasons.append(f"supplier_name_confidence={supplier_name_conf:.2f} < 0.65 (vendor ambiguous)")
+        
+        if invoice_number_conf < 0.60:
+            hitl_required = True
+            hitl_reasons.append(f"invoice_number_confidence={invoice_number_conf:.2f} < 0.60 (invoice # unclear)")
+        
+        if vat_number_conf < 0.70 and invoice.get('invoice_type') == 'SUPPLIER_INVOICE':
+            # Only flag VAT number issues for supplier invoices (not expense claims)
+            hitl_required = True
+            hitl_reasons.append(f"vat_number_confidence={vat_number_conf:.2f} < 0.70 (VAT # uncertain)")
+        
+        # Composite confidence threshold
+        if composite_confidence < 0.70:
+            hitl_required = True
+            hitl_reasons.append(f"composite_confidence={composite_confidence:.2f} < 0.70 (overall low confidence)")
+        
+        # Add HITL flags to invoice record
+        invoice['hitl_required'] = hitl_required
+        invoice['hitl_reasons'] = hitl_reasons  # List for CloudWatch/debugging
+        invoice['hitl_reason'] = '; '.join(hitl_reasons) if hitl_reasons else ''  # String for DynamoDB
+        
+        # Quality tier classification
+        if composite_confidence >= 0.90:
+            invoice['quality_tier'] = 'EXCELLENT'
+        elif composite_confidence >= 0.75:
+            invoice['quality_tier'] = 'GOOD'
+        elif composite_confidence >= 0.60:
+            invoice['quality_tier'] = 'ACCEPTABLE'
+        else:
+            invoice['quality_tier'] = 'POOR'
+        
+        # Log HITL triggers for monitoring
+        if hitl_required:
+            log_with_timestamp(
+                f"🚨 HITL REQUIRED for invoice '{invoice.get('invoice_number', 'N/A')}' "
+                f"(composite={composite_confidence:.2f}): {'; '.join(hitl_reasons)}"
+            )
+    
     return invoices
 
 
@@ -1894,6 +2055,9 @@ def process_section_with_chunking(
             
             # Parse invoices from chunk response
             chunk_invoices = parse_invoices_from_xml(xml_response)
+            
+            # Calculate confidence scores and HITL flags
+            chunk_invoices = calculate_composite_confidence_and_flags(chunk_invoices)
             
             # Add chunk metadata to each invoice
             for invoice_idx, invoice in enumerate(chunk_invoices, start=1):
@@ -2298,6 +2462,9 @@ def lambda_handler(event, context):
             # Parse invoices from XML (hardcoded logic)
             log_with_timestamp("🔍 Parsing invoices from XML response...")
             invoices = parse_invoices_from_xml(xml_response)
+            
+            # Calculate confidence scores and HITL flags
+            invoices = calculate_composite_confidence_and_flags(invoices)
             
             # Add model metadata to invoices
             for invoice in invoices:
