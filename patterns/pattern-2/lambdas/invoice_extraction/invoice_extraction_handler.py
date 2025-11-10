@@ -2177,13 +2177,25 @@ def write_invoices_to_dynamodb(
                 'UpdatedAt': current_timestamp,
                 'DateExtracted': datetime.now().strftime('%Y-%m-%d'),
                 'ExtractionConfidence': invoice_data.get('extraction_confidence', 'high'),  # Track extraction quality
-                'ConfidenceScore': (
-                    Decimal('0.95') if invoice_data.get('extraction_confidence') == 'high' else
-                    Decimal('0.75') if invoice_data.get('extraction_confidence') == 'medium' else
-                    Decimal('0.50')  # low confidence
-                ),
+                'ConfidenceScore': invoice_data.get('composite_confidence', Decimal('0.85')),  # Use composite confidence
                 'Version': 1,
                 'ModelUsed': invoice_data.get('model_used', 'unknown'),  # Track which model extracted this
+
+                # Field-level confidence scores (0.0-1.0)
+                'InvoiceTypeConfidence': invoice_data.get('invoice_type_confidence', Decimal('0.85')),
+                'SupplierNameConfidence': invoice_data.get('supplier_name_confidence', Decimal('0.85')),
+                'TotalAmountConfidence': invoice_data.get('total_amount_confidence', Decimal('0.85')),
+                'InvoiceNumberConfidence': invoice_data.get('invoice_number_confidence', Decimal('0.85')),
+                'VATNumberConfidence': invoice_data.get('vat_number_confidence', Decimal('0.85')),
+                'InvoiceDateConfidence': invoice_data.get('invoice_date_confidence', Decimal('0.85')),
+
+                # Composite confidence and quality metrics
+                'CompositeConfidence': invoice_data.get('composite_confidence', Decimal('0.85')),
+                'QualityTier': invoice_data.get('quality_tier', 'GOOD'),
+
+                # HITL (Human-In-The-Loop) flags
+                'HITLRequired': invoice_data.get('hitl_required', False),
+                'HITLReason': invoice_data.get('hitl_reason', ''),
 
                 # TTL (optional - set to 1 year from now)
                 'TTL': current_timestamp + (365 * 24 * 60 * 60)

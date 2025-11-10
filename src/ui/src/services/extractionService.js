@@ -59,18 +59,34 @@ export const fetchExtractionResults = async (companyNumber, documentType, limit 
  * @returns {Object} Formatted invoice data
  */
 export const formatInvoiceData = (extractionResult) => {
+  const compositeConf = extractionResult.CompositeConfidence || extractionResult.ConfidenceScore;
+  
   return {
     id: extractionResult.DocumentId,
     invoiceNumber: extractionResult.InvoiceNumber || 'N/A',
+    invoiceType: extractionResult.InvoiceType || 'SUPPLIER_INVOICE',
     vendor: extractionResult.VendorName || 'Unknown Vendor',
     date: formatDate(extractionResult.InvoiceDate),
     dueDate: formatDate(extractionResult.DueDate),
     amount: formatCurrency(extractionResult.TotalAmount, extractionResult.Currency),
     status: extractionResult.ExtractionStatus || 'UNKNOWN',
-    confidence: extractionResult.ConfidenceScore ? (extractionResult.ConfidenceScore * 100).toFixed(1) + '%' : 'N/A',
+    confidence: compositeConf ? (compositeConf * 100).toFixed(1) + '%' : 'N/A',
+    qualityTier: extractionResult.QualityTier || 'N/A',
+    hitlRequired: extractionResult.HITLRequired || false,
+    hitlReason: extractionResult.HITLReason || '',
     supplierAddress: extractionResult.SupplierAddress || 'N/A',
     processedAt: extractionResult.ProcessedAt,
     s3Uri: extractionResult.S3Uri,
+    // Field-level confidence scores
+    confidenceScores: {
+      composite: compositeConf,
+      invoiceType: extractionResult.InvoiceTypeConfidence,
+      supplierName: extractionResult.SupplierNameConfidence,
+      totalAmount: extractionResult.TotalAmountConfidence,
+      invoiceNumber: extractionResult.InvoiceNumberConfidence,
+      vatNumber: extractionResult.VATNumberConfidence,
+      invoiceDate: extractionResult.InvoiceDateConfidence,
+    },
     rawData: extractionResult,
   };
 };

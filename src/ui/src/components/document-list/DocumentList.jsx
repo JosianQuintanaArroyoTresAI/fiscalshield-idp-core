@@ -230,6 +230,17 @@ const DocumentList = () => {
     <Table
       columnDefinitions={[
         {
+          id: 'invoiceType',
+          header: 'Type',
+          cell: (item) => (
+            <Badge color={item.invoiceType === 'SUPPLIER_INVOICE' ? 'blue' : 'green'}>
+              {item.invoiceType === 'SUPPLIER_INVOICE' ? 'Invoice' : 'Expense'}
+            </Badge>
+          ),
+          width: 100,
+          sortingField: 'invoiceType',
+        },
+        {
           id: 'invoiceNumber',
           header: 'Invoice #',
           cell: (item) => item.invoiceNumber,
@@ -251,13 +262,6 @@ const DocumentList = () => {
           sortingField: 'date',
         },
         {
-          id: 'dueDate',
-          header: 'Due Date',
-          cell: (item) => item.dueDate,
-          width: 120,
-          sortingField: 'dueDate',
-        },
-        {
           id: 'amount',
           header: 'Amount',
           cell: (item) => item.amount,
@@ -274,9 +278,56 @@ const DocumentList = () => {
         {
           id: 'confidence',
           header: 'Confidence',
-          cell: (item) => item.confidence,
-          width: 100,
+          cell: (item) => (
+            <Badge
+              color={
+                item.qualityTier === 'EXCELLENT'
+                  ? 'green'
+                  : item.qualityTier === 'GOOD'
+                    ? 'blue'
+                    : item.qualityTier === 'ACCEPTABLE'
+                      ? 'grey'
+                      : 'red'
+              }
+            >
+              {item.confidence}
+            </Badge>
+          ),
+          width: 120,
           sortingField: 'confidence',
+        },
+        {
+          id: 'quality',
+          header: 'Quality',
+          cell: (item) => (
+            <Badge
+              color={
+                item.qualityTier === 'EXCELLENT'
+                  ? 'green'
+                  : item.qualityTier === 'GOOD'
+                    ? 'blue'
+                    : item.qualityTier === 'ACCEPTABLE'
+                      ? 'grey'
+                      : 'red'
+              }
+            >
+              {item.qualityTier}
+            </Badge>
+          ),
+          width: 120,
+          sortingField: 'qualityTier',
+        },
+        {
+          id: 'hitl',
+          header: 'Review',
+          cell: (item) =>
+            item.hitlRequired ? (
+              <Badge color="red">HITL Required</Badge>
+            ) : (
+              <Badge color="green">Auto-approved</Badge>
+            ),
+          width: 130,
+          sortingField: 'hitlRequired',
         },
       ]}
       items={invoices}

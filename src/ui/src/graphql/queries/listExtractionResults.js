@@ -37,6 +37,17 @@ const listExtractionResults = /* GraphQL */ `
         S3Uri
         ModelUsed
         ExtractedData
+        InvoiceType
+        InvoiceTypeConfidence
+        SupplierNameConfidence
+        TotalAmountConfidence
+        InvoiceNumberConfidence
+        VATNumberConfidence
+        InvoiceDateConfidence
+        CompositeConfidence
+        QualityTier
+        HITLRequired
+        HITLReason
       }
       nextToken
     }
