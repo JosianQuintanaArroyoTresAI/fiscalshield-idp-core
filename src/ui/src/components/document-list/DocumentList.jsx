@@ -19,7 +19,7 @@ import { Logger } from 'aws-amplify';
 
 import useDocumentsContext from '../../contexts/documents';
 import useSettingsContext from '../../contexts/settings';
-import { useCompany } from '../../contexts/CompanyProvider';
+import { useCompany } from '../../contexts/company';
 
 import mapDocumentsAttributes from '../common/map-document-attributes';
 import {

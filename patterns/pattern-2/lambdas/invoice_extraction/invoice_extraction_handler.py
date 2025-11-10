@@ -1247,12 +1247,40 @@ UK INVOICE LAYOUT PATTERNS (Recognition Hints):
    - Invoice ends with: "AMOUNT DUE", payment terms, or distinctive footer
    - Look for pattern: [Invoice details] → [Line items] → [Totals] → [Next invoice starts]
 
+DOCUMENT TYPE CLASSIFICATION (CRITICAL):
+🔴 SUPPLIER INVOICE vs 🟡 EXPENSE CLAIM - You MUST distinguish between these:
+
+📋 SUPPLIER INVOICE Indicators:
+   ✓ Has "Invoice Number" field with unique identifier (INV-xxx, numeric ID, etc.)
+   ✓ Contains VAT calculation (shows "20% VAT" or "VAT Amount: £X.XX")
+   ✓ Company details with registered office address
+   ✓ VAT Registration Number present (GB123456789 format)
+   ✓ Business-to-business service/product
+   ✓ Professional invoice layout with company letterhead
+   → Set: <invoice_type>SUPPLIER_INVOICE</invoice_type>
+
+💰 EXPENSE CLAIM Indicators:
+   ✗ NO proper invoice number (may show "Reference Number: Expense Claims")
+   ✗ Explicitly labeled "Expense Claims" or "Expense Reimbursement"
+   ✗ Shows individual's name + email (not just company name)
+   ✗ States "No VAT" instead of showing VAT calculation
+   ✗ Personal out-of-pocket payment (phone bill, travel, meals paid personally)
+   ✗ May say "This is not a tax invoice" with AMOUNT DUE £0.00 (already paid)
+   → Set: <invoice_type>EXPENSE_CLAIM</invoice_type>
+
+🔍 Key Differentiators:
+   - "Expense Claims" label → ALWAYS expense claim
+   - Individual name with email → Likely expense claim
+   - "No VAT" notation → Likely expense claim
+   - Proper VAT calculation with company VAT number → ALWAYS supplier invoice
+   - Invoice number present with VAT → ALWAYS supplier invoice
+
 VENDOR NAME EXTRACTION RULES:
-- Look for company names, business names, or service providers
-- For expense claims: Use the business where money was spent (e.g., "Tesco", "Microsoft", "Train Company")
-- For employee expenses: Use the merchant/vendor name, NOT the employee name
-- If unclear, use descriptive vendor name (e.g., "Restaurant", "Transport Service", "Hotel")
+- For SUPPLIER INVOICES: Use the company/business name providing the service
+- For EXPENSE CLAIMS: Use the merchant where money was spent (e.g., "O2", "Tesco", "Trainline")
+  → NOT the employee's name (e.g., use "O2" not "Mark Byles")
 - NEVER leave supplier_name empty - always provide something meaningful
+- If unclear, use descriptive vendor name (e.g., "Restaurant", "Transport Service", "Hotel")
 
 INVOICE NUMBER vs REFERENCE NUMBER (UK HMRC Standards):
 🔴 INVOICE NUMBER (invoice_number field):
@@ -1349,21 +1377,38 @@ MULTIPLE INVOICE HANDLING:
 
 REQUIRED FIELDS FOR EACH INVOICE:
 - extraction_confidence: high, medium, or low (see guidelines above)
-- supplier_name: Company/vendor name (ALWAYS required, never empty)
+- invoice_type: SUPPLIER_INVOICE or EXPENSE_CLAIM (MUST classify correctly)
+- supplier_name: Company/vendor/merchant name (ALWAYS required, never empty)
 - total_amount: Final total (look for "Total", "Amount Due", "Balance Due", "TOTAL GBP")
-- invoice_date: Date of invoice (DD/MM/YYYY or YYYY-MM-DD format)
-- invoice_number: ONLY the actual invoice number (see rules above), leave EMPTY if not found
-- reference_number: Purchase order or customer reference (optional)
-- source_page: Page number where this invoice appears
+- invoice_date: Date of invoice/claim (DD/MM/YYYY or YYYY-MM-DD format)
+- source_page: Page number where this invoice/claim appears
 
-CRITICAL: Extract EVERY invoice in the text. Do not stop after finding the first one.
+CONDITIONAL FIELDS (depend on invoice_type):
 
-Required XML format (repeat <invoice> block for each invoice found):
+For SUPPLIER_INVOICE:
+   - invoice_number: REQUIRED - actual invoice number (see rules above)
+   - vat_number: REQUIRED if present - supplier's VAT registration number
+   - vat_amount: REQUIRED - VAT amount charged
+   - reference_number: OPTIONAL - purchase order or customer reference
+
+For EXPENSE_CLAIM:
+   - invoice_number: LEAVE EMPTY (no proper invoice number exists)
+   - vat_number: LEAVE EMPTY (individual claimants don't have VAT numbers)
+   - vat_amount: LEAVE EMPTY or "0.00" (expense claims typically show "No VAT")
+   - reference_number: MAY contain "Expense Claims" or claim reference
+   - claimant_name: REQUIRED - name of person claiming expenses (if visible)
+   - claimant_email: OPTIONAL - email of claimant (if visible)
+
+CRITICAL: Extract EVERY invoice/expense claim in the text. Do not stop after finding the first one.
+
+Required XML format (repeat <invoice> block for each invoice/claim found):
 <invoices>
+<!-- EXAMPLE 1: Supplier Invoice -->
 <invoice>
 <extraction_confidence>high</extraction_confidence>
 <invoice_type>SUPPLIER_INVOICE</invoice_type>
 <invoice_number>INV-60778</invoice_number>
+<vat_number>201630957</vat_number>
 <reference_number>PO-5678</reference_number>
 <invoice_date>2024-06-30</invoice_date>
 <due_date>2024-07-15</due_date>
@@ -1377,10 +1422,35 @@ Required XML format (repeat <invoice> block for each invoice found):
 <payment_terms>Due 15 Jul 2024</payment_terms>
 <source_page>1</source_page>
 </invoice>
+
+<!-- EXAMPLE 2: Expense Claim -->
+<invoice>
+<extraction_confidence>high</extraction_confidence>
+<invoice_type>EXPENSE_CLAIM</invoice_type>
+<invoice_number></invoice_number>
+<vat_number></vat_number>
+<reference_number>Expense Claims</reference_number>
+<invoice_date>2024-06-30</invoice_date>
+<due_date>2024-06-30</due_date>
+<supplier_name>O2</supplier_name>
+<total_amount>18.00</total_amount>
+<currency>GBP</currency>
+<vat_amount>0.00</vat_amount>
+<net_amount>18.00</net_amount>
+<description>O2 phone bill - personal expense claim</description>
+<claimant_name>Mark Byles</claimant_name>
+<claimant_email>Markbyles.pro@gmail.com</claimant_email>
+<supplier_address></supplier_address>
+<payment_terms>Paid personally - claiming reimbursement</payment_terms>
+<source_page>2</source_page>
+</invoice>
+
+<!-- EXAMPLE 3: Another Supplier Invoice -->
 <invoice>
 <extraction_confidence>high</extraction_confidence>
 <invoice_type>SUPPLIER_INVOICE</invoice_type>
 <invoice_number>INV-0144</invoice_number>
+<vat_number>GB302792712</vat_number>
 <reference_number></reference_number>
 <invoice_date>2024-06-30</invoice_date>
 <due_date>2024-07-30</due_date>
@@ -1392,7 +1462,7 @@ Required XML format (repeat <invoice> block for each invoice found):
 <description>General Marketing Support June 2024</description>
 <supplier_address>21 Greenshields Road, Bedford, MK40 3TS</supplier_address>
 <payment_terms>Due 30 Jul 2024</payment_terms>
-<source_page>2</source_page>
+<source_page>3</source_page>
 </invoice>
 </invoices>
 
@@ -1707,6 +1777,7 @@ def parse_invoices_from_xml(xml_content: str) -> List[Dict[str, Any]]:
             'extraction_confidence': row_data.get('extraction_confidence', 'high'),  # Track extraction quality
             'invoice_type': row_data.get('invoice_type', 'SUPPLIER_INVOICE'),
             'invoice_number': row_data.get('invoice_number', ''),
+            'vat_number': row_data.get('vat_number', ''),  # VAT registration number (supplier invoices only)
             'reference_number': row_data.get('reference_number', ''),
             'invoice_date': row_data.get('invoice_date', datetime.now().strftime('%Y-%m-%d')),
             'due_date': row_data.get('due_date', ''),
@@ -1719,6 +1790,8 @@ def parse_invoices_from_xml(xml_content: str) -> List[Dict[str, Any]]:
             'net_amount': safe_decimal_convert(row_data.get('net_amount', '0')),
             'description': row_data.get('description', ''),
             'payment_terms': row_data.get('payment_terms', ''),
+            'claimant_name': row_data.get('claimant_name', ''),  # Expense claims only
+            'claimant_email': row_data.get('claimant_email', ''),  # Expense claims only
             'source_page': source_page
         }
 
