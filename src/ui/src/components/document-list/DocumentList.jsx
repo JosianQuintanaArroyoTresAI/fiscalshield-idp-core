@@ -115,28 +115,46 @@ const DocumentList = () => {
 
   // Load invoices when company is selected and tab is active
   useEffect(() => {
+    console.log('[INVOICES DEBUG] useEffect triggered', {
+      isCompanySelected,
+      companyNumber: activeCompany?.companyNumber,
+      activeTabId,
+    });
+
     const loadInvoices = async () => {
       if (!isCompanySelected || !activeCompany?.companyNumber) {
+        console.log('[INVOICES DEBUG] No company selected, skipping invoice load');
         logger.debug('No company selected, skipping invoice load');
         setInvoices([]);
         return;
       }
 
       if (activeTabId !== 'invoices') {
+        console.log('[INVOICES DEBUG] Tab not active, current tab:', activeTabId);
         return; // Only load when tab is active
       }
 
+      console.log('[INVOICES DEBUG] Loading invoices...');
       setIsLoadingInvoices(true);
       try {
         logger.debug(`Loading invoices for company ${activeCompany.companyNumber}`);
+        console.log('[INVOICES DEBUG] Calling fetchExtractionResults with:', {
+          companyNumber: activeCompany.companyNumber,
+          documentType: DOCUMENT_TYPES.INVOICE,
+        });
+
         const result = await fetchExtractionResults(activeCompany.companyNumber, DOCUMENT_TYPES.INVOICE, 50);
+
+        console.log('[INVOICES DEBUG] Received result:', result);
 
         const formattedInvoices = result.items.map(formatInvoiceData);
         setInvoices(formattedInvoices);
         setInvoicesNextToken(result.nextToken);
         logger.debug(`Loaded ${formattedInvoices.length} invoices`);
+        console.log('[INVOICES DEBUG] Loaded invoices:', formattedInvoices);
       } catch (error) {
         logger.error('Error loading invoices:', error);
+        console.error('[INVOICES DEBUG] Error loading invoices:', error);
         setInvoices([]);
       } finally {
         setIsLoadingInvoices(false);
