@@ -2141,7 +2141,7 @@ def write_invoices_to_dynamodb(
                 'GSI3PK': f"company#{normalize_company_name(invoice_data['supplier_name'])}#type#INVOICE",
                 'DocumentId': document_id,
                 'ExtractionStatus': 'COMPLETED',
-                'GSI6PK': f"client#{client_id}#type#INVOICE",
+                'GSI6PK': f"client#{company_number or 'unknown'}#type#INVOICE",
 
                 # Core identifiers
                 'InvoiceId': invoice_id,
