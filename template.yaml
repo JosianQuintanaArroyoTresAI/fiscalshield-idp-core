@@ -2317,43 +2317,7 @@ Resources:
             - AttributeName: ProcessedAt
               KeyType: RANGE
           Projection:
-            ProjectionType: INCLUDE
-            NonKeyAttributes:
-              - UserId
-              - DocumentId
-              - DocumentType
-              - SectionId
-              - CompanyName
-              - TotalAmount
-              - InvoiceDate
-              - TransactionAmount
-              - TransactionDate
-              - ExtractionStatus
-              - ConfidenceScore
-              - InvoiceType
-              - InvoiceNumber
-              - DueDate
-              - VendorName
-              - SupplierAddress
-              - Currency
-              - BankName
-              - AccountNumber
-              - StatementDate
-              - StatementPeriod
-              - OpeningBalance
-              - ClosingBalance
-              - S3Uri
-              - ModelUsed
-              - InvoiceTypeConfidence
-              - SupplierNameConfidence
-              - TotalAmountConfidence
-              - InvoiceNumberConfidence
-              - VATNumberConfidence
-              - InvoiceDateConfidence
-              - CompositeConfidence
-              - QualityTier
-              - HITLRequired
-              - HITLReason
+            ProjectionType: ALL
       SSESpecification:
         SSEEnabled: true
         SSEType: KMS
