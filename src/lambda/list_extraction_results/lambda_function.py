@@ -21,6 +21,7 @@ LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
 
 # AWS clients
 dynamodb = boto3.resource("dynamodb")
+dynamodb_client = boto3.client("dynamodb")
 
 
 class DecimalEncoder(json.JSONEncoder):
@@ -88,6 +89,27 @@ def list_extraction_results(
     print(f"🔍 DEBUG: Query response - Count: {response.get('Count', 0)}, ScannedCount: {response.get('ScannedCount', 0)}")
     
     items = response.get("Items", [])
+    
+    # GSI6 has limited projection (INCLUDE), so we need to fetch full items from base table
+    # Get PK and SK from GSI results, then batch get full items
+    if items:
+        print(f"🔍 DEBUG: GSI returned {len(items)} items with limited projection, fetching full items from base table")
+        
+        # Use resource batch_get_item
+        try:
+            batch_response = dynamodb.batch_get_item(
+                RequestItems={
+                    EXTRACTION_RESULTS_TABLE: {
+                        'Keys': [{"PK": item["PK"], "SK": item["SK"]} for item in items]
+                    }
+                }
+            )
+            full_items = batch_response.get("Responses", {}).get(EXTRACTION_RESULTS_TABLE, [])
+            print(f"🔍 DEBUG: Batch get returned {len(full_items)} full items")
+            items = full_items if full_items else items
+        except Exception as e:
+            print(f"⚠️  WARNING: Batch get failed: {e}, using GSI items with limited fields")
+            # Fall back to GSI items if batch get fails
     
     # Log first item for debugging (if any)
     if items:
