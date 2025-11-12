@@ -129,7 +129,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     try:
         # Extract user ID from Cognito identity
         identity = event.get("identity", {})
-        user_id = identity.get("username")
+        # Use Cognito sub (UUID) not username for consistency with invoice storage
+        user_id = identity.get("sub") or identity.get("username")
         
         if not user_id:
             print("ERROR: No user ID found in identity")
