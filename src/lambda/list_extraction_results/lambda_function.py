@@ -170,6 +170,14 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         )
         
         print(f"Successfully retrieved {len(result['items'])} extraction results")
+        
+        # Debug: Log first item to see what's being returned
+        if result['items']:
+            first_item = result['items'][0]
+            print(f"🔍 DEBUG: First item keys: {list(first_item.keys())}")
+            print(f"🔍 DEBUG: DocumentType value: {first_item.get('DocumentType')} (type: {type(first_item.get('DocumentType'))})")
+            print(f"🔍 DEBUG: Full first item: {json.dumps(first_item, default=str)[:500]}")
+        
         return result
         
     except Exception as e:
