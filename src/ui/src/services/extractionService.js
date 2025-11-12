@@ -49,6 +49,9 @@ export const fetchExtractionResults = async (companyNumber, documentType, limit 
     };
   } catch (error) {
     logger.error('Error fetching extraction results:', error);
+    console.error('[EXTRACTION SERVICE] Full error:', error);
+    console.error('[EXTRACTION SERVICE] Error message:', error.message);
+    console.error('[EXTRACTION SERVICE] Error errors:', error.errors);
     throw error;
   }
 };

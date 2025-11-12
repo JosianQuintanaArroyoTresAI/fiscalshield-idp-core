@@ -27,6 +27,9 @@ class DecimalEncoder(json.JSONEncoder):
     """Custom JSON encoder for DynamoDB Decimal types"""
     def default(self, obj):
         if isinstance(obj, Decimal):
+            # Convert to int if it's a whole number (e.g., timestamps)
+            if obj % 1 == 0:
+                return int(obj)
             return float(obj)
         return super(DecimalEncoder, self).default(obj)
 
