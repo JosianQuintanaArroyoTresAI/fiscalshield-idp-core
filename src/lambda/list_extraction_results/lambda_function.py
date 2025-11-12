@@ -61,6 +61,8 @@ def list_extraction_results(
     # Build GSI6 query: client#{CompanyNumber}#type#{DocumentType}
     gsi6_pk = f"client#{company_number}#type#{document_type}"
     
+    print(f"🔍 DEBUG: Querying GSI6PK = '{gsi6_pk}'")
+    
     query_params = {
         "IndexName": "GSI6-ClientTypeDate",
         "KeyConditionExpression": Key("GSI6PK").eq(gsi6_pk),
@@ -75,9 +77,19 @@ def list_extraction_results(
         except Exception as e:
             print(f"WARNING: Invalid pagination token: {e}")
     
+    print(f"🔍 DEBUG: Query params: {json.dumps(query_params, default=str)}")
+    
     response = extraction_table.query(**query_params)
     
+    print(f"🔍 DEBUG: Query response - Count: {response.get('Count', 0)}, ScannedCount: {response.get('ScannedCount', 0)}")
+    print(f"🔍 DEBUG: Query response - Count: {response.get('Count', 0)}, ScannedCount: {response.get('ScannedCount', 0)}")
+    
     items = response.get("Items", [])
+    
+    # Log first item for debugging (if any)
+    if items:
+        first_item = items[0]
+        print(f"🔍 DEBUG: First item GSI6PK = '{first_item.get('GSI6PK')}', UserId = '{first_item.get('UserId')}'")
     
     # Security filter: only return items for the authenticated user
     filtered_items = [
