@@ -63,6 +63,7 @@ ALL_FUNCTIONS=(
     "CreateDocumentResolverFunction::.aws-sam/build/CreateDocumentResolverFunction"
     "WorkflowTracker::.aws-sam/build/WorkflowTracker"
     "GetFileContentsResolverFunction::.aws-sam/build/GetFileContentsResolverFunction"
+    "ListExtractionResultsFunction::.aws-sam/build/ListExtractionResultsFunction"
     # Pattern 2 Functions (in nested stack) - use SAM built packages
     "OCRFunction:fiscalshield-idp-dev-PATTERN2STACK-12AZHXIRN6HYB:patterns/pattern-2/.aws-sam/build/OCRFunction"
     "ClassificationFunction:fiscalshield-idp-dev-PATTERN2STACK-12AZHXIRN6HYB:patterns/pattern-2/.aws-sam/build/ClassificationFunction"
