@@ -888,33 +888,48 @@ def lambda_handler(event, context):
             raise ValueError("No section_id found in event")
         
         document_data = event.get('document', {})
+        log_with_timestamp(f"📄 Document data type: {type(document_data)}")
         
         # Handle compressed document - check both string format and dict with compressed flag
-        from idp_common.models import Document
-        working_bucket = os.environ.get('WORKING_BUCKET')
-        
         if isinstance(document_data, str):
-            # Document is passed as S3 URI string
-            if document_data.startswith('s3://'):
-                log_with_timestamp(f"📥 Loading compressed document from S3 URI: {document_data}")
-                document = Document.load_document(document_data, working_bucket, logger)
-                document_dict = document.to_dict()
-            else:
-                raise ValueError(f"Unsupported document format: {document_data}")
+            # Document is passed as S3 URI string - fetch from S3
+            s3_client = boto3.client('s3')
+            from urllib.parse import urlparse
+            parsed_uri = urlparse(document_data)
+            bucket = parsed_uri.netloc
+            key = parsed_uri.path.lstrip('/')
+            
+            log_with_timestamp(f"📥 Fetching document from S3: s3://{bucket}/{key}")
+            s3_obj = s3_client.get_object(Bucket=bucket, Key=key)
+            document_dict = json.loads(s3_obj['Body'].read().decode('utf-8'))
+            
+        elif isinstance(document_data, dict) and (document_data.get('compressed') or 's3_uri' in document_data):
+            # Document is compressed and stored in S3 - fetch it
+            s3_uri = document_data.get('s3_uri')
+            if not s3_uri:
+                raise ValueError("Document marked as compressed but no s3_uri provided")
+                
+            log_with_timestamp(f"� Document is compressed, fetching from S3: {s3_uri}")
+            
+            s3_client = boto3.client('s3')
+            from urllib.parse import urlparse
+            parsed_uri = urlparse(s3_uri)
+            bucket = parsed_uri.netloc
+            key = parsed_uri.path.lstrip('/')
+            
+            s3_obj = s3_client.get_object(Bucket=bucket, Key=key)
+            document_dict = json.loads(s3_obj['Body'].read().decode('utf-8'))
+            
         elif isinstance(document_data, dict):
-            # Check if dict has compressed flag or s3_uri indicating it needs to be loaded from S3
-            if document_data.get('compressed') is True or 's3_uri' in document_data:
-                log_with_timestamp(f"📥 Loading compressed document from event data")
-                log_with_timestamp(f"📋 Document data keys: {list(document_data.keys())}")
-                if 's3_uri' in document_data:
-                    log_with_timestamp(f"📥 S3 URI: {document_data['s3_uri']}")
-                document = Document.load_document(document_data, working_bucket, logger)
-                document_dict = document.to_dict()
-            else:
-                # Document is already fully loaded
-                document_dict = document_data
+            # Document is inline dict (already decompressed)
+            document_dict = document_data
         else:
-            raise ValueError(f"Unsupported document type: {type(document_data)}")
+            raise ValueError(f"Invalid document format: {type(document_data)}")
+        
+        # Log document structure for debugging
+        log_with_timestamp(f"📦 Document keys: {list(document_dict.keys())}")
+        log_with_timestamp(f"📦 Document has {len(document_dict.get('pages', {}))} pages")
+        log_with_timestamp(f"📦 Document has {len(document_dict.get('sections', []))} sections")
         
         # Extract document metadata
         document_id = document_dict.get('document_id') or document_dict.get('id')
