@@ -936,20 +936,109 @@ def lambda_handler(event, context):
             stored_account_info = None
             total_transactions_inserted = 0
         
-        # Load section text
-        section_text = None
+        # Load section text (matching invoice extraction logic)
+        sections = document_dict.get('sections', [])
+        section_data = None
         
-        # Try to get section from document
-        if 'sections' in document_dict:
-            for section in document_dict['sections']:
-                if str(section.get('section_id')) == str(section_id):
-                    section_text = section.get('section_text', '')
-                    break
+        for section in sections:
+            if str(section.get('section_id')) == str(section_id):
+                section_data = section
+                break
         
+        if not section_data:
+            raise ValueError(f"Section {section_id} not found in document. Available sections: {[s.get('section_id') for s in sections]}")
+        
+        log_with_timestamp(f"📋 Section data keys: {list(section_data.keys())}")
+        log_with_timestamp(f"📋 Section data: {json.dumps(section_data, default=str)[:500]}")
+        
+        # Get section text from OCR results
+        section_text = ""
+        section_pages = section_data.get('page_ids', [])
+        
+        log_with_timestamp(f"📄 Section has {len(section_pages)} page IDs: {section_pages}")
+        
+        # Check if section has ocr_text directly
+        if 'ocr_text' in section_data:
+            section_text = section_data['ocr_text']
+            log_with_timestamp(f"✅ Found ocr_text directly in section ({len(section_text)} chars)")
+        
+        # Build section text from pages if not found in section
         if not section_text:
-            raise ValueError(f"No section text found for section_id: {section_id}")
+            pages = document_dict.get('pages', {})
+            log_with_timestamp(f"📚 Document has {len(pages)} pages (dict format)")
+            
+            # Pages is a dict with page_id as key
+            for page_id in section_pages:
+                if page_id in pages:
+                    page_data = pages[page_id]
+                    log_with_timestamp(f"📄 Processing page {page_id}, keys: {list(page_data.keys())}")
+                    
+                    # Extract page number from page_id
+                    page_number = 1
+                    try:
+                        if page_id.startswith('page-'):
+                            page_number = int(page_id.split('-')[1])
+                        elif page_id.isdigit():
+                            page_number = int(page_id)
+                    except (ValueError, IndexError):
+                        page_number = section_pages.index(page_id) + 1
+                    
+                    # Add page marker for chunk tracking
+                    page_marker = f"\n[PAGE:{page_number}]\n"
+                    
+                    # Check if page has inline ocr_text
+                    if 'ocr_text' in page_data:
+                        page_text = page_data['ocr_text']
+                        section_text += page_marker + page_text + "\n"
+                        log_with_timestamp(f"✅ Added inline text from page {page_id} (page #{page_number}, {len(page_text)} chars)")
+                    
+                    # Otherwise fetch from raw_text_uri
+                    elif 'raw_text_uri' in page_data:
+                        raw_text_uri = page_data['raw_text_uri']
+                        log_with_timestamp(f"📥 Fetching OCR text from: {raw_text_uri}")
+                        
+                        from urllib.parse import urlparse
+                        parsed_uri = urlparse(raw_text_uri)
+                        bucket = parsed_uri.netloc
+                        key = parsed_uri.path.lstrip('/')
+                        
+                        s3_obj = s3_client.get_object(Bucket=bucket, Key=key)
+                        raw_text_data = json.loads(s3_obj['Body'].read().decode('utf-8'))
+                        
+                        log_with_timestamp(f"📋 rawText.json keys: {list(raw_text_data.keys())}")
+                        
+                        # rawText.json contains the extracted text
+                        page_text = raw_text_data.get('text', '') or raw_text_data.get('Text', '') or raw_text_data.get('content', '')
+                        
+                        # Try Bedrock Nova response format
+                        if not page_text and 'output' in raw_text_data:
+                            try:
+                                page_text = raw_text_data['output']['message']['content'][0]['text']
+                                log_with_timestamp(f"📝 Extracted text from Bedrock response format")
+                            except (KeyError, IndexError, TypeError):
+                                pass
+                        
+                        # Try Textract format
+                        if not page_text and 'Blocks' in raw_text_data:
+                            blocks = raw_text_data.get('Blocks', [])
+                            lines = [block.get('Text', '') for block in blocks if block.get('BlockType') == 'LINE']
+                            page_text = '\n'.join(lines)
+                            log_with_timestamp(f"📝 Extracted {len(lines)} lines from Textract Blocks")
+                        
+                        if page_text:
+                            section_text += page_marker + page_text + "\n"
+                            log_with_timestamp(f"✅ Added text from S3 for page {page_id} (page #{page_number}, {len(page_text)} chars)")
+                        else:
+                            log_with_timestamp(f"⚠️ No text found in rawText.json for page {page_id}")
+                    else:
+                        log_with_timestamp(f"⚠️ No OCR text found for page {page_id}")
+                else:
+                    log_with_timestamp(f"⚠️ Page {page_id} not found in pages dict")
         
-        log_with_timestamp(f"📝 Section text length: {len(section_text)} characters")
+        if not section_text or len(section_text.strip()) == 0:
+            raise ValueError(f"No OCR text content found for section_id: {section_id}")
+        
+        log_with_timestamp(f"📝 Total section text length: {len(section_text)} characters")
         
         # Create page-based chunks
         chunker = BankStatementChunker()
