@@ -59,7 +59,7 @@ class TestListExtractionResults:
     
     @patch('lambda_function.dynamodb')
     def test_queries_gsi6_index(self, mock_dynamodb, mock_gsi_response, mock_batch_get_response):
-        """Should query GSI6-ClientTypeDate index."""
+        """Should query GSI7-ClientTypeDate index."""
         mock_table = MagicMock()
         mock_table.query.return_value = mock_gsi_response
         mock_dynamodb.Table.return_value = mock_table
@@ -75,7 +75,7 @@ class TestListExtractionResults:
         # Verify GSI query was called
         mock_table.query.assert_called_once()
         call_kwargs = mock_table.query.call_args[1]
-        assert call_kwargs["IndexName"] == "GSI6-ClientTypeDate"
+        assert call_kwargs["IndexName"] == "GSI7-ClientTypeDate"
     
     @patch('lambda_function.dynamodb')
     def test_uses_batch_get_for_full_items(self, mock_dynamodb, mock_gsi_response, mock_batch_get_response):

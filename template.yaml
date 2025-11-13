@@ -2309,8 +2309,19 @@ Resources:
               KeyType: RANGE
           Projection:
             ProjectionType: KEYS_ONLY
-        # GSI6: Client-level reporting
+        # GSI6: Client-level reporting (original - kept for backward compatibility)
         - IndexName: GSI6-ClientTypeDate
+          KeySchema:
+            - AttributeName: GSI6PK
+              KeyType: HASH
+            - AttributeName: ProcessedAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: INCLUDE
+            NonKeyAttributes:
+              - UserId
+        # GSI7: Client-level reporting with ALL attributes
+        - IndexName: GSI7-ClientTypeDate
           KeySchema:
             - AttributeName: GSI6PK
               KeyType: HASH
@@ -7199,7 +7210,7 @@ Resources:
               Action:
                 - dynamodb:Query
               Resource:
-                - !Sub "${ExtractionResultsTable.Arn}/index/GSI6-ClientTypeDate"
+                - !Sub "${ExtractionResultsTable.Arn}/index/GSI7-ClientTypeDate"
             - Effect: Allow
               Action:
                 - kms:Decrypt

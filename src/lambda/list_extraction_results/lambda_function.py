@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: MIT-0
 
 """
-Lambda function to list extraction results (invoices, bank statements) for a company.
-Queries ExtractionResultsTable using GSI6-ClientTypeDate index.
+Lambda function for listing extraction results from DynamoDB.
+Queries ExtractionResultsTable using GSI7-ClientTypeDate index.
+Supports filtering by company number and document type (INVOICE or BANK_STATEMENT).
 """
 
 import json
@@ -43,32 +44,31 @@ def list_extraction_results(
     next_token: Optional[str] = None
 ) -> Dict[str, Any]:
     """
-    Query DynamoDB ExtractionResultsTable for extraction results.
+    List extraction results for a given company and document type.
     
-    Uses GSI6-ClientTypeDate index to efficiently query by company and document type.
-    Results are filtered by user_id for security.
+    Uses GSI7-ClientTypeDate index to efficiently query by company and document type.
+    GSI7 has ProjectionType: ALL, so we get full items without needing batch_get_item.
     
     Args:
-        user_id: Cognito user ID (for security filtering)
-        company_number: Company number to filter by
-        document_type: Document type (INVOICE or BANK_STATEMENT)
-        limit: Maximum number of results to return
-        next_token: Pagination token from previous query
-        
+        company_number: UK Companies House number (e.g., "12345678")
+        document_type: "INVOICE" or "BANK_STATEMENT"
+        limit: Maximum number of results to return (default: 50)
+        next_token: Pagination token for fetching next page
+    
     Returns:
-        Dict with items list and optional nextToken
+        Dictionary with items list and optional nextToken
     """
     print(f"Querying extraction results - Company: {company_number}, Type: {document_type}, User: {user_id}")
     
     extraction_table = dynamodb.Table(EXTRACTION_RESULTS_TABLE)
     
-    # Build GSI6 query: client#{CompanyNumber}#type#{DocumentType}
+    # Build GSI7 query: client#{CompanyNumber}#type#{DocumentType}
     gsi6_pk = f"client#{company_number}#type#{document_type}"
     
     print(f"🔍 DEBUG: Querying GSI6PK = '{gsi6_pk}'")
     
     query_params = {
-        "IndexName": "GSI6-ClientTypeDate",
+        "IndexName": "GSI7-ClientTypeDate",
         "KeyConditionExpression": Key("GSI6PK").eq(gsi6_pk),
         "ScanIndexForward": False,  # Sort by ProcessedAt descending (newest first)
         "Limit": limit
@@ -86,30 +86,10 @@ def list_extraction_results(
     response = extraction_table.query(**query_params)
     
     print(f"🔍 DEBUG: Query response - Count: {response.get('Count', 0)}, ScannedCount: {response.get('ScannedCount', 0)}")
-    print(f"🔍 DEBUG: Query response - Count: {response.get('Count', 0)}, ScannedCount: {response.get('ScannedCount', 0)}")
     
     items = response.get("Items", [])
     
-    # GSI6 has limited projection (INCLUDE), so we need to fetch full items from base table
-    # Get PK and SK from GSI results, then batch get full items
-    if items:
-        print(f"🔍 DEBUG: GSI returned {len(items)} items with limited projection, fetching full items from base table")
-        
-        # Use resource batch_get_item
-        try:
-            batch_response = dynamodb.batch_get_item(
-                RequestItems={
-                    EXTRACTION_RESULTS_TABLE: {
-                        'Keys': [{"PK": item["PK"], "SK": item["SK"]} for item in items]
-                    }
-                }
-            )
-            full_items = batch_response.get("Responses", {}).get(EXTRACTION_RESULTS_TABLE, [])
-            print(f"🔍 DEBUG: Batch get returned {len(full_items)} full items")
-            items = full_items if full_items else items
-        except Exception as e:
-            print(f"⚠️  WARNING: Batch get failed: {e}, using GSI items with limited fields")
-            # Fall back to GSI items if batch get fails
+    # GSI7 has ProjectionType: ALL, so items already contain all attributes
     
     # Log first item for debugging (if any)
     if items:
