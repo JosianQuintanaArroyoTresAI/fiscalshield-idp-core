@@ -1776,6 +1776,89 @@ Resources:
       LogGroupName: !Sub "/${AWS::StackName}/lambda/InvoiceExtractionFunction"
       RetentionInDays: !Ref LogRetentionDays
 
+  BankStatementExtractionFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: python3.12  # Force SAM to build this function
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "This Lambda function does not require VPC access as it only interacts with AWS services via AWS APIs"
+          - id: W92
+            reason: "Function does not require concurrent execution limits as it is designed to scale based on demand"
+          - id: W11
+            reason: "Cloudwatch does not support resource-level permissions, and Bedrock should support any enabled Bedrock model_id or inference profile"
+    # checkov:skip=CKV_AWS_116: "DLQ not required for this function as StepFunctions will handle retries"
+    # checkov:skip=CKV_AWS_173: "Environment variables do not contain sensitive data - only configuration values like feature flags and non-sensitive settings"
+    # checkov:skip=CKV_AWS_117: "Function does not require VPC access as it only interacts with AWS services via APIs"
+    # checkov:skip=CKV_AWS_115: "Function does not require reserved concurrency as it scales based on demand"
+    Properties:
+      PermissionsBoundary:
+        !If [
+          HasPermissionsBoundary,
+          !Ref PermissionsBoundaryArn,
+          !Ref AWS::NoValue,
+        ]
+      Handler: bank_statement_extraction_handler.lambda_handler
+      Runtime: python3.12
+      CodeUri: ./lambdas/bank_statement_extraction/
+      Timeout: 900
+      MemorySize: 1024
+      Environment:
+        Variables:
+          LOG_LEVEL: !Ref LogLevel
+          EXTRACTION_RESULTS_TABLE: !Ref ExtractionResultsTable
+          CONFIGURATION_TABLE: !Ref ConfigurationTable
+          TRACKING_TABLE: !Ref TrackingTable
+          WORKING_BUCKET: !Ref WorkingBucket
+          BEDROCK_MODEL_ID: "anthropic.claude-3-haiku-20240307-v1:0"
+          BEDROCK_INFERENCE_PROFILE_ARN: "arn:aws:bedrock:eu-central-1:864899848062:inference-profile/eu.anthropic.claude-3-haiku-20240307-v1:0"
+          FALLBACK_BEDROCK_MODEL_ID: "anthropic.claude-3-7-sonnet-20250219-v1:0,anthropic.claude-3-5-sonnet-20240620-v1:0"
+          FALLBACK_BEDROCK_INFERENCE_PROFILE_ARN: "arn:aws:bedrock:eu-central-1:864899848062:inference-profile/eu.anthropic.claude-3-7-sonnet-20250219-v1:0,arn:aws:bedrock:eu-central-1:864899848062:inference-profile/eu.anthropic.claude-3-5-sonnet-20240620-v1:0"
+          BEDROCK_MAX_RETRIES: "6"
+          BEDROCK_BACKOFF_BASE_SECONDS: "2.0"
+          BEDROCK_BACKOFF_MAX_SECONDS: "45.0"
+          BEDROCK_FALLBACK_AFTER_ATTEMPT: "3"
+          # Page-based chunking configuration (optimal for bank statements)
+          LAMBDA_TIMEOUT_BUFFER_SECONDS: "60"  # Reserve 60s for cleanup before Lambda timeout
+      LoggingConfig:
+        LogGroup: !Ref BankStatementExtractionFunctionLogGroup
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ExtractionResultsTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref ConfigurationTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TrackingTable
+        - S3ReadPolicy:
+            BucketName: !Ref WorkingBucket
+        - S3ReadPolicy:
+            BucketName: !Ref OutputBucket
+        - Statement:
+            - Effect: Allow
+              Action:
+                - kms:Encrypt
+                - kms:Decrypt
+                - kms:ReEncrypt*
+                - kms:GenerateDataKey*
+                - kms:DescribeKey
+              Resource: !Ref CustomerManagedEncryptionKeyArn
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - bedrock:InvokeModelWithResponseStream
+              Resource:
+                - !Sub "arn:${AWS::Partition}:bedrock:*::foundation-model/*"
+                - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/*"
+
+  BankStatementExtractionFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !Ref CustomerManagedEncryptionKeyArn
+      LogGroupName: !Sub "/${AWS::StackName}/lambda/BankStatementExtractionFunction"
+      RetentionInDays: !Ref LogRetentionDays
+
   AssessmentFunction:
     Type: AWS::Serverless::Function
     DependsOn: Pattern2DockerBuildRun
@@ -2362,6 +2445,14 @@ Resources:
       MessageRetentionPeriod: 1209600 # 14 days
       SqsManagedSseEnabled: true
 
+  BankStatementExtractionDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${AWS::StackName}-bank-statement-extraction-dlq"
+      VisibilityTimeout: 300
+      MessageRetentionPeriod: 1209600 # 14 days
+      SqsManagedSseEnabled: true
+
   DocumentProcessingStateMachine:
     Type: AWS::Serverless::StateMachine
     Properties:
@@ -2378,6 +2469,7 @@ Resources:
         ClassificationFunctionArn: !GetAtt ClassificationFunction.Arn
         ExtractionFunctionArn: !GetAtt ExtractionFunction.Arn
         InvoiceExtractionFunctionArn: !GetAtt InvoiceExtractionFunction.Arn
+        BankStatementExtractionFunctionArn: !GetAtt BankStatementExtractionFunction.Arn
         AssessmentFunctionArn: !GetAtt AssessmentFunction.Arn
         ProcessResultsLambdaArn: !GetAtt ProcessResultsFunction.Arn
         HITLWaitFunctionArn: !GetAtt HITLWaitFunction.Arn
@@ -2385,6 +2477,7 @@ Resources:
         SummarizationLambdaArn: !GetAtt SummarizationFunction.Arn
         OutputBucket: !Ref OutputBucket
         InvoiceExtractionDLQUrl: !Ref InvoiceExtractionDeadLetterQueue
+        BankStatementExtractionDLQUrl: !Ref BankStatementExtractionDeadLetterQueue
       Logging:
         Level: ALL
         IncludeExecutionData: true
@@ -2401,6 +2494,8 @@ Resources:
         - LambdaInvokePolicy:
             FunctionName: !Ref InvoiceExtractionFunction
         - LambdaInvokePolicy:
+            FunctionName: !Ref BankStatementExtractionFunction
+        - LambdaInvokePolicy:
             FunctionName: !Ref AssessmentFunction
         - LambdaInvokePolicy:
             FunctionName: !Ref ProcessResultsFunction
@@ -2413,6 +2508,8 @@ Resources:
         - CloudWatchLogsFullAccess
         - SQSSendMessagePolicy:
             QueueName: !GetAtt InvoiceExtractionDeadLetterQueue.QueueName
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt BankStatementExtractionDeadLetterQueue.QueueName
 
   StateMachineLogGroup:
     Type: AWS::Logs::LogGroup
