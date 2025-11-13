@@ -889,18 +889,32 @@ def lambda_handler(event, context):
         
         document_data = event.get('document', {})
         
-        # Handle compressed document (S3 URI)
+        # Handle compressed document - check both string format and dict with compressed flag
+        from idp_common.models import Document
+        working_bucket = os.environ.get('WORKING_BUCKET')
+        
         if isinstance(document_data, str):
+            # Document is passed as S3 URI string
             if document_data.startswith('s3://'):
-                log_with_timestamp(f"📥 Loading compressed document from: {document_data}")
-                from idp_common.models import Document
-                working_bucket = os.environ.get('WORKING_BUCKET')
+                log_with_timestamp(f"📥 Loading compressed document from S3 URI: {document_data}")
                 document = Document.load_document(document_data, working_bucket, logger)
                 document_dict = document.to_dict()
             else:
                 raise ValueError(f"Unsupported document format: {document_data}")
+        elif isinstance(document_data, dict):
+            # Check if dict has compressed flag or s3_uri indicating it needs to be loaded from S3
+            if document_data.get('compressed') is True or 's3_uri' in document_data:
+                log_with_timestamp(f"📥 Loading compressed document from event data")
+                log_with_timestamp(f"📋 Document data keys: {list(document_data.keys())}")
+                if 's3_uri' in document_data:
+                    log_with_timestamp(f"📥 S3 URI: {document_data['s3_uri']}")
+                document = Document.load_document(document_data, working_bucket, logger)
+                document_dict = document.to_dict()
+            else:
+                # Document is already fully loaded
+                document_dict = document_data
         else:
-            document_dict = document_data
+            raise ValueError(f"Unsupported document type: {type(document_data)}")
         
         # Extract document metadata
         document_id = document_dict.get('document_id') or document_dict.get('id')
