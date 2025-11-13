@@ -157,8 +157,7 @@
                         "Parameters": {
                             "execution_arn.$": "$.execution_arn",
                             "document.$": "$.document",
-                            "section_id.$": "$.section.section_id",
-                            "resume_state.$": "$.resume_state"
+                            "section_id.$": "$.section.section_id"
                         },
                         "Retry": [
                             {
