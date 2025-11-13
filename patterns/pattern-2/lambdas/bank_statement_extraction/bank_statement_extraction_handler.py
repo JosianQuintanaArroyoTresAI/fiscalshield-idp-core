@@ -931,17 +931,23 @@ def lambda_handler(event, context):
         log_with_timestamp(f"📦 Document has {len(document_dict.get('pages', {}))} pages")
         log_with_timestamp(f"📦 Document has {len(document_dict.get('sections', []))} sections")
         
-        # Extract document metadata
-        document_id = document_dict.get('document_id') or document_dict.get('id')
+        # Extract document metadata (matching invoice extraction pattern)
+        document_id = (
+            document_dict.get('id')
+            or document_dict.get('document_id')
+            or document_dict.get('documentId')
+        )
         user_id = document_dict.get('user_id')
-        client_id = document_dict.get('client_id')
         company_number = document_dict.get('company_number')
         company_name = document_dict.get('company_name')
+        client_id = company_number or document_dict.get('client_id') or 'default-client'  # Use company_number as client_id with fallback
         
-        if not document_id or not user_id or not client_id:
+        log_with_timestamp(f"🔍 Extracted metadata - ID: {document_id}, User: {user_id}, Client: {client_id}, Company: {company_name} ({company_number})")
+        
+        if not document_id or not user_id:
             raise ValueError(
                 f"Missing required fields: document_id={document_id}, "
-                f"user_id={user_id}, client_id={client_id}"
+                f"user_id={user_id}"
             )
         
         log_with_timestamp(
