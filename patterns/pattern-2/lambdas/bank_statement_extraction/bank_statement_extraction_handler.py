@@ -716,24 +716,24 @@ def write_transactions_to_dynamodb(
             item = {
                 # Primary Key
                 'PK': f"user#{user_id}#doc#{document_id}",
-                'SK': f"type#BANK_TRANSACTION#section#{section_id}#txn#{idx+1}",
+                'SK': f"type#BANK_STATEMENT#section#{section_id}#txn#{idx+1}",
                 
                 # GSI Keys
-                'GSI1PK': f"user#{user_id}#type#BANK_TRANSACTION",
+                'GSI1PK': f"user#{user_id}#type#BANK_STATEMENT",
                 'ProcessedAt': current_timestamp,
                 'UserId': user_id,
-                'GSI3PK': f"account#{txn_data['account_number']}#type#BANK_TRANSACTION",
+                'GSI3PK': f"account#{txn_data['account_number']}#type#BANK_STATEMENT",
                 'DocumentId': document_id,
                 'ExtractionStatus': 'COMPLETED',
-                'GSI6PK': f"client#{client_id}#type#BANK_TRANSACTION",
+                'GSI6PK': f"client#{client_id}#type#BANK_STATEMENT",
                 
                 # Core identifiers
                 'TransactionId': transaction_id,
                 'SectionId': section_id,
                 'ClientId': client_id,
-                'CompanyNumber': company_number or 'unknown',
-                'CompanyName': company_name or 'Unknown Company',
-                'DocumentType': 'BANK_TRANSACTION',
+                'CompanyNumber': company_number,  # Required field from frontend
+                'CompanyName': company_name,  # Required field from frontend
+                'DocumentType': 'BANK_STATEMENT',
                 
                 # Account information (duplicated for easy filtering)
                 'AccountNumber': txn_data['account_number'],
@@ -942,6 +942,11 @@ def lambda_handler(event, context):
         company_name = document_dict.get('company_name')
         client_id = company_number or document_dict.get('client_id')  # Use company_number as client_id
         
+        # DIAGNOSTIC LOGGING: Check all metadata fields in document
+        log_with_timestamp(f"🔍 ALL document_dict keys: {sorted(document_dict.keys())}")
+        log_with_timestamp(f"🔍 company_number in dict: {company_number}")
+        log_with_timestamp(f"🔍 company_name in dict: {company_name}")
+        log_with_timestamp(f"🔍 client_id in dict: {document_dict.get('client_id')}")
         log_with_timestamp(f"🔍 Extracted metadata - ID: {document_id}, User: {user_id}, Client: {client_id}, Company: {company_name} ({company_number})")
         
         # CRITICAL SECURITY: Validate required fields to prevent document leaks between users/companies
