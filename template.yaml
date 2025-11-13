@@ -2309,7 +2309,7 @@ Resources:
               KeyType: RANGE
           Projection:
             ProjectionType: KEYS_ONLY
-        # GSI6: Client-level reporting (original - kept for backward compatibility)
+        # GSI6: Client-level reporting (must match deployed version exactly - DO NOT MODIFY)
         - IndexName: GSI6-ClientTypeDate
           KeySchema:
             - AttributeName: GSI6PK
@@ -2320,7 +2320,15 @@ Resources:
             ProjectionType: INCLUDE
             NonKeyAttributes:
               - UserId
-        # GSI7: Client-level reporting with ALL attributes
+              - ExtractionStatus
+              - TotalAmount
+              - DocumentId
+              - InvoiceDate
+              - SectionId
+              - TransactionAmount
+              - CompanyName
+              - TransactionDate
+        # GSI7: Client-level reporting with ALL attributes (new index for complete data access)
         - IndexName: GSI7-ClientTypeDate
           KeySchema:
             - AttributeName: GSI6PK
