@@ -940,14 +940,16 @@ def lambda_handler(event, context):
         user_id = document_dict.get('user_id')
         company_number = document_dict.get('company_number')
         company_name = document_dict.get('company_name')
-        client_id = company_number or document_dict.get('client_id') or 'default-client'  # Use company_number as client_id with fallback
+        client_id = company_number or document_dict.get('client_id')  # Use company_number as client_id
         
         log_with_timestamp(f"🔍 Extracted metadata - ID: {document_id}, User: {user_id}, Client: {client_id}, Company: {company_name} ({company_number})")
         
-        if not document_id or not user_id:
+        # CRITICAL SECURITY: Validate required fields to prevent document leaks between users/companies
+        # Both user_id and client_id MUST be present to ensure proper document isolation
+        if not all([document_id, section_id, user_id, client_id]):
             raise ValueError(
-                f"Missing required fields: document_id={document_id}, "
-                f"user_id={user_id}"
+                f"Missing required fields in event: document_id={document_id}, "
+                f"section_id={section_id}, user_id={user_id}, client_id={client_id}"
             )
         
         log_with_timestamp(
