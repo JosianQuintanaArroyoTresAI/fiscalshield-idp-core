@@ -35,6 +35,18 @@ const listExtractionResults = /* GraphQL */ `
         StatementPeriod
         OpeningBalance
         ClosingBalance
+        TransactionCount
+        TotalCredits
+        TotalDebits
+        TransactionId
+        TransactionDate
+        TransactionDescription
+        TransactionAmount
+        TransactionType
+        AccountBalance
+        Reference
+        SourcePage
+        SortCode
         S3Uri
         ModelUsed
         ExtractedData
