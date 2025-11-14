@@ -366,57 +366,93 @@ const DocumentList = () => {
           id: 'bankName',
           header: 'Bank',
           cell: (item) => item.bankName,
-          width: 150,
+          width: 120,
           sortingField: 'bankName',
         },
         {
           id: 'accountNumber',
           header: 'Account',
           cell: (item) => item.accountNumber,
-          width: 130,
+          width: 110,
           sortingField: 'accountNumber',
         },
         {
-          id: 'statementDate',
-          header: 'Statement Date',
-          cell: (item) => item.statementDate,
-          width: 130,
-          sortingField: 'statementDate',
-        },
-        {
           id: 'statementPeriod',
-          header: 'Period',
+          header: 'Statement Period',
           cell: (item) => item.statementPeriod,
-          width: 150,
+          width: 180,
           sortingField: 'statementPeriod',
         },
         {
-          id: 'openingBalance',
-          header: 'Opening Balance',
-          cell: (item) => item.openingBalance,
-          width: 140,
-          sortingField: 'openingBalance',
+          id: 'transactionCount',
+          header: 'Transactions',
+          cell: (item) => item.transactionCount,
+          width: 100,
+          sortingField: 'transactionCount',
+        },
+        {
+          id: 'totalCredits',
+          header: 'Total In',
+          cell: (item) => (
+            <span style={{ color: '#037f0c', fontWeight: 'bold' }}>{item.totalCredits}</span>
+          ),
+          width: 120,
+          sortingField: 'totalCredits',
+        },
+        {
+          id: 'totalDebits',
+          header: 'Total Out',
+          cell: (item) => (
+            <span style={{ color: '#d13212', fontWeight: 'bold' }}>{item.totalDebits}</span>
+          ),
+          width: 120,
+          sortingField: 'totalDebits',
+        },
+        {
+          id: 'netMovement',
+          header: 'Net Movement',
+          cell: (item) => (
+            <span style={{ color: item.netMovement >= 0 ? '#037f0c' : '#d13212', fontWeight: 'bold' }}>
+              {item.netMovement}
+            </span>
+          ),
+          width: 120,
+          sortingField: 'netMovement',
         },
         {
           id: 'closingBalance',
           header: 'Closing Balance',
           cell: (item) => item.closingBalance,
-          width: 140,
+          width: 130,
           sortingField: 'closingBalance',
         },
         {
-          id: 'status',
-          header: 'Status',
-          cell: (item) => <Badge color={getStatusVariant(item.status)}>{item.status}</Badge>,
-          width: 120,
-          sortingField: 'status',
+          id: 'quality',
+          header: 'Quality',
+          cell: (item) => (
+            <Badge
+              color={
+                item.qualityTier === 'EXCELLENT'
+                  ? 'green'
+                  : item.qualityTier === 'GOOD'
+                  ? 'blue'
+                  : item.qualityTier === 'ACCEPTABLE'
+                  ? 'grey'
+                  : 'red'
+              }
+            >
+              {item.qualityTier}
+            </Badge>
+          ),
+          width: 100,
+          sortingField: 'qualityTier',
         },
         {
-          id: 'confidence',
-          header: 'Confidence',
-          cell: (item) => item.confidence,
-          width: 100,
-          sortingField: 'confidence',
+          id: 'processedDate',
+          header: 'Processed',
+          cell: (item) => item.processedDate,
+          width: 110,
+          sortingField: 'processedDate',
         },
       ]}
       items={bankStatements}

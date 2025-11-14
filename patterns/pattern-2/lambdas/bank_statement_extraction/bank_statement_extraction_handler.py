@@ -787,6 +787,172 @@ def write_transactions_to_dynamodb(
     return inserted_count
 
 
+def write_statement_summary_to_dynamodb(
+    document_id: str,
+    section_id: str,
+    user_id: str,
+    client_id: str,
+    account_info: Dict[str, Any],
+    transactions: List[Dict[str, Any]],
+    company_number: Optional[str] = None,
+    company_name: Optional[str] = None,
+    model_used: str = 'unknown'
+) -> bool:
+    """
+    Write a bank statement summary record to ExtractionResultsTable.
+    This creates a single record per statement (similar to how invoices work)
+    that can be displayed in the frontend list view.
+    
+    Returns:
+        True if successful, False otherwise
+    """
+    
+    if not extraction_table:
+        log_with_timestamp("⚠️ EXTRACTION_RESULTS_TABLE not configured - skipping statement summary write")
+        return False
+    
+    if not transactions:
+        log_with_timestamp("⚠️ No transactions to summarize")
+        return False
+    
+    try:
+        current_timestamp = int(time.time())
+        
+        # Calculate summary statistics
+        opening_balance = Decimal('0')
+        closing_balance = Decimal('0')
+        total_debits = Decimal('0')
+        total_credits = Decimal('0')
+        transaction_count = len(transactions)
+        
+        # Get opening and closing balances from first and last transactions
+        if transactions:
+            # Sort by date to find first and last
+            sorted_txns = sorted(transactions, key=lambda t: t.get('date', ''))
+            
+            # Opening balance from first transaction's balance (if available)
+            first_txn = sorted_txns[0]
+            if first_txn.get('balance') is not None:
+                opening_balance = Decimal(str(first_txn['balance']))
+            
+            # Closing balance from last transaction
+            last_txn = sorted_txns[-1]
+            if last_txn.get('balance') is not None:
+                closing_balance = Decimal(str(last_txn['balance']))
+            
+            # Calculate totals
+            for txn in transactions:
+                amount = Decimal(str(txn.get('amount', 0)))
+                if amount > 0:
+                    total_credits += amount
+                else:
+                    total_debits += abs(amount)
+        
+        # Get statement date and period from account info or transactions
+        statement_date = account_info.get('statement_period', '')
+        if not statement_date and transactions:
+            # Use the last transaction date as statement date
+            statement_date = sorted_txns[-1].get('date', '')
+        
+        # Calculate statement period from first and last transaction dates
+        statement_period = account_info.get('statement_period', '')
+        if transactions and len(sorted_txns) > 0:
+            first_date = sorted_txns[0].get('date', '')
+            last_date = sorted_txns[-1].get('date', '')
+            if first_date and last_date:
+                statement_period = f"{first_date} to {last_date}"
+        
+        # Calculate composite confidence from transaction confidences
+        confidence_scores = [
+            txn.get('composite_confidence', 0) for txn in transactions
+        ]
+        composite_confidence = Decimal(str(sum(confidence_scores) / len(confidence_scores))) if confidence_scores else Decimal('0')
+        
+        # Determine quality tier based on composite confidence
+        if composite_confidence >= 0.9:
+            quality_tier = 'EXCELLENT'
+        elif composite_confidence >= 0.75:
+            quality_tier = 'GOOD'
+        elif composite_confidence >= 0.6:
+            quality_tier = 'ACCEPTABLE'
+        else:
+            quality_tier = 'NEEDS_REVIEW'
+        
+        # Generate unique statement ID
+        statement_id = f"{document_id}-stmt-{section_id}-{str(uuid.uuid4())[:8]}"
+        
+        # Create DynamoDB item for statement summary
+        item = {
+            # Primary Key
+            'PK': f"user#{user_id}#doc#{document_id}",
+            'SK': f"type#BANK_STATEMENT#section#{section_id}#statement#summary",
+            
+            # GSI Keys
+            'GSI1PK': f"user#{user_id}#type#BANK_STATEMENT",
+            'ProcessedAt': current_timestamp,
+            'UserId': user_id,
+            'GSI3PK': f"account#{account_info.get('account_number', 'unknown')}#type#BANK_STATEMENT",
+            'DocumentId': document_id,
+            'ExtractionStatus': 'COMPLETED',
+            'GSI6PK': f"client#{company_number or client_id}#type#BANK_STATEMENT",
+            
+            # Core identifiers
+            'StatementId': statement_id,
+            'SectionId': section_id,
+            'ClientId': client_id,
+            'CompanyNumber': company_number or 'unknown',
+            'CompanyName': company_name or 'Unknown Company',
+            'DocumentType': 'BANK_STATEMENT',
+            
+            # Bank statement summary fields
+            'BankName': account_info.get('bank_name', 'Unknown Bank'),
+            'AccountNumber': account_info.get('account_number', 'Unknown'),
+            'SortCode': account_info.get('sort_code', ''),
+            'StatementDate': statement_date,
+            'StatementPeriod': statement_period,
+            'OpeningBalance': opening_balance,
+            'ClosingBalance': closing_balance,
+            'TotalDebits': total_debits,
+            'TotalCredits': total_credits,
+            'TransactionCount': transaction_count,
+            'Currency': 'GBP',  # Default to GBP for UK bank statements
+            
+            # Confidence and quality
+            'ConfidenceScore': composite_confidence,
+            'CompositeConfidence': composite_confidence,
+            'QualityTier': quality_tier,
+            'HITLRequired': quality_tier == 'NEEDS_REVIEW',
+            'HITLReason': 'Low confidence score' if quality_tier == 'NEEDS_REVIEW' else None,
+            
+            # Metadata
+            'CreatedAt': current_timestamp,
+            'UpdatedAt': current_timestamp,
+            'DateExtracted': datetime.now().strftime('%Y-%m-%d'),
+            'ModelUsed': model_used,
+            
+            # TTL (optional - 1 year)
+            'TTL': current_timestamp + (365 * 24 * 60 * 60)
+        }
+        
+        # Write to DynamoDB
+        extraction_table.put_item(Item=item)
+        
+        log_with_timestamp(
+            f"✅ Inserted statement summary: {account_info.get('bank_name')} "
+            f"Account {account_info.get('account_number')} - "
+            f"{transaction_count} transactions, "
+            f"Balance: £{opening_balance} → £{closing_balance}"
+        )
+        
+        return True
+        
+    except Exception as e:
+        log_with_timestamp(f"❌ Error inserting statement summary: {str(e)}")
+        import traceback
+        log_with_timestamp(traceback.format_exc())
+        return False
+
+
 # ==============================================================================
 # Single Chunk Processing
 # ==============================================================================
@@ -972,11 +1138,13 @@ def lambda_handler(event, context):
             chunk_start_index = resume_state['next_chunk_index']
             stored_account_info = resume_state.get('last_account_info')
             total_transactions_inserted = resume_state.get('total_transactions_inserted', 0)
+            all_transactions = resume_state.get('all_transactions', [])  # Restore collected transactions
         else:
             log_with_timestamp("🆕 Starting NEW bank statement extraction")
             chunk_start_index = 0
             stored_account_info = None
             total_transactions_inserted = 0
+            all_transactions = []  # Initialize for new extraction
         
         # Load section text (matching invoice extraction logic)
         sections = document_dict.get('sections', [])
@@ -1111,7 +1279,8 @@ def lambda_handler(event, context):
                 resume_state = {
                     'next_chunk_index': chunk_index,
                     'last_account_info': stored_account_info,
-                    'total_transactions_inserted': total_transactions_inserted
+                    'total_transactions_inserted': total_transactions_inserted,
+                    'all_transactions': all_transactions  # Save collected transactions for resume
                 }
                 
                 # Update tracking table
@@ -1159,6 +1328,9 @@ def lambda_handler(event, context):
             if result['account_info']:
                 stored_account_info = result['account_info']
             
+            # Collect transactions for statement summary
+            all_transactions.extend(result['transactions'])
+            
             total_transactions_inserted += result['transactions_inserted']
             chunks_processed_this_run += 1
         
@@ -1167,6 +1339,23 @@ def lambda_handler(event, context):
             f"✅ COMPLETED extraction: {len(all_chunks)} chunks, "
             f"{total_transactions_inserted} transactions inserted"
         )
+        
+        # Write statement summary record (for frontend display)
+        if stored_account_info and all_transactions:
+            log_with_timestamp("📝 Writing bank statement summary record...")
+            write_statement_summary_to_dynamodb(
+                document_id=document_id,
+                section_id=section_id,
+                user_id=user_id,
+                client_id=client_id,
+                account_info=stored_account_info,
+                transactions=all_transactions,
+                company_number=company_number,
+                company_name=company_name,
+                model_used='bedrock-claude'  # Can be updated to track actual model
+            )
+        else:
+            log_with_timestamp(f"⚠️ Skipping statement summary - account_info: {stored_account_info is not None}, transactions: {len(all_transactions)}")
         
         # Update final status
         update_chunk_progress(

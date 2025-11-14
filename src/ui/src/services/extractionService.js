@@ -100,16 +100,40 @@ export const formatInvoiceData = (extractionResult) => {
  * @returns {Object} Formatted bank statement data
  */
 export const formatBankStatementData = (extractionResult) => {
+  // Calculate net movement (credits - debits)
+  const totalCredits = extractionResult.TotalCredits || 0;
+  const totalDebits = extractionResult.TotalDebits || 0;
+  const netMovement = totalCredits - totalDebits;
+
+  // Format processed date
+  const processedDate = extractionResult.ProcessedAt
+    ? new Date(extractionResult.ProcessedAt * 1000).toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      })
+    : 'N/A';
+
   return {
     id: extractionResult.DocumentId,
     bankName: extractionResult.BankName || 'Unknown Bank',
     accountNumber: extractionResult.AccountNumber ? maskAccountNumber(extractionResult.AccountNumber) : 'N/A',
+    sortCode: extractionResult.SortCode || 'N/A',
     statementDate: formatDate(extractionResult.StatementDate),
     statementPeriod: extractionResult.StatementPeriod || 'N/A',
+    transactionCount: extractionResult.TransactionCount || 0,
+    totalCredits: formatCurrency(totalCredits, extractionResult.Currency),
+    totalDebits: formatCurrency(totalDebits, extractionResult.Currency),
+    netMovement: formatCurrency(netMovement, extractionResult.Currency),
     openingBalance: formatCurrency(extractionResult.OpeningBalance, extractionResult.Currency),
     closingBalance: formatCurrency(extractionResult.ClosingBalance, extractionResult.Currency),
     status: extractionResult.ExtractionStatus || 'UNKNOWN',
-    confidence: extractionResult.ConfidenceScore ? (extractionResult.ConfidenceScore * 100).toFixed(1) + '%' : 'N/A',
+    confidence: extractionResult.ConfidenceScore
+      ? (extractionResult.ConfidenceScore * 100).toFixed(1) + '%'
+      : 'N/A',
+    qualityTier: extractionResult.QualityTier || 'N/A',
+    hitlRequired: extractionResult.HITLRequired || false,
+    processedDate: processedDate,
     processedAt: extractionResult.ProcessedAt,
     s3Uri: extractionResult.S3Uri,
     rawData: extractionResult,
