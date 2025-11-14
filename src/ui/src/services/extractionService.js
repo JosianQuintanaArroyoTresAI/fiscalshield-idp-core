@@ -97,14 +97,9 @@ export const formatInvoiceData = (extractionResult) => {
 /**
  * Format bank statement data for display
  * @param {Object} extractionResult - Raw extraction result from DynamoDB
- * @returns {Object} Formatted bank statement data
+ * @returns {Object} Formatted bank statement data (transactions, not summaries)
  */
 export const formatBankStatementData = (extractionResult) => {
-  // Calculate net movement (credits - debits)
-  const totalCredits = extractionResult.TotalCredits || 0;
-  const totalDebits = extractionResult.TotalDebits || 0;
-  const netMovement = totalCredits - totalDebits;
-
   // Format processed date
   const processedDate = extractionResult.ProcessedAt
     ? new Date(extractionResult.ProcessedAt * 1000).toLocaleDateString('en-GB', {
@@ -114,23 +109,30 @@ export const formatBankStatementData = (extractionResult) => {
       })
     : 'N/A';
 
+  // Format transaction date
+  const transactionDate = formatDate(extractionResult.TransactionDate);
+
+  // Determine transaction type display
+  const transactionType = extractionResult.TransactionType || 'UNKNOWN';
+  const amount = extractionResult.TransactionAmount || 0;
+
   return {
-    id: extractionResult.DocumentId,
+    id: extractionResult.TransactionId || extractionResult.DocumentId,
     bankName: extractionResult.BankName || 'Unknown Bank',
     accountNumber: extractionResult.AccountNumber ? maskAccountNumber(extractionResult.AccountNumber) : 'N/A',
     sortCode: extractionResult.SortCode || 'N/A',
-    statementDate: formatDate(extractionResult.StatementDate),
-    statementPeriod: extractionResult.StatementPeriod || 'N/A',
-    transactionCount: extractionResult.TransactionCount || 0,
-    totalCredits: formatCurrency(totalCredits, extractionResult.Currency),
-    totalDebits: formatCurrency(totalDebits, extractionResult.Currency),
-    netMovement: formatCurrency(netMovement, extractionResult.Currency),
-    openingBalance: formatCurrency(extractionResult.OpeningBalance, extractionResult.Currency),
-    closingBalance: formatCurrency(extractionResult.ClosingBalance, extractionResult.Currency),
-    status: extractionResult.ExtractionStatus || 'UNKNOWN',
-    confidence: extractionResult.ConfidenceScore ? (extractionResult.ConfidenceScore * 100).toFixed(1) + '%' : 'N/A',
+    transactionDate: transactionDate,
+    transactionDescription: extractionResult.TransactionDescription || 'N/A',
+    reference: extractionResult.Reference || 'N/A',
+    transactionAmount: amount,
+    formattedAmount: formatCurrency(Math.abs(amount), extractionResult.Currency || 'GBP'),
+    transactionType: transactionType,
+    accountBalance: formatCurrency(extractionResult.AccountBalance, extractionResult.Currency || 'GBP'),
+    confidence: extractionResult.CompositeConfidence
+      ? (extractionResult.CompositeConfidence * 100).toFixed(0) + '%'
+      : 'N/A',
     qualityTier: extractionResult.QualityTier || 'N/A',
-    hitlRequired: extractionResult.HITLRequired || false,
+    sourcePage: extractionResult.SourcePage || 'N/A',
     processedDate: processedDate,
     processedAt: extractionResult.ProcessedAt,
     s3Uri: extractionResult.S3Uri,
@@ -204,6 +206,31 @@ export const getStatusVariant = (status) => {
   };
 
   return statusMap[status] || 'info';
+};
+
+/**
+ * Fetch individual transactions for a specific bank statement
+ * @param {string} documentId - Document ID containing the transactions
+ * @param {string} sectionId - Section ID for the statement
+ * @returns {Promise<Array>} Array of transaction records
+ */
+export const fetchStatementTransactions = async (documentId, sectionId) => {
+  try {
+    logger.debug(`Fetching transactions for document ${documentId}, section ${sectionId}`);
+    
+    // For now, we'll query DynamoDB directly via a custom query
+    // In production, you'd want to add a GraphQL query for this
+    // The transactions have SK pattern: type#BANK_STATEMENT#section#{sectionId}#txn#{n}
+    
+    // TODO: Implement proper GraphQL query
+    // For now, return empty array - we'll add the query in next step
+    logger.warn('fetchStatementTransactions not yet implemented - need GraphQL query');
+    return [];
+    
+  } catch (error) {
+    logger.error('Error fetching statement transactions:', error);
+    throw error;
+  }
 };
 
 /**

@@ -64,6 +64,13 @@ const DocumentList = () => {
   const [isLoadingBankStatements, setIsLoadingBankStatements] = useState(false);
   const [invoicesNextToken, setInvoicesNextToken] = useState(null);
   const [bankStatementsNextToken, setBankStatementsNextToken] = useState(null);
+  
+  // Bank statement transactions state
+  const [selectedStatement, setSelectedStatement] = useState(null);
+  const [statementTransactions, setStatementTransactions] = useState([]);
+  const [isLoadingTransactions, setIsLoadingTransactions] = useState(false);
+  const [showTransactionsPanel, setShowTransactionsPanel] = useState(false);
+  const [bankStatementView, setBankStatementView] = useState('summary'); // 'summary' or 'transactions'
 
   const { activeCompany, isCompanySelected } = useCompany();
   const { settings } = useSettingsContext();
@@ -358,97 +365,85 @@ const DocumentList = () => {
     />
   );
 
-  // Bank Statements Table Component
+  // Bank Statements Table Component (Transaction-level view)
   const renderBankStatementsTable = () => (
     <Table
       columnDefinitions={[
         {
+          id: 'transactionDate',
+          header: 'Date',
+          cell: (item) => item.transactionDate,
+          width: 100,
+          sortingField: 'transactionDate',
+        },
+        {
+          id: 'reference',
+          header: 'Reference',
+          cell: (item) => item.reference,
+          width: 200,
+          sortingField: 'reference',
+        },
+        {
+          id: 'transactionDescription',
+          header: 'Description',
+          cell: (item) => (
+            <span title={item.transactionDescription}>
+              {item.transactionDescription.length > 60
+                ? item.transactionDescription.substring(0, 60) + '...'
+                : item.transactionDescription}
+            </span>
+          ),
+          width: 300,
+          sortingField: 'transactionDescription',
+        },
+        {
+          id: 'transactionAmount',
+          header: 'Amount',
+          cell: (item) => (
+            <span
+              style={{
+                color: item.transactionAmount >= 0 ? '#037f0c' : '#d13212',
+                fontWeight: 'bold',
+              }}
+            >
+              {item.transactionAmount >= 0 ? '+' : ''}
+              {item.formattedAmount}
+            </span>
+          ),
+          width: 120,
+          sortingField: 'transactionAmount',
+        },
+        {
+          id: 'accountBalance',
+          header: 'Balance',
+          cell: (item) => item.accountBalance,
+          width: 120,
+          sortingField: 'accountBalance',
+        },
+        {
           id: 'bankName',
           header: 'Bank',
           cell: (item) => item.bankName,
-          width: 120,
+          width: 110,
           sortingField: 'bankName',
         },
         {
           id: 'accountNumber',
           header: 'Account',
           cell: (item) => item.accountNumber,
-          width: 110,
+          width: 100,
           sortingField: 'accountNumber',
         },
         {
-          id: 'statementPeriod',
-          header: 'Statement Period',
-          cell: (item) => item.statementPeriod,
-          width: 180,
-          sortingField: 'statementPeriod',
-        },
-        {
-          id: 'transactionCount',
-          header: 'Transactions',
-          cell: (item) => item.transactionCount,
-          width: 100,
-          sortingField: 'transactionCount',
-        },
-        {
-          id: 'totalCredits',
-          header: 'Total In',
-          cell: (item) => <span style={{ color: '#037f0c', fontWeight: 'bold' }}>{item.totalCredits}</span>,
-          width: 120,
-          sortingField: 'totalCredits',
-        },
-        {
-          id: 'totalDebits',
-          header: 'Total Out',
-          cell: (item) => <span style={{ color: '#d13212', fontWeight: 'bold' }}>{item.totalDebits}</span>,
-          width: 120,
-          sortingField: 'totalDebits',
-        },
-        {
-          id: 'netMovement',
-          header: 'Net Movement',
+          id: 'confidence',
+          header: 'Confidence',
           cell: (item) => (
-            <span style={{ color: item.netMovement >= 0 ? '#037f0c' : '#d13212', fontWeight: 'bold' }}>
-              {item.netMovement}
-            </span>
-          ),
-          width: 120,
-          sortingField: 'netMovement',
-        },
-        {
-          id: 'closingBalance',
-          header: 'Closing Balance',
-          cell: (item) => item.closingBalance,
-          width: 130,
-          sortingField: 'closingBalance',
-        },
-        {
-          id: 'quality',
-          header: 'Quality',
-          cell: (item) => (
-            <Badge
-              color={
-                item.qualityTier === 'EXCELLENT'
-                  ? 'green'
-                  : item.qualityTier === 'GOOD'
-                  ? 'blue'
-                  : item.qualityTier === 'ACCEPTABLE'
-                  ? 'grey'
-                  : 'red'
-              }
-            >
-              {item.qualityTier}
+            <Badge color={parseInt(item.confidence) >= 90 ? 'green' : parseInt(item.confidence) >= 75 ? 'blue' : 'grey'}>
+              {item.confidence}
             </Badge>
           ),
-          width: 100,
-          sortingField: 'qualityTier',
-        },
-        {
-          id: 'processedDate',
-          header: 'Processed',
-          cell: (item) => item.processedDate,
-          width: 110,
-          sortingField: 'processedDate',
+          width: 90,
+          sortingField: 'confidence',
         },
       ]}
       items={bankStatements}
@@ -460,21 +455,21 @@ const DocumentList = () => {
           counter={`(${bankStatements.length})`}
           description={
             isCompanySelected
-              ? `Extracted bank statements for ${activeCompany?.companyName || 'selected company'}`
-              : 'Select a company to view bank statements'
+              ? `Bank statement transactions for ${activeCompany?.companyName || 'selected company'}`
+              : 'Select a company to view bank statement transactions'
           }
         >
-          Bank Statements
+          Bank Statement Transactions
         </Header>
       }
       empty={
         <Box margin={{ vertical: 'xs' }} textAlign="center" color="inherit">
           <SpaceBetween size="m">
-            <Box variant="h3">{isCompanySelected ? 'No bank statements found' : 'No company selected'}</Box>
+            <Box variant="h3">{isCompanySelected ? 'No transactions found' : 'No company selected'}</Box>
             <Box variant="p" color="text-body-secondary">
               {isCompanySelected
-                ? 'No extracted bank statements available for this company yet.'
-                : 'Please select a company from the dropdown to view bank statements.'}
+                ? 'No bank statement transactions available for this company yet.'
+                : 'Please select a company from the dropdown to view bank statement transactions.'}
             </Box>
           </SpaceBetween>
         </Box>

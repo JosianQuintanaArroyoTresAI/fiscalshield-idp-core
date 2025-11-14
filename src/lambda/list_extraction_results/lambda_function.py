@@ -41,7 +41,8 @@ def list_extraction_results(
     company_number: str,
     document_type: str,
     limit: int = 50,
-    next_token: Optional[str] = None
+    next_token: Optional[str] = None,
+    view_type: Optional[str] = "transactions"  # NEW: "transactions" or "summary"
 ) -> Dict[str, Any]:
     """
     List extraction results for a given company and document type.
@@ -50,15 +51,18 @@ def list_extraction_results(
     GSI7 has ProjectionType: ALL, so we get full items without needing batch_get_item.
     
     Args:
+        user_id: Authenticated user ID
         company_number: UK Companies House number (e.g., "12345678")
         document_type: "INVOICE" or "BANK_STATEMENT"
         limit: Maximum number of results to return (default: 50)
         next_token: Pagination token for fetching next page
+        view_type: For BANK_STATEMENT: "transactions" returns individual transactions,
+                   "summary" returns statement summaries
     
     Returns:
         Dictionary with items list and optional nextToken
     """
-    print(f"Querying extraction results - Company: {company_number}, Type: {document_type}, User: {user_id}")
+    print(f"Querying extraction results - Company: {company_number}, Type: {document_type}, User: {user_id}, View: {view_type}")
     
     extraction_table = dynamodb.Table(EXTRACTION_RESULTS_TABLE)
     
@@ -71,7 +75,7 @@ def list_extraction_results(
         "IndexName": "GSI7-ClientTypeDate",
         "KeyConditionExpression": Key("GSI6PK").eq(gsi6_pk),
         "ScanIndexForward": False,  # Sort by ProcessedAt descending (newest first)
-        "Limit": limit
+        "Limit": limit * 10  # Get more to allow for filtering
     }
     
     # Handle pagination
@@ -89,20 +93,42 @@ def list_extraction_results(
     
     items = response.get("Items", [])
     
-    # GSI7 has ProjectionType: ALL, so items already contain all attributes
-    
-    # Log first item for debugging (if any)
-    if items:
-        first_item = items[0]
-        print(f"🔍 DEBUG: First item GSI6PK = '{first_item.get('GSI6PK')}', UserId = '{first_item.get('UserId')}'")
-    
     # Security filter: only return items for the authenticated user
-    filtered_items = [
+    user_items = [
         item for item in items
         if item.get("UserId") == user_id
     ]
     
-    print(f"Found {len(items)} items, {len(filtered_items)} belong to user {user_id}")
+    print(f"Found {len(items)} items, {len(user_items)} belong to user {user_id}")
+    
+    # Filter by SK pattern based on view_type
+    if document_type == "BANK_STATEMENT":
+        if view_type == "transactions":
+            # Return individual transaction records (SK contains '#txn#')
+            filtered_items = [
+                item for item in user_items
+                if '#txn#' in item.get('SK', '')
+            ]
+            print(f"Filtered to {len(filtered_items)} transaction records")
+        else:
+            # Return statement summary records (SK contains '#statement#summary')
+            filtered_items = [
+                item for item in user_items
+                if '#statement#summary' in item.get('SK', '')
+            ]
+            print(f"Filtered to {len(filtered_items)} statement summary records")
+    elif document_type == "INVOICE":
+        # For invoices, return invoice records (SK contains '#invoice#')
+        filtered_items = [
+            item for item in user_items
+            if '#invoice#' in item.get('SK', '')
+        ]
+        print(f"Filtered to {len(filtered_items)} invoice records")
+    else:
+        filtered_items = user_items
+    
+    # Limit to requested number
+    filtered_items = filtered_items[:limit]
     
     # Convert Decimal to float for JSON serialization
     serialized_items = json.loads(json.dumps(filtered_items, cls=DecimalEncoder))
@@ -147,6 +173,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         document_type = arguments.get("documentType")
         limit = arguments.get("limit", 50)
         next_token = arguments.get("nextToken")
+        view_type = arguments.get("viewType", "transactions")  # NEW: Default to transactions for BANK_STATEMENT
         
         # Validate required arguments
         if not company_number:
@@ -160,7 +187,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         if document_type not in valid_types:
             raise ValueError(f"documentType must be one of: {', '.join(valid_types)}")
         
-        print(f"Processing request - User: {user_id}, Company: {company_number}, Type: {document_type}")
+        print(f"Processing request - User: {user_id}, Company: {company_number}, Type: {document_type}, View: {view_type}")
         
         # Query extraction results
         result = list_extraction_results(
@@ -168,7 +195,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             company_number=company_number,
             document_type=document_type,
             limit=limit,
-            next_token=next_token
+            next_token=next_token,
+            view_type=view_type  # Pass view_type parameter
         )
         
         print(f"Successfully retrieved {len(result['items'])} extraction results")
