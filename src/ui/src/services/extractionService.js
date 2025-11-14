@@ -29,6 +29,7 @@ export const DOCUMENT_TYPES = {
 export const fetchExtractionResults = async (companyNumber, documentType, limit = 50, nextToken = null) => {
   try {
     logger.debug(`Fetching ${documentType} extraction results for company ${companyNumber}`);
+    console.log(`[EXTRACTION SERVICE] Fetching ${documentType} for company ${companyNumber}, limit: ${limit}`);
 
     const response = await API.graphql(
       graphqlOperation(listExtractionResultsQuery, {
@@ -39,9 +40,15 @@ export const fetchExtractionResults = async (companyNumber, documentType, limit 
       }),
     );
 
+    console.log('[EXTRACTION SERVICE] GraphQL Response:', response);
+    console.log('[EXTRACTION SERVICE] Response data:', response?.data);
+    console.log('[EXTRACTION SERVICE] listExtractionResults:', response?.data?.listExtractionResults);
+
     const result = response?.data?.listExtractionResults || { items: [] };
 
     logger.debug(`Fetched ${result.items.length} extraction results, hasMore: ${!!result.nextToken}`);
+    console.log(`[EXTRACTION SERVICE] ✅ Fetched ${result.items.length} items`);
+    console.log('[EXTRACTION SERVICE] First 2 items:', result.items.slice(0, 2));
 
     return {
       items: result.items || [],
@@ -49,9 +56,10 @@ export const fetchExtractionResults = async (companyNumber, documentType, limit 
     };
   } catch (error) {
     logger.error('Error fetching extraction results:', error);
-    console.error('[EXTRACTION SERVICE] Full error:', error);
+    console.error('[EXTRACTION SERVICE] ❌ Full error:', error);
     console.error('[EXTRACTION SERVICE] Error message:', error.message);
     console.error('[EXTRACTION SERVICE] Error errors:', error.errors);
+    console.error('[EXTRACTION SERVICE] Error stack:', error.stack);
     throw error;
   }
 };

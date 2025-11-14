@@ -273,6 +273,19 @@ type ExtractionResult @aws_cognito_user_pools @aws_iam {
   StatementPeriod: String
   OpeningBalance: Float
   ClosingBalance: Float
+  TransactionCount: Int
+  TotalCredits: Float
+  TotalDebits: Float
+  # Bank Statement Transaction fields
+  TransactionId: String
+  TransactionDate: String
+  TransactionDescription: String
+  TransactionAmount: Float
+  TransactionType: String
+  AccountBalance: Float
+  Reference: String
+  SourcePage: String
+  SortCode: String
   # Common metadata
   S3Uri: String
   ModelUsed: String
