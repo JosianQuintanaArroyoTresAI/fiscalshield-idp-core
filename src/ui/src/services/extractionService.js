@@ -217,16 +217,15 @@ export const getStatusVariant = (status) => {
 export const fetchStatementTransactions = async (documentId, sectionId) => {
   try {
     logger.debug(`Fetching transactions for document ${documentId}, section ${sectionId}`);
-    
+
     // For now, we'll query DynamoDB directly via a custom query
     // In production, you'd want to add a GraphQL query for this
     // The transactions have SK pattern: type#BANK_STATEMENT#section#{sectionId}#txn#{n}
-    
+
     // TODO: Implement proper GraphQL query
     // For now, return empty array - we'll add the query in next step
     logger.warn('fetchStatementTransactions not yet implemented - need GraphQL query');
     return [];
-    
   } catch (error) {
     logger.error('Error fetching statement transactions:', error);
     throw error;

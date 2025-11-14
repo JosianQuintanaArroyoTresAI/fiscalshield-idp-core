@@ -64,7 +64,7 @@ const DocumentList = () => {
   const [isLoadingBankStatements, setIsLoadingBankStatements] = useState(false);
   const [invoicesNextToken, setInvoicesNextToken] = useState(null);
   const [bankStatementsNextToken, setBankStatementsNextToken] = useState(null);
-  
+
   // Bank statement transactions state
   const [selectedStatement, setSelectedStatement] = useState(null);
   const [statementTransactions, setStatementTransactions] = useState([]);
@@ -438,7 +438,9 @@ const DocumentList = () => {
           id: 'confidence',
           header: 'Confidence',
           cell: (item) => (
-            <Badge color={parseInt(item.confidence) >= 90 ? 'green' : parseInt(item.confidence) >= 75 ? 'blue' : 'grey'}>
+            <Badge
+              color={parseInt(item.confidence) >= 90 ? 'green' : parseInt(item.confidence) >= 75 ? 'blue' : 'grey'}
+            >
               {item.confidence}
             </Badge>
           ),
