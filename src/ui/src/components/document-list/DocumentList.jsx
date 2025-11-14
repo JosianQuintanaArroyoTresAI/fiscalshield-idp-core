@@ -393,18 +393,14 @@ const DocumentList = () => {
         {
           id: 'totalCredits',
           header: 'Total In',
-          cell: (item) => (
-            <span style={{ color: '#037f0c', fontWeight: 'bold' }}>{item.totalCredits}</span>
-          ),
+          cell: (item) => <span style={{ color: '#037f0c', fontWeight: 'bold' }}>{item.totalCredits}</span>,
           width: 120,
           sortingField: 'totalCredits',
         },
         {
           id: 'totalDebits',
           header: 'Total Out',
-          cell: (item) => (
-            <span style={{ color: '#d13212', fontWeight: 'bold' }}>{item.totalDebits}</span>
-          ),
+          cell: (item) => <span style={{ color: '#d13212', fontWeight: 'bold' }}>{item.totalDebits}</span>,
           width: 120,
           sortingField: 'totalDebits',
         },

@@ -128,9 +128,7 @@ export const formatBankStatementData = (extractionResult) => {
     openingBalance: formatCurrency(extractionResult.OpeningBalance, extractionResult.Currency),
     closingBalance: formatCurrency(extractionResult.ClosingBalance, extractionResult.Currency),
     status: extractionResult.ExtractionStatus || 'UNKNOWN',
-    confidence: extractionResult.ConfidenceScore
-      ? (extractionResult.ConfidenceScore * 100).toFixed(1) + '%'
-      : 'N/A',
+    confidence: extractionResult.ConfidenceScore ? (extractionResult.ConfidenceScore * 100).toFixed(1) + '%' : 'N/A',
     qualityTier: extractionResult.QualityTier || 'N/A',
     hitlRequired: extractionResult.HITLRequired || false,
     processedDate: processedDate,
