@@ -6223,6 +6223,7 @@ Resources:
         Variables:
           LOG_LEVEL: !Ref LogLevel
           TRACKING_TABLE_NAME: !Ref TrackingTable
+          EXTRACTION_RESULTS_TABLE: !Ref ExtractionResultsTable
           INPUT_BUCKET: !Ref InputBucket
           OUTPUT_BUCKET: !Ref OutputBucket
       LoggingConfig:
@@ -6230,6 +6231,8 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref TrackingTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ExtractionResultsTable
         - S3CrudPolicy:
             BucketName: !Ref InputBucket
         - S3CrudPolicy:
