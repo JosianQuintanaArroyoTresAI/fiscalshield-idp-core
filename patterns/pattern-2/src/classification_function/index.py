@@ -120,9 +120,10 @@ def handler(event, context):
         return response
 
     # Intelligent Classification detection: Skip if pages already have classifications
+    # NOTE: Exclude "unclassified" - it means classification failed previously, so we should retry
     pages_with_classification = 0
     for page in document.pages.values():
-        if page.classification and page.classification.strip():
+        if page.classification and page.classification.strip() and page.classification.lower() != "unclassified":
             pages_with_classification += 1
 
     if pages_with_classification == len(document.pages) and len(document.pages) > 0:
