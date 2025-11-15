@@ -24,6 +24,7 @@ import { useCompany } from '../../contexts/company';
 import { fetchCompanyIntelligence, generateAMLReport } from '../../services/analysisStack';
 import { lookupCompany, checkFilingHistory, lookupOfficers } from '../../services/dataCollection';
 import AppLayoutWrapper from '../app-layout-wrapper';
+import MarkdownViewer from '../document-viewer/MarkdownViewer';
 
 import '@awsui/global-styles/index.css';
 
@@ -95,9 +96,7 @@ const CompanyAnalysis = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [intelligence, setIntelligence] = useState(null);
   const [intelligenceLoading, setIntelligenceLoading] = useState(false);
-  const [intelligenceError, setIntelligenceError] = useState(null);
-  const [generatingReport, setGeneratingReport] = useState(false);
-  const [reportSuccess, setReportSuccess] = useState(null);
+  const [intelligenceError, setIntelligenceError] = useState(null);\n  const [generatingReport, setGeneratingReport] = useState(false);\n  const [reportSuccess, setReportSuccess] = useState(null);\n  const [reportMarkdown, setReportMarkdown] = useState(null);\n  const [isLoadingMarkdown, setIsLoadingMarkdown] = useState(false);\n\n  // Fetch markdown content when reportSuccess changes\n  useEffect(() => {\n    const fetchMarkdown = async () => {\n      if (!reportSuccess?.downloadUrl) {\n        setReportMarkdown(null);\n        return;\n      }\n\n      try {\n        setIsLoadingMarkdown(true);\n        console.log('Fetching report markdown from:', reportSuccess.downloadUrl);\n        \n        const response = await fetch(reportSuccess.downloadUrl);\n        if (!response.ok) {\n          throw new Error(`Failed to fetch report: ${response.statusText}`);\n        }\n        \n        const markdown = await response.text();\n        setReportMarkdown(markdown);\n        console.log('Report markdown loaded successfully');\n      } catch (err) {\n        console.error('Error fetching report markdown:', err);\n        setIntelligenceError(`Failed to load report content: ${err.message}`);\n      } finally {\n        setIsLoadingMarkdown(false);\n      }\n    };\n\n    fetchMarkdown();\n  }, [reportSuccess]);
 
   const loadCompanyData = useCallback(async () => {
     try {
@@ -245,6 +244,7 @@ const CompanyAnalysis = () => {
   const handleGenerateReport = async () => {
     setGeneratingReport(true);
     setReportSuccess(null);
+    setReportMarkdown(null);
     setIntelligenceError(null);
 
     try {
@@ -995,6 +995,26 @@ const CompanyAnalysis = () => {
               {generatingReport ? 'Generating Report...' : 'Generate Full AML Report'}
             </Button>
           </Box>
+
+          {/* Display the markdown report content inline */}
+          {isLoadingMarkdown && (
+            <Box textAlign="center" padding="l">
+              <Spinner size="large" />
+              <Box variant="p" padding={{ top: 's' }}>
+                Loading report content...
+              </Box>
+            </Box>
+          )}
+
+          {reportMarkdown && !isLoadingMarkdown && (
+            <Box margin={{ top: 'l' }}>
+              <MarkdownViewer
+                content={reportMarkdown}
+                documentName={`AML_Report_${companyNumber}`}
+                title={`AML Report - ${reportSuccess?.companyName || companyDisplayName}`}
+              />
+            </Box>
+          )}
         </>
       ) : (
         <Alert type="info" header="AML Intelligence Not Available">

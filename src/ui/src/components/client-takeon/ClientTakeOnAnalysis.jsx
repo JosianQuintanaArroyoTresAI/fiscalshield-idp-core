@@ -17,6 +17,7 @@ import {
 import { useCompany } from '../../contexts/company';
 import { COMPANY_SELECT_PATH } from '../../routes/constants';
 import { fetchCompanyIntelligence, generateAMLReport } from '../../services/analysisStack';
+import MarkdownViewer from '../document-viewer/MarkdownViewer';
 
 import '@awsui/global-styles/index.css';
 
@@ -41,6 +42,39 @@ const ClientTakeOnAnalysis = ({ embedded = false }) => {
   const [generatingReport, setGeneratingReport] = useState(false);
   const [reportSuccess, setReportSuccess] = useState(null);
   const [intelligence, setIntelligence] = useState(null);
+  const [reportMarkdown, setReportMarkdown] = useState(null);
+  const [isLoadingMarkdown, setIsLoadingMarkdown] = useState(false);
+
+  // Fetch markdown content when reportSuccess changes
+  useEffect(() => {
+    const fetchMarkdown = async () => {
+      if (!reportSuccess?.downloadUrl) {
+        setReportMarkdown(null);
+        return;
+      }
+
+      try {
+        setIsLoadingMarkdown(true);
+        console.log('Fetching report markdown from:', reportSuccess.downloadUrl);
+        
+        const response = await fetch(reportSuccess.downloadUrl);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch report: ${response.statusText}`);
+        }
+        
+        const markdown = await response.text();
+        setReportMarkdown(markdown);
+        console.log('Report markdown loaded successfully');
+      } catch (err) {
+        console.error('Error fetching report markdown:', err);
+        setError(`Failed to load report content: ${err.message}`);
+      } finally {
+        setIsLoadingMarkdown(false);
+      }
+    };
+
+    fetchMarkdown();
+  }, [reportSuccess]);
 
   useEffect(() => {
     // Redirect if no company selected
@@ -73,6 +107,7 @@ const ClientTakeOnAnalysis = ({ embedded = false }) => {
   const handleGenerateReport = async () => {
     setGeneratingReport(true);
     setReportSuccess(null);
+    setReportMarkdown(null);
     setError(null);
 
     try {
@@ -422,6 +457,26 @@ const ClientTakeOnAnalysis = ({ embedded = false }) => {
                     {generatingReport ? 'Generating Report...' : 'Generate Full AML Report'}
                   </Button>
                 </Box>
+
+                {/* Display the markdown report content inline */}
+                {isLoadingMarkdown && (
+                  <Box textAlign="center" padding="l">
+                    <Spinner size="large" />
+                    <Box variant="p" padding={{ top: 's' }}>
+                      Loading report content...
+                    </Box>
+                  </Box>
+                )}
+
+                {reportMarkdown && !isLoadingMarkdown && (
+                  <Box margin={{ top: 'l' }}>
+                    <MarkdownViewer
+                      content={reportMarkdown}
+                      documentName={`AML_Report_${activeCompany.companyNumber}`}
+                      title={`AML Report - ${reportSuccess?.companyName || activeCompany.companyName}`}
+                    />
+                  </Box>
+                )}
 
                 {/* Detailed Intelligence Insights - Expandable Sections */}
                 {intelligence.insights && (
