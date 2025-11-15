@@ -96,7 +96,42 @@ const CompanyAnalysis = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [intelligence, setIntelligence] = useState(null);
   const [intelligenceLoading, setIntelligenceLoading] = useState(false);
-  const [intelligenceError, setIntelligenceError] = useState(null);\n  const [generatingReport, setGeneratingReport] = useState(false);\n  const [reportSuccess, setReportSuccess] = useState(null);\n  const [reportMarkdown, setReportMarkdown] = useState(null);\n  const [isLoadingMarkdown, setIsLoadingMarkdown] = useState(false);\n\n  // Fetch markdown content when reportSuccess changes\n  useEffect(() => {\n    const fetchMarkdown = async () => {\n      if (!reportSuccess?.downloadUrl) {\n        setReportMarkdown(null);\n        return;\n      }\n\n      try {\n        setIsLoadingMarkdown(true);\n        console.log('Fetching report markdown from:', reportSuccess.downloadUrl);\n        \n        const response = await fetch(reportSuccess.downloadUrl);\n        if (!response.ok) {\n          throw new Error(`Failed to fetch report: ${response.statusText}`);\n        }\n        \n        const markdown = await response.text();\n        setReportMarkdown(markdown);\n        console.log('Report markdown loaded successfully');\n      } catch (err) {\n        console.error('Error fetching report markdown:', err);\n        setIntelligenceError(`Failed to load report content: ${err.message}`);\n      } finally {\n        setIsLoadingMarkdown(false);\n      }\n    };\n\n    fetchMarkdown();\n  }, [reportSuccess]);
+  const [intelligenceError, setIntelligenceError] = useState(null);
+  const [generatingReport, setGeneratingReport] = useState(false);
+  const [reportSuccess, setReportSuccess] = useState(null);
+  const [reportMarkdown, setReportMarkdown] = useState(null);
+  const [isLoadingMarkdown, setIsLoadingMarkdown] = useState(false);
+
+  // Fetch markdown content when reportSuccess changes
+  useEffect(() => {
+    const fetchMarkdown = async () => {
+      if (!reportSuccess?.downloadUrl) {
+        setReportMarkdown(null);
+        return;
+      }
+
+      try {
+        setIsLoadingMarkdown(true);
+        console.log('Fetching report markdown from:', reportSuccess.downloadUrl);
+
+        const response = await fetch(reportSuccess.downloadUrl);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch report: ${response.statusText}`);
+        }
+
+        const markdown = await response.text();
+        setReportMarkdown(markdown);
+        console.log('Report markdown loaded successfully');
+      } catch (err) {
+        console.error('Error fetching report markdown:', err);
+        setIntelligenceError(`Failed to load report content: ${err.message}`);
+      } finally {
+        setIsLoadingMarkdown(false);
+      }
+    };
+
+    fetchMarkdown();
+  }, [reportSuccess]);
 
   const loadCompanyData = useCallback(async () => {
     try {
