@@ -274,6 +274,46 @@ def handler(event, context):
                     logger.warning(
                         f"No list entries were found/deleted for {object_key}"
                     )
+                    # Fallback: Scan for list entries by ObjectKey if robust deletion failed
+                    logger.info(f"Attempting fallback: scanning for list entries by ObjectKey")
+                    try:
+                        scan_response = tracking_table.scan(
+                            FilterExpression="ObjectKey = :obj_key",
+                            ExpressionAttributeValues={":obj_key": object_key}
+                        )
+                        
+                        list_items = scan_response.get('Items', [])
+                        logger.info(f"Found {len(list_items)} list entries via scan for {object_key}")
+                        
+                        for item in list_items:
+                            try:
+                                tracking_table.delete_item(
+                                    Key={"PK": item["PK"], "SK": item["SK"]}
+                                )
+                                logger.info(f"Deleted list entry: PK={item['PK']}, SK={item['SK']}")
+                                deletion_success = True
+                            except Exception as del_err:
+                                logger.error(f"Error deleting scanned list entry: {str(del_err)}")
+                        
+                        # Handle pagination
+                        while 'LastEvaluatedKey' in scan_response:
+                            scan_response = tracking_table.scan(
+                                FilterExpression="ObjectKey = :obj_key",
+                                ExpressionAttributeValues={":obj_key": object_key},
+                                ExclusiveStartKey=scan_response['LastEvaluatedKey']
+                            )
+                            list_items = scan_response.get('Items', [])
+                            for item in list_items:
+                                try:
+                                    tracking_table.delete_item(
+                                        Key={"PK": item["PK"], "SK": item["SK"]}
+                                    )
+                                    logger.info(f"Deleted list entry (paginated): PK={item['PK']}, SK={item['SK']}")
+                                    deletion_success = True
+                                except Exception as del_err:
+                                    logger.error(f"Error deleting paginated list entry: {str(del_err)}")
+                    except Exception as scan_err:
+                        logger.error(f"Error in fallback scan deletion: {str(scan_err)}")
             except Exception as e:
                 logger.error(f"Error in robust list entry deletion: {str(e)}")
 
@@ -293,20 +333,9 @@ def handler(event, context):
             except Exception as e:
                 logger.error(f"Error deleting chunk tracking records: {str(e)}")
 
-            # Finally, delete the document record from tracking table
-            if document_metadata:
-                logger.info(
-                    f"Deleting document record with PK={doc_pk}, SK=none from tracking table"
-                )
-                try:
-                    tracking_table.delete_item(Key={"PK": doc_pk, "SK": "none"})
-                    logger.info(
-                        "Successfully deleted document record from tracking table"
-                    )
-                except Exception as e:
-                    logger.error(
-                        f"Error deleting document record from tracking table: {str(e)}"
-                    )
+            # Note: In this architecture, documents exist ONLY as list entries.
+            # There is no separate doc#{object_key} record to delete.
+            # The document_metadata query above is only used to get timestamp for list deletion.
 
             deleted_count += 1
             logger.info(f"Completed deletion process for document: {object_key}")
