@@ -15,7 +15,7 @@ import {
   Button,
 } from '@awsui/components-react';
 import { useCollection } from '@awsui/collection-hooks';
-import { Logger } from 'aws-amplify';
+import { Logger, API, graphqlOperation } from 'aws-amplify';
 
 import useDocumentsContext from '../../contexts/documents';
 import useSettingsContext from '../../contexts/settings';
@@ -34,6 +34,7 @@ import useLocalStorage from '../common/local-storage';
 import { exportToExcel, exportToCSV } from '../common/download-func';
 import DeleteDocumentModal from '../common/DeleteDocumentModal';
 import ReprocessDocumentModal from '../common/ReprocessDocumentModal';
+import { TRIGGER_TRANSACTION_ANALYSIS } from '../../graphql/mutations/triggerTransactionAnalysis';
 
 import {
   DocumentsPreferences,
@@ -521,13 +522,43 @@ const DocumentList = () => {
           actions={
             <SpaceBetween direction="horizontal" size="xs">
               <Button
-                onClick={() => {
+                onClick={async () => {
+                  if (!activeCompany?.companyNumber) {
+                    console.error('No active company selected');
+                    return;
+                  }
+                  
                   const pendingCount = bankStatements.filter(
                     (item) => (item.analysisStatus || 'PENDING') === 'PENDING',
                   ).length;
-                  console.log(`Analyse Transactions clicked - ${pendingCount} pending`);
-                  // TODO: Implement analysis trigger
-                  alert(`Analysis feature coming soon! ${pendingCount} transactions pending analysis.`);
+                  
+                  try {
+                    console.log(`Starting analysis for ${activeCompany.companyNumber} - ${pendingCount} pending transactions`);
+                    
+                    const response = await API.graphql(
+                      graphqlOperation(TRIGGER_TRANSACTION_ANALYSIS, {
+                        companyNumber: activeCompany.companyNumber,
+                      })
+                    );
+                    
+                    const result = response.data.triggerTransactionAnalysis;
+                    
+                    if (result.success) {
+                      console.log('Analysis started:', result.executionArn);
+                      alert(`✓ Analysis started successfully!\n${result.message}\n\nExecution: ${result.executionName}`);
+                      
+                      // Refresh bank statements to show IN_PROGRESS status
+                      setTimeout(() => {
+                        loadBankStatements();
+                      }, 2000);
+                    } else {
+                      console.error('Analysis failed:', result.message);
+                      alert(`✗ Analysis failed: ${result.message}`);
+                    }
+                  } catch (error) {
+                    console.error('Error triggering analysis:', error);
+                    alert(`✗ Error starting analysis: ${error.message || 'Unknown error'}`);
+                  }
                 }}
                 disabled={
                   bankStatements.length === 0 ||
