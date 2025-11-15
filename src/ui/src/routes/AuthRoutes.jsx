@@ -88,11 +88,7 @@ const AuthRoutes = ({ redirectParam }) => {
           </RequireCompany>
         </Route>
         <Route exact path={ADMIN_VALIDATION_METRICS_PATH}>
-          {isAdmin ? (
-            <ValidationMetricsDashboard />
-          ) : (
-            <Redirect to={DEFAULT_PATH} />
-          )}
+          {isAdmin ? <ValidationMetricsDashboard /> : <Redirect to={DEFAULT_PATH} />}
         </Route>
         <Route path={COMPANY_INTELLIGENCE_PATH}>
           <RequireCompany>

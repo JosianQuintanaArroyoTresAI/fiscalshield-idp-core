@@ -3,7 +3,7 @@
 
 /**
  * Validation Metrics Dashboard - Admin Only
- * 
+ *
  * Displays classification validation metrics including:
  * - User vs Model agreement rates
  * - Confidence calibration
@@ -53,11 +53,11 @@ const ValidationMetricsDashboard = () => {
       const response = await API.graphql(
         graphqlOperation(getValidationMetrics, {
           timeRangeDays: parseInt(timeRange.value),
-        })
+        }),
       );
 
       const metricsData = response.data.getValidationMetrics;
-      
+
       // Parse JSON fields
       metricsData.byDocumentType = JSON.parse(metricsData.byDocumentType);
       metricsData.byConfidenceBucket = JSON.parse(metricsData.byConfidenceBucket);
@@ -170,7 +170,8 @@ const ValidationMetricsDashboard = () => {
       >
         <SpaceBetween size="m">
           <Box variant="p" color="text-body-secondary">
-            Track model accuracy vs user selections to determine when to enable auto-classification. High agreement rates (95%+) indicate the model is ready to classify documents automatically.
+            Track model accuracy vs user selections to determine when to enable auto-classification. High agreement
+            rates (95%+) indicate the model is ready to classify documents automatically.
           </Box>
 
           {/* Summary Cards */}
@@ -271,9 +272,7 @@ const ValidationMetricsDashboard = () => {
             id: 'highConfidenceMismatches',
             header: 'High Confidence Mismatches',
             cell: (item) => (
-              <Badge color={item.highConfidenceMismatches > 0 ? 'red' : 'grey'}>
-                {item.highConfidenceMismatches}
-              </Badge>
+              <Badge color={item.highConfidenceMismatches > 0 ? 'red' : 'grey'}>{item.highConfidenceMismatches}</Badge>
             ),
             sortingField: 'highConfidenceMismatches',
           },
@@ -281,9 +280,7 @@ const ValidationMetricsDashboard = () => {
             id: 'accuracy',
             header: 'Accuracy',
             cell: (item) => (
-              <StatusIndicator type={getMatchRateVariant(parseFloat(item.accuracy))}>
-                {item.accuracy}%
-              </StatusIndicator>
+              <StatusIndicator type={getMatchRateVariant(parseFloat(item.accuracy))}>{item.accuracy}%</StatusIndicator>
             ),
             sortingField: 'accuracy',
           },
@@ -425,8 +422,8 @@ const ValidationMetricsDashboard = () => {
             <strong>{metrics.totalValidations.toLocaleString()}</strong> validations.
           </Box>
           <Box margin={{ top: 's' }}>
-            ✅ <strong>Recommendation:</strong> Enable auto-classification for invoices and bank statements.
-            The model has demonstrated sufficient accuracy to classify documents without user input.
+            ✅ <strong>Recommendation:</strong> Enable auto-classification for invoices and bank statements. The model
+            has demonstrated sufficient accuracy to classify documents without user input.
           </Box>
         </Alert>
       )}
@@ -438,7 +435,8 @@ const ValidationMetricsDashboard = () => {
             <strong>{metrics.totalValidations.toLocaleString()}</strong> validations.
           </Box>
           <Box margin={{ top: 's' }}>
-            ⚠️ <strong>Recommendation:</strong> Continue collecting validation data. Target: 95%+ accuracy over 1000+ documents before enabling auto-classification.
+            ⚠️ <strong>Recommendation:</strong> Continue collecting validation data. Target: 95%+ accuracy over 1000+
+            documents before enabling auto-classification.
           </Box>
         </Alert>
       )}
