@@ -22,6 +22,7 @@ import { Logger } from 'aws-amplify';
 import { checkAnalysisStackHealth, fetchCompanyIntelligence, generateAMLReport } from '../../services/analysisStack';
 import { COMPANY_SELECT_PATH } from '../../routes/constants';
 import AppLayoutWrapper from '../app-layout-wrapper';
+import MarkdownViewer from '../document-viewer/MarkdownViewer';
 
 import '@awsui/global-styles/index.css';
 
@@ -115,12 +116,46 @@ const CompanyIntelligence = () => {
   };
 
   const [reportData, setReportData] = useState(null);
+  const [reportMarkdown, setReportMarkdown] = useState(null);
+  const [isLoadingMarkdown, setIsLoadingMarkdown] = useState(false);
+
+  // Fetch markdown content when reportData changes
+  useEffect(() => {
+    const fetchMarkdown = async () => {
+      if (!reportData?.downloadUrl) {
+        setReportMarkdown(null);
+        return;
+      }
+
+      try {
+        setIsLoadingMarkdown(true);
+        logger.debug('Fetching report markdown from:', reportData.downloadUrl);
+
+        const response = await fetch(reportData.downloadUrl);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch report: ${response.statusText}`);
+        }
+
+        const markdown = await response.text();
+        setReportMarkdown(markdown);
+        logger.debug('Report markdown loaded successfully');
+      } catch (err) {
+        logger.error('Error fetching report markdown:', err);
+        setReportMessage(`Failed to load report content: ${err.message}`);
+      } finally {
+        setIsLoadingMarkdown(false);
+      }
+    };
+
+    fetchMarkdown();
+  }, [reportData]);
 
   const handleGenerateReport = async () => {
     try {
       setIsGeneratingReport(true);
       setReportMessage('');
       setReportData(null);
+      setReportMarkdown(null);
       const result = await generateAMLReport(companyNumber);
 
       if (result.success) {
@@ -595,6 +630,26 @@ const CompanyIntelligence = () => {
               >
                 {reportMessage}
               </Alert>
+            )}
+
+            {/* Display the markdown report content inline */}
+            {isLoadingMarkdown && (
+              <Box textAlign="center" padding="l">
+                <Spinner size="large" />
+                <Box variant="p" padding={{ top: 's' }}>
+                  Loading report content...
+                </Box>
+              </Box>
+            )}
+
+            {reportMarkdown && !isLoadingMarkdown && (
+              <Box margin={{ top: 'l' }}>
+                <MarkdownViewer
+                  content={reportMarkdown}
+                  documentName={`AML_Report_${companyNumber}`}
+                  title={`AML Report - ${reportData?.companyName || companyNumber}`}
+                />
+              </Box>
             )}
           </SpaceBetween>
         </Container>

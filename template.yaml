@@ -7406,6 +7406,24 @@ Resources:
       DataSourceName: !GetAtt GetValidationMetricsDataSource.Name
       TypeName: Query
       FieldName: getValidationMetrics
+      RequestMappingTemplate: |
+        {
+          "version": "2018-05-29",
+          "operation": "Invoke",
+          "payload": {
+            "arguments": $util.toJson($ctx.args),
+            "identity": $util.toJson($ctx.identity)
+          }
+        }
+      ResponseMappingTemplate: |
+        #if($ctx.error)
+          $util.error($ctx.error.message, $ctx.error.type)
+        #end
+        #if($ctx.result.statusCode == 200)
+          $util.toJson($ctx.result.metrics)
+        #else
+          $util.error($ctx.result.body, "LambdaError")
+        #end
 
   ##########################################################################
   # Delete User Company Lambda
