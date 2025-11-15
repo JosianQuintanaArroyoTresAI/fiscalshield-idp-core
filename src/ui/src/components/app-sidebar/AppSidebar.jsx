@@ -17,6 +17,7 @@ import {
   DOCUMENTS_ANALYTICS_PATH,
   CONFIGURATION_PATH,
   DISCOVERY_PATH,
+  ADMIN_VALIDATION_METRICS_PATH,
 } from '../../routes/constants';
 
 const logger = new Logger('AppSidebar');
@@ -102,6 +103,12 @@ const AppSidebar = () => {
         items: [
           {
             type: 'link',
+            text: 'Validation Metrics',
+            href: ADMIN_VALIDATION_METRICS_PATH,
+            info: '📊',
+          },
+          {
+            type: 'link',
             text: 'Query Knowledge Base',
             href: DOCUMENTS_KB_QUERY_PATH,
             info: '💬',
@@ -110,7 +117,7 @@ const AppSidebar = () => {
             type: 'link',
             text: 'Analytics & Agents',
             href: DOCUMENTS_ANALYTICS_PATH,
-            info: '📊',
+            info: '🤖',
           },
           {
             type: 'link',
