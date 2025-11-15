@@ -523,7 +523,7 @@ const DocumentList = () => {
               <Button
                 onClick={() => {
                   const pendingCount = bankStatements.filter(
-                    (item) => (item.analysisStatus || 'PENDING') === 'PENDING'
+                    (item) => (item.analysisStatus || 'PENDING') === 'PENDING',
                   ).length;
                   console.log(`Analyse Transactions clicked - ${pendingCount} pending`);
                   // TODO: Implement analysis trigger
