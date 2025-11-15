@@ -69,8 +69,8 @@ export const exportToCSV = async (data, nameFile) => {
     new Set(
       data.reduce((acc, row) => {
         return acc.concat(Object.keys(row));
-      }, [])
-    )
+      }, []),
+    ),
   );
 
   // Create CSV header
@@ -81,15 +81,15 @@ export const exportToCSV = async (data, nameFile) => {
     return keys
       .map((key) => {
         let value = row[key] ?? '';
-        
+
         // Convert value to string
         value = String(value);
-        
+
         // Escape quotes and wrap in quotes if contains comma, quote, or newline
         if (value.includes(',') || value.includes('"') || value.includes('\n')) {
           value = `"${value.replace(/"/g, '""')}"`;
         }
-        
+
         return value;
       })
       .join(',');

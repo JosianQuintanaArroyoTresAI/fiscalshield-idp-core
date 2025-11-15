@@ -245,7 +245,7 @@ const DocumentList = () => {
       Quality: item.qualityTier,
       Review: item.hitlRequired ? 'HITL Required' : 'Auto-approved',
     }));
-    
+
     const timestamp = new Date().toISOString().split('T')[0];
     const companyName = activeCompany?.companyName || 'Company';
     exportToCSV(csvData, `${companyName}_Invoices_${timestamp}`);
@@ -365,11 +365,7 @@ const DocumentList = () => {
               : 'Select a company to view invoices'
           }
           actions={
-            <Button
-              onClick={handleDownloadInvoices}
-              disabled={invoices.length === 0}
-              iconName="download"
-            >
+            <Button onClick={handleDownloadInvoices} disabled={invoices.length === 0} iconName="download">
               Download CSV
             </Button>
           }
@@ -405,7 +401,7 @@ const DocumentList = () => {
       Account: item.accountNumber,
       Confidence: item.confidence,
     }));
-    
+
     const timestamp = new Date().toISOString().split('T')[0];
     const companyName = activeCompany?.companyName || 'Company';
     exportToCSV(csvData, `${companyName}_BankStatements_${timestamp}`);
@@ -507,11 +503,7 @@ const DocumentList = () => {
               : 'Select a company to view bank statement transactions'
           }
           actions={
-            <Button
-              onClick={handleDownloadBankStatements}
-              disabled={bankStatements.length === 0}
-              iconName="download"
-            >
+            <Button onClick={handleDownloadBankStatements} disabled={bankStatements.length === 0} iconName="download">
               Download CSV
             </Button>
           }
