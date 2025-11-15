@@ -26,7 +26,7 @@ classes:
       - Header text: "Invoice", "Tax Invoice", "VAT Invoice", "Proforma Invoice", "Credit Note", "Receipt"
       - Supplier/vendor details at top (company name, address, VAT/tax registration number)
       - Line items table with columns: description, quantity, unit price, amount
-      - Financial calculations: subtotal, VAT/GST breakdown (often 20% in UK), total amount
+      - Financial calculations: subtotal, VAT/GST breakdown (often 20%% in UK), total amount
       - Invoice metadata: invoice number, invoice date, due date
       - Payment terms and bank details for wire transfer
       - May include purchase order number, customer reference
