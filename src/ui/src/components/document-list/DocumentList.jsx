@@ -527,26 +527,30 @@ const DocumentList = () => {
                     console.error('No active company selected');
                     return;
                   }
-                  
+
                   const pendingCount = bankStatements.filter(
                     (item) => (item.analysisStatus || 'PENDING') === 'PENDING',
                   ).length;
-                  
+
                   try {
-                    console.log(`Starting analysis for ${activeCompany.companyNumber} - ${pendingCount} pending transactions`);
-                    
+                    console.log(
+                      `Starting analysis for ${activeCompany.companyNumber} - ${pendingCount} pending transactions`,
+                    );
+
                     const response = await API.graphql(
                       graphqlOperation(TRIGGER_TRANSACTION_ANALYSIS, {
                         companyNumber: activeCompany.companyNumber,
-                      })
+                      }),
                     );
-                    
+
                     const result = response.data.triggerTransactionAnalysis;
-                    
+
                     if (result.success) {
                       console.log('Analysis started:', result.executionArn);
-                      alert(`✓ Analysis started successfully!\n${result.message}\n\nExecution: ${result.executionName}`);
-                      
+                      alert(
+                        `✓ Analysis started successfully!\n${result.message}\n\nExecution: ${result.executionName}`,
+                      );
+
                       // Refresh bank statements to show IN_PROGRESS status
                       setTimeout(() => {
                         loadBankStatements();
