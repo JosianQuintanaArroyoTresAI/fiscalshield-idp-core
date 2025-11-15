@@ -159,59 +159,75 @@ jobs:
         echo "  Configuration Bucket: $CONFIG_BUCKET"
         echo "  Configuration Table: $CONFIG_TABLE"
         
-        # Upload config to S3
-        CONFIG_FILE="config_library/pattern-2/lending-package-sample/config.yaml"
-        S3_KEY="pattern-2/lending-package-sample/config.yaml"
+        # Upload ALL pattern-2 configs to S3 (preserving directory structure)
+        echo "📤 Uploading all pattern-2 configurations to S3..."
+        aws s3 sync config_library/pattern-2/ "s3://$CONFIG_BUCKET/config_library/pattern-2/" \
+          --region eu-central-1 \
+          --exclude "*" \
+          --include "*/config.yaml" \
+          --delete
+        
+        if [ $? -ne 0 ]; then
+          echo "❌ Failed to upload configurations to S3"
+          exit 1
+        fi
+        
+        echo "  ✅ All configurations uploaded to S3"
+        
+        # Load DEFAULT configuration to DynamoDB (fiscalshield-production)
+        CONFIG_FILE="config_library/pattern-2/fiscalshield-production/config.yaml"
         
         if [ ! -f "$CONFIG_FILE" ]; then
           echo "❌ Config file not found: $CONFIG_FILE"
           exit 1
         fi
         
-        echo "Uploading configuration to S3..."
-        aws s3 cp "$CONFIG_FILE" "s3://$CONFIG_BUCKET/$S3_KEY" --region eu-central-1
-        
-        if [ $? -ne 0 ]; then
-          echo "❌ Failed to upload configuration to S3"
-          exit 1
-        fi
-        
-        echo "  ✅ Uploaded to s3://$CONFIG_BUCKET/$S3_KEY"
-        
-        # Load configuration to DynamoDB using Python (correct schema)
-        echo "Loading configuration to DynamoDB..."
+        echo "📥 Loading fiscalshield-production as Default configuration..."
         python3 << EOF
         import boto3
         import yaml
         import sys
+        from decimal import Decimal
+        
+        def convert_floats_to_decimal(obj):
+            """Recursively convert float values to Decimal for DynamoDB compatibility"""
+            if isinstance(obj, float):
+                return Decimal(str(obj))
+            elif isinstance(obj, dict):
+                return {k: convert_floats_to_decimal(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_floats_to_decimal(item) for item in obj]
+            return obj
         
         try:
             # Load config from file
-            with open('config_library/pattern-2/lending-package-sample/config.yaml', 'r') as f:
+            with open('$CONFIG_FILE', 'r') as f:
                 config = yaml.safe_load(f)
+            
+            # Convert floats to Decimals for DynamoDB
+            config = convert_floats_to_decimal(config)
             
             # Write to DynamoDB with correct schema (Configuration as partition key)
             dynamodb = boto3.resource('dynamodb', region_name='eu-central-1')
             table = dynamodb.Table('$CONFIG_TABLE')
             
+            # Store as Default configuration (used by Lambdas)
             table.put_item(Item={
-                'Configuration': 'pattern-2/lending-package-sample',
-                'classification': config.get('classification', {}),
-                'extraction': config.get('extraction', {}),
-                'ocr': config.get('ocr', {}),
-                'summarization': config.get('summarization', {}),
-                'assessment': config.get('assessment', {})
+                'Configuration': 'Default',
+                **config  # Spread all config keys
             })
             
             trust_hint = config.get('classification', {}).get('trust_user_hint', False)
             validate_hint = config.get('classification', {}).get('validate_hint_on_mismatch', False)
             
-            print(f"  ✅ Configuration loaded to DynamoDB successfully!")
+            print(f"  ✅ fiscalshield-production loaded as Default configuration!")
             print(f"  ✅ trust_user_hint: {trust_hint}")
             print(f"  ✅ validate_hint_on_mismatch: {validate_hint}")
             
         except Exception as e:
             print(f"❌ Failed to load configuration: {e}")
+            import traceback
+            traceback.print_exc()
             sys.exit(1)
         EOF
         

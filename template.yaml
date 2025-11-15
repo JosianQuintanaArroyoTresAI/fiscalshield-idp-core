@@ -916,6 +916,7 @@ Resources:
         WorkingBucket: !Ref WorkingBucket
         TrackingTable: !Ref TrackingTable
         ExtractionResultsTable: !Ref ExtractionResultsTable
+        ValidationRequestsTable: !Ref ValidationRequestsTable
         CustomerManagedEncryptionKeyArn: !GetAtt CustomerManagedEncryptionKey.Arn
         LogRetentionDays: !Ref LogRetentionDays
         LogLevel: !Ref LogLevel
@@ -2346,6 +2347,79 @@ Resources:
           Value: ExtractionResultsStorage
         - Key: DataClassification
           Value: Confidential
+
+  ##########################################################################
+  # Validation Requests table for tracking classification validation
+  ##########################################################################
+
+  ValidationRequestsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        # Primary Key
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        # GSI1 - Query by document ID
+        - AttributeName: DocumentId
+          AttributeType: S
+        - AttributeName: CreatedAt
+          AttributeType: N
+        # GSI2 - Query by status (for pending validations)
+        - AttributeName: ValidationStatus
+          AttributeType: S
+        # GSI3 - Query by user (for user-specific metrics)
+        - AttributeName: UserId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: TTL
+        Enabled: true
+      GlobalSecondaryIndexes:
+        # GSI1: Query validations by document
+        - IndexName: GSI1-DocumentValidations
+          KeySchema:
+            - AttributeName: DocumentId
+              KeyType: HASH
+            - AttributeName: CreatedAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        # GSI2: Query by status (find pending validations)
+        - IndexName: GSI2-StatusDate
+          KeySchema:
+            - AttributeName: ValidationStatus
+              KeyType: HASH
+            - AttributeName: CreatedAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        # GSI3: Query by user for analytics
+        - IndexName: GSI3-UserValidations
+          KeySchema:
+            - AttributeName: UserId
+              KeyType: HASH
+            - AttributeName: CreatedAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+        KMSMasterKeyId: !Ref CustomerManagedEncryptionKey
+      Tags:
+        - Key: Purpose
+          Value: ClassificationValidation
+        - Key: DataClassification
+          Value: Operational
 
   ##########################################################################
   # Discovery SQS queue for processing discovery jobs
@@ -7253,6 +7327,85 @@ Resources:
       DataSourceName: !GetAtt ListExtractionResultsDataSource.Name
       TypeName: Query
       FieldName: listExtractionResults
+
+  ##########################################################################
+  # Get Validation Metrics Lambda (Admin Only)
+  ##########################################################################
+
+  GetValidationMetricsFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access as it only interacts with AWS services via APIs"
+          - id: W92
+            reason: "Function does not require reserved concurrency as it scales based on demand"
+    # checkov:skip=CKV_AWS_116: "DLQ not required for AppSync resolver function"
+    # checkov:skip=CKV_AWS_117: "Function does not require VPC access as it only interacts with AWS services via APIs"
+    # checkov:skip=CKV_AWS_115: "Function does not require reserved concurrency as it scales based on demand"
+    # checkov:skip=CKV_AWS_173: "Environment variables do not contain sensitive data - only configuration values"
+    Properties:
+      PermissionsBoundary:
+        !If [
+          HasPermissionsBoundary,
+          !Ref PermissionsBoundaryArn,
+          !Ref AWS::NoValue,
+        ]
+      Handler: lambda_function.lambda_handler
+      Runtime: python3.12
+      CodeUri: ./src/lambda/get_validation_metrics
+      Description: Lambda function to aggregate classification validation metrics (Admin only)
+      MemorySize: 512
+      Timeout: 60
+      Environment:
+        Variables:
+          LOG_LEVEL: !Ref LogLevel
+          VALIDATION_REQUESTS_TABLE: !Ref ValidationRequestsTable
+      LoggingConfig:
+        LogGroup: !Ref GetValidationMetricsFunctionLogGroup
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref ValidationRequestsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Scan
+                - dynamodb:Query
+              Resource:
+                - !GetAtt ValidationRequestsTable.Arn
+                - !Sub "${ValidationRequestsTable.Arn}/index/*"
+            - Effect: Allow
+              Action:
+                - kms:Decrypt
+                - kms:DescribeKey
+              Resource: !GetAtt CustomerManagedEncryptionKey.Arn
+
+  GetValidationMetricsFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !GetAtt CustomerManagedEncryptionKey.Arn
+      RetentionInDays: !Ref LogRetentionDays
+
+  GetValidationMetricsDataSource:
+    Type: AWS::AppSync::DataSource
+    Properties:
+      ApiId: !GetAtt GraphQLApi.ApiId
+      Name: GetValidationMetricsDataSource
+      Description: Lambda function for getting validation metrics (Admin only)
+      Type: AWS_LAMBDA
+      ServiceRoleArn: !GetAtt AppSyncServiceRole.Arn
+      LambdaConfig:
+        LambdaFunctionArn: !GetAtt GetValidationMetricsFunction.Arn
+
+  GetValidationMetricsResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn: GraphQLSchema
+    Properties:
+      ApiId: !GetAtt GraphQLApi.ApiId
+      DataSourceName: !GetAtt GetValidationMetricsDataSource.Name
+      TypeName: Query
+      FieldName: getValidationMetrics
 
   ##########################################################################
   # Delete User Company Lambda

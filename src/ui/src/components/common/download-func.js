@@ -58,3 +58,52 @@ export const exportToTextFile = async (text, nameFile) => {
   link.click();
   URL.revokeObjectURL(url);
 };
+
+export const exportToCSV = async (data, nameFile) => {
+  if (data.length === 0) {
+    return;
+  }
+
+  // Get all unique keys from all objects
+  const keys = Array.from(
+    new Set(
+      data.reduce((acc, row) => {
+        return acc.concat(Object.keys(row));
+      }, []),
+    ),
+  );
+
+  // Create CSV header
+  const csvHeader = keys.join(',');
+
+  // Create CSV rows
+  const csvRows = data.map((row) => {
+    return keys
+      .map((key) => {
+        let value = row[key] ?? '';
+
+        // Convert value to string
+        value = String(value);
+
+        // Escape quotes and wrap in quotes if contains comma, quote, or newline
+        if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+          value = `"${value.replace(/"/g, '""')}"`;
+        }
+
+        return value;
+      })
+      .join(',');
+  });
+
+  // Combine header and rows
+  const csv = [csvHeader, ...csvRows].join('\n');
+
+  // Create and download file
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${nameFile}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+};

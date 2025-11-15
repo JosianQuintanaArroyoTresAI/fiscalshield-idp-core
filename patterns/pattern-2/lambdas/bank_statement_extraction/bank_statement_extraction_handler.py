@@ -383,6 +383,13 @@ def get_default_bank_statement_prompt() -> str:
     
     return """Extract bank statement transactions from this OCR text. The text may have formatting issues from OCR processing.
 
+CRITICAL DOCUMENT TYPE CHECK:
+⚠️ BEFORE extracting anything, verify this is actually a BANK STATEMENT.
+- If the document is an INVOICE, RECEIPT, or OTHER document type: Return EMPTY XML: <bank_statement><transactions></transactions></bank_statement>
+- DO NOT extract transactions from invoices, receipts, or other non-bank-statement documents
+- DO NOT use the example transactions below - they are EXAMPLES ONLY, not real data
+- Only extract transactions if you see clear evidence of bank statement formatting (account numbers, sort codes, transaction tables)
+
 CRITICAL: This PDF may contain MULTIPLE bank statements.
 
 PAGE NUMBER EXTRACTION:
@@ -433,6 +440,7 @@ Confidence Guidelines:
 - 0.40-0.59: Significant uncertainty
 - 0.0-0.39: Field missing or very unclear
 
+⚠️ EXAMPLE OUTPUT FORMAT (DO NOT COPY THESE VALUES - EXTRACT FROM THE ACTUAL TEXT BELOW):
 Return in XML format:
 <bank_statement>
 <account_info>
@@ -504,6 +512,12 @@ Return in XML format:
 </transaction>
 </transactions>
 </bank_statement>
+⚠️ END OF EXAMPLES - DO NOT USE THESE VALUES IN YOUR OUTPUT ⚠️
+
+REMEMBER:
+- If the text below is NOT a bank statement (e.g., it's an invoice, receipt, etc.), return: <bank_statement><transactions></transactions></bank_statement>
+- DO NOT hallucinate or copy example transactions
+- Only extract what you actually see in the text below
 
 TEXT TO PROCESS:
 {section_text}"""

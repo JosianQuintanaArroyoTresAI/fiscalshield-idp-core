@@ -31,7 +31,7 @@ import {
 } from '../../services/extractionService';
 import { paginationLabels } from '../common/labels';
 import useLocalStorage from '../common/local-storage';
-import { exportToExcel } from '../common/download-func';
+import { exportToExcel, exportToCSV } from '../common/download-func';
 import DeleteDocumentModal from '../common/DeleteDocumentModal';
 import ReprocessDocumentModal from '../common/ReprocessDocumentModal';
 
@@ -232,6 +232,25 @@ const DocumentList = () => {
     actions.setSelectedItems([]);
   };
 
+  // Download invoices to CSV
+  const handleDownloadInvoices = () => {
+    const csvData = invoices.map((item) => ({
+      Type: item.invoiceType === 'SUPPLIER_INVOICE' ? 'Invoice' : 'Expense',
+      'Invoice Number': item.invoiceNumber,
+      Vendor: item.vendor,
+      'Invoice Date': item.date,
+      Amount: item.amount,
+      Status: item.status,
+      Confidence: item.confidence,
+      Quality: item.qualityTier,
+      Review: item.hitlRequired ? 'HITL Required' : 'Auto-approved',
+    }));
+
+    const timestamp = new Date().toISOString().split('T')[0];
+    const companyName = activeCompany?.companyName || 'Company';
+    exportToCSV(csvData, `${companyName}_Invoices_${timestamp}`);
+  };
+
   // Invoices Table Component
   const renderInvoicesTable = () => (
     <Table
@@ -345,6 +364,11 @@ const DocumentList = () => {
               ? `Extracted invoices for ${activeCompany?.companyName || 'selected company'}`
               : 'Select a company to view invoices'
           }
+          actions={
+            <Button onClick={handleDownloadInvoices} disabled={invoices.length === 0} iconName="download">
+              Download CSV
+            </Button>
+          }
         >
           Invoices
         </Header>
@@ -364,6 +388,24 @@ const DocumentList = () => {
       pagination={<Pagination currentPageIndex={1} pagesCount={1} disabled={!invoicesNextToken} />}
     />
   );
+
+  // Download bank statements to CSV
+  const handleDownloadBankStatements = () => {
+    const csvData = bankStatements.map((item) => ({
+      Date: item.transactionDate,
+      Reference: item.reference,
+      Description: item.transactionDescription,
+      Amount: item.formattedAmount,
+      Balance: item.accountBalance,
+      Bank: item.bankName,
+      Account: item.accountNumber,
+      Confidence: item.confidence,
+    }));
+
+    const timestamp = new Date().toISOString().split('T')[0];
+    const companyName = activeCompany?.companyName || 'Company';
+    exportToCSV(csvData, `${companyName}_BankStatements_${timestamp}`);
+  };
 
   // Bank Statements Table Component (Transaction-level view)
   const renderBankStatementsTable = () => (
@@ -459,6 +501,11 @@ const DocumentList = () => {
             isCompanySelected
               ? `Bank statement transactions for ${activeCompany?.companyName || 'selected company'}`
               : 'Select a company to view bank statement transactions'
+          }
+          actions={
+            <Button onClick={handleDownloadBankStatements} disabled={bankStatements.length === 0} iconName="download">
+              Download CSV
+            </Button>
           }
         >
           Bank Statement Transactions

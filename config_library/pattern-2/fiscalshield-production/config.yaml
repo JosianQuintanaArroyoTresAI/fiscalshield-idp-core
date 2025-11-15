@@ -1,0 +1,443 @@
+# FiscalShield IDP Production Configuration
+# Optimized for invoice and bank statement classification with high confidence
+notes: FiscalShield production configuration with improved classification prompts and validation support
+
+# OCR Configuration
+ocr:
+  backend: "textract"
+  model_id: "eu.anthropic.claude-3-7-sonnet-20250219-v1:0"
+  system_prompt: "You are an expert OCR system. Extract all text from the provided image accurately, preserving layout where possible."
+  task_prompt: "Extract all text from this document image. Preserve the layout, including paragraphs, tables, and formatting."
+  features:
+    - name: LAYOUT
+    - name: TABLES
+    - name: SIGNATURES
+  image:
+    target_width: ""
+    target_height: ""
+
+# Document Classes
+classes:
+  - name: invoice
+    description: >-
+      A commercial invoice or expense claim document issued by a supplier, vendor, or individual to request payment for goods or services purchased.
+      
+      KEY IDENTIFIERS:
+      - Header text: "Invoice", "Tax Invoice", "VAT Invoice", "Proforma Invoice", "Credit Note", "Receipt"
+      - Supplier/vendor details at top (company name, address, VAT/tax registration number)
+      - Line items table with columns: description, quantity, unit price, amount
+      - Financial calculations: subtotal, VAT/GST breakdown (often 20%% in UK), total amount
+      - Invoice metadata: invoice number, invoice date, due date
+      - Payment terms and bank details for wire transfer
+      - May include purchase order number, customer reference
+      
+      DISTINGUISHING FEATURES:
+      - Itemized charges showing WHAT was purchased (products/services)
+      - Amounts OWED (not paid) - this is a request for payment
+      - Business-to-business OR individual-to-business format
+      - VAT invoice number format (e.g., "INV-2024-001", "#12345")
+      - May show "PAID" stamp or payment status if settled
+      
+      INCLUDES SUBTYPES:
+      - Supplier invoices (formal business invoices with VAT registration)
+      - Expense claims/receipts (individual purchases, simpler format, from shops/restaurants)
+      - Credit notes (negative invoices for refunds/adjustments)
+    attributes:
+      - name: InvoiceNumber
+        description: The unique invoice identifier (e.g., INV-2024-001, #12345)
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: InvoiceDate
+        description: The date the invoice was issued
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: SupplierName
+        description: The name of the company or individual issuing the invoice
+        evaluation_method: FUZZY
+        attributeType: simple
+      - name: TotalAmount
+        description: The total amount due including all taxes
+        evaluation_method: NUMERIC_EXACT
+        attributeType: simple
+      - name: VATAmount
+        description: The VAT/tax amount charged
+        evaluation_method: NUMERIC_EXACT
+        attributeType: simple
+      - name: SubtotalAmount
+        description: The subtotal before tax
+        evaluation_method: NUMERIC_EXACT
+        attributeType: simple
+      - name: LineItems
+        description: List of products or services being invoiced with quantities and prices
+        attributeType: list
+        listItemTemplate:
+          itemAttributes:
+            - name: Description
+              description: Description of the product or service
+              dataType: string
+            - name: Quantity
+              description: Number of units
+              dataType: number
+            - name: UnitPrice
+              description: Price per unit
+              dataType: number
+            - name: Amount
+              description: Total line amount (quantity × unit price)
+              dataType: number
+
+  - name: bank-statement
+    description: >-
+      A financial statement issued by a bank or financial institution documenting account activity and transactions over a specific time period.
+      
+      KEY IDENTIFIERS:
+      - Bank logo and institution name (e.g., Barclays, HSBC, Lloyds, NatWest, Metro Bank)
+      - Account holder name and address
+      - Account number (often partially masked: ****1234)
+      - Sort code (UK: XX-XX-XX format)
+      - Statement period with clear start and end dates
+      - Opening balance and closing balance
+      - Chronological transaction list with dates
+      
+      TRANSACTION TABLE COLUMNS:
+      - Date (transaction date)
+      - Description (merchant name, payment reference, transaction type)
+      - Money OUT (debits, payments, withdrawals)
+      - Money IN (credits, deposits, transfers received)
+      - Running balance (account balance after each transaction)
+      
+      DISTINGUISHING FEATURES:
+      - Shows money flowing IN and OUT of an account (not requesting payment)
+      - Transaction history format (NOT itemized sales)
+      - Statement period dates (e.g., "01 Oct 2024 - 31 Oct 2024")
+      - Transaction types: DD (Direct Debit), SO (Standing Order), POS (Point of Sale), BACS, CHAPS, ATM
+      - Interest charges, bank fees, overdraft information may be included
+      - NOT an invoice - this is account activity documentation
+      
+      TRANSACTION TYPES COMMONLY SEEN:
+      - Direct Debits (regular bills: utilities, subscriptions)
+      - Standing Orders (regular transfers)
+      - Card payments (POS, contactless, chip & PIN)
+      - Bank transfers (BACS, CHAPS, Faster Payments)
+      - ATM withdrawals
+      - Salary deposits
+      - Interest earned/charged
+    attributes:
+      - name: BankName
+        description: The name of the financial institution
+        evaluation_method: FUZZY
+        attributeType: simple
+      - name: AccountHolderName
+        description: The name of the account owner
+        evaluation_method: FUZZY
+        attributeType: simple
+      - name: AccountNumber
+        description: The account number (may be partially masked)
+        evaluation_method: FUZZY
+        attributeType: simple
+      - name: SortCode
+        description: "The bank sort code (UK format: XX-XX-XX)"
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: StatementPeriodStart
+        description: The start date of the statement period
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: StatementPeriodEnd
+        description: The end date of the statement period
+        evaluation_method: EXACT
+        attributeType: simple
+      - name: OpeningBalance
+        description: The account balance at the start of the statement period
+        evaluation_method: NUMERIC_EXACT
+        attributeType: simple
+      - name: ClosingBalance
+        description: The account balance at the end of the statement period
+        evaluation_method: NUMERIC_EXACT
+        attributeType: simple
+      - name: Transactions
+        description: List of all transactions during the statement period with date, description, and amounts
+        attributeType: list
+        listItemTemplate:
+          itemAttributes:
+            - name: Date
+              description: The transaction date
+              dataType: string
+            - name: Description
+              description: The transaction description or merchant name
+              dataType: string
+            - name: MoneyOut
+              description: Amount debited from account (if applicable)
+              dataType: number
+            - name: MoneyIn
+              description: Amount credited to account (if applicable)
+              dataType: number
+            - name: Balance
+              description: Running account balance after this transaction
+              dataType: number
+
+# Classification Configuration
+classification:
+  classificationMethod: multimodalPageLevelClassification
+  maxPagesForClassification: "ALL"
+  
+  # User hint behavior - SET TO FALSE to enable validation logging
+  trust_user_hint: false  # Run LLM classification even with user hints to collect validation metrics
+  validate_hint_on_mismatch: true
+  
+  image:
+    target_height: ""
+    target_width: ""
+  
+  model: arn:aws:bedrock:eu-central-1:864899848062:inference-profile/eu.anthropic.claude-3-haiku-20240307-v1:0
+  fallback_models:
+    - arn:aws:bedrock:eu-central-1:864899848062:inference-profile/eu.anthropic.claude-3-7-sonnet-20250219-v1:0
+    - arn:aws:bedrock:eu-central-1:864899848062:inference-profile/eu.anthropic.claude-3-5-sonnet-20240620-v1:0
+  
+  temperature: "0.0"
+  top_p: "0.1"
+  max_tokens: "4096"
+  top_k: "5"
+  
+  system_prompt: >-
+    You are a multimodal document classification expert specializing in UK financial and commercial documents.
+    Your task is to classify documents into predefined categories with HIGH CONFIDENCE based on visual layout, textual content, and distinctive features.
+    You MUST provide a confidence score from 0.0 to 1.0 reflecting the strength of classification evidence.
+    Your output must be valid JSON according to the requested format.
+
+    <variables>
+    <document-ocr-data>: OCR-extracted text content providing textual information for classification
+    <document-image>: Visual representation showing layout, formatting, logos, and structure
+    <document-types>: Valid document types you must classify into - ONLY use types from this list
+    </variables>
+  
+  task_prompt: >-
+    <task-description>
+    Analyze the provided document using both visual layout and textual content to determine its document type with high confidence.
+    Decide if this page starts a new document ("start") or continues the previous document ("continue").
+    </task-description>
+
+    <document-types>
+    {CLASS_NAMES_AND_DESCRIPTIONS}
+    </document-types>
+
+    <classification-examples>
+    Example 1 - Invoice Classification:
+    Visual evidence: Header text "TAX INVOICE", company logo at top, table with columns (Description, Qty, Unit Price, Amount)
+    Textual evidence: "Invoice Number: INV-2024-12345", "Invoice Date: 15/11/2024", itemized list showing "Office Chairs x 5 @ £120.00", financial calculation showing "Subtotal: £600.00", "VAT 20%%: £120.00", "Total Due: £720.00", "Payment Terms: Net 30 days"
+    Classification: "invoice"
+    Confidence: 0.98
+    Reasoning: Clear invoice structure with all distinctive features - invoice number, supplier details, itemized charges, VAT breakdown, payment terms. High confidence due to multiple matching identifiers.
+    Document Boundary: start
+
+    Example 2 - Bank Statement Classification:
+    Visual evidence: Bank logo (Barclays), professional letterhead, transaction table layout with date/description/amount columns
+    Textual evidence: "Barclays Bank PLC", "Statement Period: 01/10/2024 - 31/10/2024", "Account: ****1234", "Sort Code: 20-00-00", "Opening Balance: £5,420.50", transaction list including "15 Oct DD - Electric Company £85.00", "18 Oct POS - Tesco Superstore £42.15", "25 Oct BACS Credit - Salary £2,800.00", "Closing Balance: £8,093.35"
+    Classification: "bank-statement"
+    Confidence: 0.99
+    Reasoning: Unmistakable bank statement format - bank header, statement period, account details, chronological transactions with debits/credits, running balance. All key identifiers present.
+    Document Boundary: start
+
+    Example 3 - Expense Receipt (Invoice subtype):
+    Visual evidence: Simple receipt format from retail store, POS terminal print style
+    Textual evidence: "Tesco Express", "Receipt #: 1234", "Date: 15/11/2024", list of grocery items with prices, "Total: £35.42", "Card Payment"
+    Classification: "invoice"
+    Confidence: 0.85
+    Reasoning: Classifying as "invoice" because it shows itemized purchases with amounts. This is a receipt/expense claim document (invoice subtype). Confidence slightly lower than formal B2B invoices due to simpler format, but still clearly requesting/documenting payment for goods.
+    Document Boundary: start
+    </classification-examples>
+
+    <classification-instructions>
+    Follow these steps to achieve HIGH CONFIDENCE classification:
+    
+    1. VISUAL ANALYSIS:
+       - Examine logos, headers, letterheads (bank logos vs company logos)
+       - Analyze document structure (transaction table vs itemized invoice)
+       - Check for distinctive formatting (statement period vs invoice number)
+    
+    2. TEXTUAL ANALYSIS:
+       - Identify key terminology ("Invoice", "Statement", "Account", "VAT", "Sort Code")
+       - Look for distinctive metadata (invoice number format vs account number format)
+       - Analyze transaction/line item patterns (money IN/OUT vs items purchased)
+    
+    3. FEATURE MATCHING:
+       - Count how many KEY IDENTIFIERS match each document type
+       - More matches = higher confidence
+       - Look for DISTINGUISHING FEATURES that definitively rule in/out types
+    
+    4. CONFIDENCE ASSESSMENT:
+       HIGH (0.90-1.0): Multiple distinctive features clearly match ONE type, no ambiguity
+       MEDIUM (0.70-0.89): Most features match, minor ambiguity or missing secondary features
+       LOW (0.0-0.69): Limited features, conflicting signals, or poor image quality
+    
+    5. DOCUMENT BOUNDARY:
+       - "start": First page of new document (has header, logo, document number)
+       - "continue": Continuation page (lacks header, shows "Page 2 of 3", continues from previous)
+    
+    6. CRITICAL: Only use document types explicitly listed in <document-types> section above
+    </classification-instructions>
+
+    <disambiguation-rules>
+    Invoice vs Bank Statement confusion points:
+    - Invoice: Shows WHAT was purchased (line items) and money OWED
+    - Bank Statement: Shows WHERE money went/came from (transactions) and account ACTIVITY
+    - Invoice: Has supplier details, invoice number, payment terms
+    - Bank Statement: Has bank logo, account number, statement period
+    - Invoice: Requests payment or documents a purchase
+    - Bank Statement: Documents account history over time
+    
+    If uncertain, check:
+    - Does it have an invoice number? → Likely invoice
+    - Does it have an account number and statement period? → Likely bank-statement
+    - Does it show "Total Due" or "Amount Owed"? → Likely invoice
+    - Does it show "Opening Balance" and "Closing Balance"? → Likely bank-statement
+    </disambiguation-rules>
+
+    <output-format>
+    {
+      "classification_reason": "Detailed reasoning with specific visual and textual evidence that led to this classification. List the KEY IDENTIFIERS found and explain why confidence is high/medium/low.",
+      "class": "exact_document_type_from_list",
+      "confidence": 0.95,
+      "document_boundary": "start or continue"
+    }
+    </output-format>
+
+    <<CACHEPOINT>>
+
+    <document-ocr-data>
+    {DOCUMENT_TEXT}
+    </document-ocr-data>
+
+    <document-image>
+    {DOCUMENT_IMAGE}
+    </document-image>
+
+    <final-instructions>
+    Analyze the document above by:
+    1. Applying the <classification-instructions> to examine visual and textual features
+    2. Using <classification-examples> as reference patterns
+    3. Applying <disambiguation-rules> if choosing between invoice and bank-statement
+    4. Selecting ONLY from document types in <document-types>
+    5. Providing confidence score based on strength of evidence
+    6. Outputting in exact JSON format specified in <output-format>
+    
+    REMEMBER: The class field must be EXACTLY "invoice" or "bank-statement" (lowercase with hyphen).
+    </final-instructions>
+
+# Extraction Configuration
+extraction:
+  agentic:
+    enabled: false
+    review_agent: false
+  image:
+    target_width: ""
+    target_height: ""
+  top_p: "0.1"
+  max_tokens: "10000"
+  top_k: "5"
+  task_prompt: >-
+    <background>
+    You are an expert in document analysis and information extraction specializing in UK financial documents.
+    You can understand and extract key information from documents classified as type {DOCUMENT_CLASS}.
+    </background>
+
+    <task>
+    Your task is to extract structured data from the unstructured text and convert it into well-organized JSON format.
+    Use the attributes list below to identify what information to extract.
+    </task>
+
+    <extraction-guidelines>
+    Guidelines:
+        1. Ensure data is accurately represented and properly formatted within JSON structure
+        2. Include double quotes around all keys and values
+        3. Do not make up data - only extract information explicitly found in the document
+        4. Do not use /n for new lines, use a space instead
+        5. If a field is not found or if unsure, return null
+        6. All dates should be in DD/MM/YYYY format (UK standard)
+        7. All currency amounts in GBP (£)
+        8. Do not perform calculations or summations unless totals are explicitly given
+        9. For checkboxes and selection fields, ONLY include options with clear visual selection marks
+        10. Think step by step first and then answer
+    </extraction-guidelines>
+
+    If the attributes section below contains attribute names and descriptions, output only those attributes using the provided descriptions as guidance.
+
+    <attributes>
+    {ATTRIBUTE_NAMES_AND_DESCRIPTIONS}
+    </attributes>
+
+    <<CACHEPOINT>>
+
+    <document-text>
+    {DOCUMENT_TEXT}
+    </document-text>
+
+    <document_image>
+    {DOCUMENT_IMAGE}
+    </document_image>
+
+    Extract the requested attributes from the document above and return valid JSON.
+
+# Summarization Configuration
+summarization:
+  model: arn:aws:bedrock:eu-central-1:864899848062:inference-profile/eu.anthropic.claude-3-7-sonnet-20250219-v1:0
+  temperature: "0.0"
+  top_p: "0.1"
+  max_tokens: "4096"
+
+# Assessment Configuration  
+assessment:
+  model: eu.amazon.nova-lite-v1:0
+  temperature: "0.0"
+  top_p: "0.1"
+  max_tokens: "4096"
+
+# Metering Configuration
+metering:
+  - name: textract/detect_document_text
+    dimensions:
+      - name: pages
+  - name: textract/analyze_document-Layout
+    dimensions:
+      - name: pages
+  - name: textract/analyze_document-Signatures
+    dimensions:
+      - name: pages
+  - name: textract/analyze_document-Forms
+    dimensions:
+      - name: pages
+  - name: textract/analyze_document-Tables
+    dimensions:
+      - name: pages
+  - name: textract/analyze_document-Tables+Forms
+    dimensions:
+      - name: pages
+  - name: bedrock/eu.amazon.nova-lite-v1:0
+    dimensions:
+      - name: inputTokens
+      - name: outputTokens
+      - name: cacheReadInputTokens
+      - name: cacheWriteInputTokens
+  - name: bedrock/eu.amazon.nova-pro-v1:0
+    dimensions:
+      - name: inputTokens
+      - name: outputTokens
+      - name: cacheReadInputTokens
+      - name: cacheWriteInputTokens
+  - name: bedrock/eu.anthropic.claude-3-haiku-20240307-v1:0
+    dimensions:
+      - name: inputTokens
+      - name: outputTokens
+      - name: cacheReadInputTokens
+      - name: cacheWriteInputTokens
+  - name: bedrock/eu.anthropic.claude-3-5-sonnet-20240620-v1:0
+    dimensions:
+      - name: inputTokens
+      - name: outputTokens
+      - name: cacheReadInputTokens
+      - name: cacheWriteInputTokens
+  - name: bedrock/eu.anthropic.claude-3-7-sonnet-20250219-v1:0
+    dimensions:
+      - name: inputTokens
+      - name: outputTokens
+      - name: cacheReadInputTokens
+      - name: cacheWriteInputTokens

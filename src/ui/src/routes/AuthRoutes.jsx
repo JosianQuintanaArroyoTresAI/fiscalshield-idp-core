@@ -22,6 +22,7 @@ import { ClientTakeOnAnalysis } from '../components/client-takeon';
 import { InvoiceInsights } from '../components/invoice-insights';
 import { BankStatementInsights } from '../components/bank-insights';
 import { CompanyHub } from '../components/company-hub';
+import ValidationMetricsDashboard from '../components/admin/ValidationMetricsDashboard';
 import RequireCompany from '../components/RequireCompany';
 
 import {
@@ -39,12 +40,13 @@ import {
   CLIENT_TAKEON_PATH,
   INVOICE_INSIGHTS_PATH,
   BANK_INSIGHTS_PATH,
+  ADMIN_VALIDATION_METRICS_PATH,
 } from './constants';
 
 const logger = new Logger('AuthRoutes');
 
 const AuthRoutes = ({ redirectParam }) => {
-  const { currentCredentials } = useAppContext();
+  const { currentCredentials, isAdmin } = useAppContext();
   const settings = useParameterStore(currentCredentials);
   const { signOut } = useAuthenticator();
 
@@ -84,6 +86,9 @@ const AuthRoutes = ({ redirectParam }) => {
           <RequireCompany>
             <BankStatementInsights />
           </RequireCompany>
+        </Route>
+        <Route exact path={ADMIN_VALIDATION_METRICS_PATH}>
+          {isAdmin ? <ValidationMetricsDashboard /> : <Redirect to={DEFAULT_PATH} />}
         </Route>
         <Route path={COMPANY_INTELLIGENCE_PATH}>
           <RequireCompany>

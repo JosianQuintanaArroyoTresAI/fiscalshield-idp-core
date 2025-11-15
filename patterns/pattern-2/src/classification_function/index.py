@@ -193,11 +193,108 @@ def handler(event, context):
     # NEW: Store classification metadata for drift detection
     if not document.metadata:
         document.metadata = {}
-    document.metadata["classification_method"] = "llm"
+    
+    # Check if we should use user hint for routing despite running LLM
+    validate_on_mismatch = config.get("classification", {}).get("validate_hint_on_mismatch", False)
+    use_user_hint_for_routing = (user_hint and validate_on_mismatch)
+    
+    if use_user_hint_for_routing:
+        document.metadata["classification_method"] = "user_hint_validated"
+        document.metadata["user_provided_type"] = user_hint
+        logger.info(f"🔄 Using user hint '{user_hint}' for routing (validation mode)")
+    else:
+        document.metadata["classification_method"] = "llm"
+    
     if user_hint:
         # Store user hint even when we ran LLM (for comparison/drift detection)
-        document.metadata["user_provided_type"] = user_hint
-        logger.info(f"Stored user hint '{user_hint}' for drift detection (LLM classification was run)")
+        if not use_user_hint_for_routing:
+            document.metadata["user_provided_type"] = user_hint
+            logger.info(f"Stored user hint '{user_hint}' for drift detection (LLM classification was run)")
+        
+        # NEW: Validate user hint against model prediction
+        if document.sections and len(document.sections) > 0:
+            model_classification = document.sections[0].classification
+            model_confidence = document.sections[0].confidence
+            
+            validation_match = (model_classification.lower() == user_hint.lower())
+            
+            # If validate_on_mismatch=true, override model classification with user hint
+            if use_user_hint_for_routing:
+                original_classification = model_classification
+                # Override the section classification with user hint
+                for section in document.sections:
+                    section.classification = user_hint
+                # document.pages is a dict, iterate over values
+                for page_id, page in document.pages.items():
+                    page.classification = user_hint
+                
+                logger.info(
+                    f"📝 Overrode classification: model='{original_classification}' → user='{user_hint}' "
+                    f"(confidence={model_confidence:.2f}) for routing"
+                )
+            
+            # Log validation result
+            logger.info(
+                f"🔍 VALIDATION: user='{user_hint}', model='{model_classification}' "
+                f"(confidence={model_confidence:.2f}), match={validation_match}"
+            )
+            
+            # Store validation data in DynamoDB for metrics
+            try:
+                import boto3
+                import uuid
+                from datetime import datetime
+                from decimal import Decimal
+                
+                validation_table_name = os.environ.get("VALIDATION_REQUESTS_TABLE")
+                if validation_table_name:
+                    dynamodb = boto3.resource("dynamodb")
+                    validation_table = dynamodb.Table(validation_table_name)
+                    
+                    validation_id = str(uuid.uuid4())
+                    timestamp = int(datetime.now().timestamp())
+                    
+                    # Create validation record
+                    validation_item = {
+                        "PK": f"validation#{validation_id}",
+                        "SK": f"doc#{document.id}",
+                        "ValidationId": validation_id,
+                        "DocumentId": document.id,
+                        "UserId": document.user_id if hasattr(document, 'user_id') and document.user_id else "unknown",
+                        "CompanyNumber": document.company_number if hasattr(document, 'company_number') and document.company_number else None,
+                        "CompanyName": document.company_name if hasattr(document, 'company_name') and document.company_name else None,
+                        "UserSelection": user_hint,
+                        "ModelPrediction": model_classification,
+                        "ModelConfidence": Decimal(str(model_confidence)),  # Convert float to Decimal for DynamoDB
+                        "ValidationMatch": validation_match,
+                        "ValidationStatus": "auto_logged",  # vs "pending_user_confirmation" for future
+                        "CreatedAt": timestamp,
+                        "TTL": timestamp + (90 * 24 * 60 * 60),  # 90 days retention
+                    }
+                    
+                    validation_table.put_item(Item=validation_item)
+                    
+                    if not validation_match and model_confidence > 0.90:
+                        logger.warning(
+                            f"⚠️  HIGH CONFIDENCE MISMATCH: user='{user_hint}', "
+                            f"model='{model_classification}' (confidence={model_confidence:.2f}). "
+                            f"Validation ID: {validation_id}"
+                        )
+                    elif not validation_match:
+                        logger.info(
+                            f"📊 Mismatch logged (low confidence): user='{user_hint}', "
+                            f"model='{model_classification}' (confidence={model_confidence:.2f}). "
+                            f"Validation ID: {validation_id}"
+                        )
+                    else:
+                        logger.info(f"✅ User and model agree on '{user_hint}'. Validation ID: {validation_id}")
+                        
+                else:
+                    logger.warning("VALIDATION_REQUESTS_TABLE not configured - skipping validation logging")
+                    
+            except Exception as e:
+                logger.error(f"Failed to log validation data: {str(e)}")
+                # Don't fail the workflow if validation logging fails
 
     # Check if document processing failed or has pages that failed to classify
     failed_page_exceptions = None

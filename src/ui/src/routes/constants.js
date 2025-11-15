@@ -18,3 +18,4 @@ export const OVERVIEW_DASHBOARD_PATH = '/overview';
 export const CLIENT_TAKEON_PATH = '/client-takeon';
 export const INVOICE_INSIGHTS_PATH = '/invoice-insights';
 export const BANK_INSIGHTS_PATH = '/bank-insights';
+export const ADMIN_VALIDATION_METRICS_PATH = '/admin/validation-metrics';
