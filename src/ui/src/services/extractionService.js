@@ -140,6 +140,7 @@ export const formatBankStatementData = (extractionResult) => {
       ? (extractionResult.CompositeConfidence * 100).toFixed(0) + '%'
       : 'N/A',
     qualityTier: extractionResult.QualityTier || 'N/A',
+    analysisStatus: extractionResult.AnalysisStatus || 'PENDING',
     sourcePage: extractionResult.SourcePage || 'N/A',
     processedDate: processedDate,
     processedAt: extractionResult.ProcessedAt,

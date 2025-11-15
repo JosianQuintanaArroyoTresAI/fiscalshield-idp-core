@@ -18,6 +18,7 @@ const listExtractionResults = /* GraphQL */ `
         CompanyName
         UserId
         ExtractionStatus
+        AnalysisStatus
         ProcessedAt
         SectionId
         ConfidenceScore

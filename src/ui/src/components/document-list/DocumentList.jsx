@@ -489,6 +489,22 @@ const DocumentList = () => {
           width: 90,
           sortingField: 'confidence',
         },
+        {
+          id: 'analysisStatus',
+          header: 'Analysis',
+          cell: (item) => {
+            const status = item.analysisStatus || 'PENDING';
+            const colorMap = {
+              PENDING: 'grey',
+              IN_PROGRESS: 'blue',
+              ANALYZED: 'green',
+              FAILED: 'red',
+            };
+            return <Badge color={colorMap[status] || 'grey'}>{status}</Badge>;
+          },
+          width: 100,
+          sortingField: 'analysisStatus',
+        },
       ]}
       items={bankStatements}
       loading={isLoadingBankStatements}
@@ -503,9 +519,30 @@ const DocumentList = () => {
               : 'Select a company to view bank statement transactions'
           }
           actions={
-            <Button onClick={handleDownloadBankStatements} disabled={bankStatements.length === 0} iconName="download">
-              Download CSV
-            </Button>
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button
+                onClick={() => {
+                  const pendingCount = bankStatements.filter(
+                    (item) => (item.analysisStatus || 'PENDING') === 'PENDING'
+                  ).length;
+                  console.log(`Analyse Transactions clicked - ${pendingCount} pending`);
+                  // TODO: Implement analysis trigger
+                  alert(`Analysis feature coming soon! ${pendingCount} transactions pending analysis.`);
+                }}
+                disabled={
+                  bankStatements.length === 0 ||
+                  !bankStatements.some((item) => (item.analysisStatus || 'PENDING') === 'PENDING')
+                }
+                variant="primary"
+              >
+                Analyse Transactions
+                {bankStatements.filter((item) => (item.analysisStatus || 'PENDING') === 'PENDING').length > 0 &&
+                  ` (${bankStatements.filter((item) => (item.analysisStatus || 'PENDING') === 'PENDING').length})`}
+              </Button>
+              <Button onClick={handleDownloadBankStatements} disabled={bankStatements.length === 0} iconName="download">
+                Download CSV
+              </Button>
+            </SpaceBetween>
           }
         >
           Bank Statement Transactions

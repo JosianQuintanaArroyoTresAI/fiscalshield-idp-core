@@ -2563,6 +2563,17 @@ Resources:
       Name: !Sub "${AWS::StackName}-Settings"
       Value: "{}"
 
+  # SSM Parameter for Analysis Stack API URL (placeholder for cross-stack integration)
+  AnalysisApiUrlParameter:
+    DependsOn:
+      - IsStacknameLengthOK
+    Type: AWS::SSM::Parameter
+    Properties:
+      Type: String
+      Name: !Sub "/${AWS::StackName}/analysis-api-url"
+      Description: "Placeholder for Analysis Stack API URL (will be updated by Analysis stack deployment)"
+      Value: "https://placeholder-analysis-api.execute-api.eu-central-1.amazonaws.com/prod"
+
   UpdateSettingsFunction:
     DependsOn:
       - IsStacknameLengthOK

@@ -254,6 +254,7 @@ type ExtractionResult @aws_cognito_user_pools @aws_iam {
   CompanyName: String
   UserId: String!
   ExtractionStatus: String
+  AnalysisStatus: String
   ProcessedAt: AWSTimestamp
   SectionId: String
   ConfidenceScore: Float

@@ -739,6 +739,7 @@ def write_transactions_to_dynamodb(
                 'GSI3PK': f"account#{txn_data['account_number']}#type#BANK_STATEMENT",
                 'DocumentId': document_id,
                 'ExtractionStatus': 'COMPLETED',
+                'AnalysisStatus': 'PENDING',
                 'GSI6PK': f"client#{client_id}#type#BANK_STATEMENT",
                 
                 # Core identifiers
