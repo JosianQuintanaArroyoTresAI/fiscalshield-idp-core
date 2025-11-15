@@ -308,6 +308,7 @@ classes:
         description: Additional notes or remarks about the document. Look for sections labeled 'notes', 'remarks', or 'comments'.
 classification:
   maxPagesForClassification: "ALL"
+  trust_user_hint: true  # If true, skip LLM classification when user provides document type
   image:
     target_height: ''
     target_width: ''
