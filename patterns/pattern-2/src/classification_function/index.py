@@ -224,7 +224,8 @@ def handler(event, context):
                 # Override the section classification with user hint
                 for section in document.sections:
                     section.classification = user_hint
-                for page in document.pages:
+                # document.pages is a dict, iterate over values
+                for page_id, page in document.pages.items():
                     page.classification = user_hint
                 
                 logger.info(
