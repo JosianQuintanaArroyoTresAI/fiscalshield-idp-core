@@ -568,16 +568,27 @@ def extract_structured_data_from_text(
             return parsed_data, "json"
         except (json.JSONDecodeError, TypeError) as e:
             logger.warning(f"Failed to parse as JSON: {e}")
-            # Fallback to YAML if JSON parsing fails
-            try:
-                yaml_str = extract_yaml_from_text(text)
-                parsed_data = yaml.safe_load(yaml_str)
-                return parsed_data, "yaml"
-            except yaml.YAMLError as yaml_e:
-                logger.warning(f"Fallback YAML parsing also failed: {yaml_e}")
-                return text, "unknown"
+            # Fallback to YAML if JSON parsing fails (only if yaml is available)
+            if yaml is not None:
+                try:
+                    yaml_str = extract_yaml_from_text(text)
+                    parsed_data = yaml.safe_load(yaml_str)
+                    return parsed_data, "yaml"
+                except yaml.YAMLError as yaml_e:
+                    logger.warning(f"Fallback YAML parsing also failed: {yaml_e}")
+            return text, "unknown"
 
     elif detected_format == "yaml":
+        if yaml is None:
+            logger.warning("YAML library not available. Cannot parse YAML format.")
+            # Fall back to JSON
+            try:
+                json_str = extract_json_from_text(text)
+                parsed_data = json.loads(json_str)
+                return parsed_data, "json"
+            except (json.JSONDecodeError, TypeError):
+                return text, "unknown"
+        
         try:
             yaml_str = extract_yaml_from_text(text)
             # Check if YAML extraction actually found structured content
@@ -624,23 +635,24 @@ def extract_structured_data_from_text(
         except (json.JSONDecodeError, TypeError):
             pass
 
-        # Try YAML second
-        try:
-            yaml_str = extract_yaml_from_text(text)
-            # Check if YAML extraction actually found structured content
-            if yaml_str == text:
-                # YAML extraction fell back to original text, check if it's actually structured
-                parsed_data = yaml.safe_load(yaml_str)
-                if not isinstance(parsed_data, (dict, list)):
-                    # Got a simple string, not structured data
-                    raise yaml.YAMLError(
-                        "YAML parsing returned simple string, not structured data"
-                    )
-            else:
-                parsed_data = yaml.safe_load(yaml_str)
-            return parsed_data, "yaml"
-        except yaml.YAMLError:
-            pass
+        # Try YAML second (only if yaml library is available)
+        if yaml is not None:
+            try:
+                yaml_str = extract_yaml_from_text(text)
+                # Check if YAML extraction actually found structured content
+                if yaml_str == text:
+                    # YAML extraction fell back to original text, check if it's actually structured
+                    parsed_data = yaml.safe_load(yaml_str)
+                    if not isinstance(parsed_data, (dict, list)):
+                        # Got a simple string, not structured data
+                        raise yaml.YAMLError(
+                            "YAML parsing returned simple string, not structured data"
+                        )
+                else:
+                    parsed_data = yaml.safe_load(yaml_str)
+                return parsed_data, "yaml"
+            except yaml.YAMLError:
+                pass
 
         # If both fail, return original text
         logger.warning(
