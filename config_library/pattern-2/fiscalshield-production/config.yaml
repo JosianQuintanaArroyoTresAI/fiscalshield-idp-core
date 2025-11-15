@@ -135,7 +135,7 @@ classes:
         evaluation_method: FUZZY
         attributeType: simple
       - name: SortCode
-        description: The bank sort code (UK format: XX-XX-XX)
+        description: "The bank sort code (UK format: XX-XX-XX)"
         evaluation_method: EXACT
         attributeType: simple
       - name: StatementPeriodStart
