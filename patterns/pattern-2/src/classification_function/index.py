@@ -193,11 +193,23 @@ def handler(event, context):
     # NEW: Store classification metadata for drift detection
     if not document.metadata:
         document.metadata = {}
-    document.metadata["classification_method"] = "llm"
+    
+    # Check if we should use user hint for routing despite running LLM
+    validate_on_mismatch = config.get("classification", {}).get("validate_hint_on_mismatch", False)
+    use_user_hint_for_routing = (user_hint and validate_on_mismatch)
+    
+    if use_user_hint_for_routing:
+        document.metadata["classification_method"] = "user_hint_validated"
+        document.metadata["user_provided_type"] = user_hint
+        logger.info(f"🔄 Using user hint '{user_hint}' for routing (validation mode)")
+    else:
+        document.metadata["classification_method"] = "llm"
+    
     if user_hint:
         # Store user hint even when we ran LLM (for comparison/drift detection)
-        document.metadata["user_provided_type"] = user_hint
-        logger.info(f"Stored user hint '{user_hint}' for drift detection (LLM classification was run)")
+        if not use_user_hint_for_routing:
+            document.metadata["user_provided_type"] = user_hint
+            logger.info(f"Stored user hint '{user_hint}' for drift detection (LLM classification was run)")
         
         # NEW: Validate user hint against model prediction
         if document.sections and len(document.sections) > 0:
@@ -205,6 +217,20 @@ def handler(event, context):
             model_confidence = document.sections[0].confidence
             
             validation_match = (model_classification.lower() == user_hint.lower())
+            
+            # If validate_on_mismatch=true, override model classification with user hint
+            if use_user_hint_for_routing:
+                original_classification = model_classification
+                # Override the section classification with user hint
+                for section in document.sections:
+                    section.classification = user_hint
+                for page in document.pages:
+                    page.classification = user_hint
+                
+                logger.info(
+                    f"📝 Overrode classification: model='{original_classification}' → user='{user_hint}' "
+                    f"(confidence={model_confidence:.2f}) for routing"
+                )
             
             # Log validation result
             logger.info(
