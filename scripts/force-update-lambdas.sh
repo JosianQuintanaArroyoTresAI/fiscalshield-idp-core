@@ -77,6 +77,8 @@ ALL_FUNCTIONS=(
     "AssessCompanyFunction:fiscalshield-analysis-prod:stacks/analysis/.aws-sam/build/AssessCompanyFunction"
     "GenerateReportFunction:fiscalshield-analysis-prod:stacks/analysis/.aws-sam/build/GenerateReportFunction"
     "HealthCheckFunction:fiscalshield-analysis-prod:stacks/analysis/.aws-sam/build/HealthCheckFunction"
+    # Transaction Analysis
+    "TriggerTransactionAnalysisFunction::src/resolvers/triggerTransactionAnalysis"
     # Add more as your project grows:
     # "DiscoveryUploadResolverFunction::.aws-sam/build/DiscoveryUploadResolverFunction"
     # "UpdateConfigurationFunction::.aws-sam/build/UpdateConfigurationFunction"
