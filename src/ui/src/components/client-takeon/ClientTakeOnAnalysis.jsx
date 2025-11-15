@@ -56,12 +56,12 @@ const ClientTakeOnAnalysis = ({ embedded = false }) => {
       try {
         setIsLoadingMarkdown(true);
         console.log('Fetching report markdown from:', reportSuccess.downloadUrl);
-        
+
         const response = await fetch(reportSuccess.downloadUrl);
         if (!response.ok) {
           throw new Error(`Failed to fetch report: ${response.statusText}`);
         }
-        
+
         const markdown = await response.text();
         setReportMarkdown(markdown);
         console.log('Report markdown loaded successfully');

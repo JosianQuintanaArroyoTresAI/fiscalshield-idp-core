@@ -130,12 +130,12 @@ const CompanyIntelligence = () => {
       try {
         setIsLoadingMarkdown(true);
         logger.debug('Fetching report markdown from:', reportData.downloadUrl);
-        
+
         const response = await fetch(reportData.downloadUrl);
         if (!response.ok) {
           throw new Error(`Failed to fetch report: ${response.statusText}`);
         }
-        
+
         const markdown = await response.text();
         setReportMarkdown(markdown);
         logger.debug('Report markdown loaded successfully');
