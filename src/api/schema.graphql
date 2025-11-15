@@ -310,6 +310,47 @@ type ExtractionResultsConnection @aws_cognito_user_pools @aws_iam {
   nextToken: String
 }
 
+type ValidationMismatch @aws_cognito_user_pools {
+  documentId: String!
+  userSelection: String!
+  modelPrediction: String!
+  confidence: Float!
+  createdAt: Int!
+  validationId: String!
+  company: String
+}
+
+type ValidationByType @aws_cognito_user_pools {
+  total: Int!
+  matches: Int!
+  mismatches: Int!
+  highConfidenceMismatches: Int!
+}
+
+type ValidationByConfidence @aws_cognito_user_pools {
+  total: Int!
+  matches: Int!
+}
+
+type ValidationSummary @aws_cognito_user_pools {
+  modelAccuracy: String!
+  totalDocumentsValidated: Int!
+  requiresAttention: Int!
+}
+
+type ValidationMetrics @aws_cognito_user_pools {
+  timeRangeDays: Int!
+  totalValidations: Int!
+  matches: Int!
+  mismatches: Int!
+  matchRatePercent: Float!
+  mismatchRatePercent: Float!
+  byDocumentType: AWSJSON!
+  byConfidenceBucket: AWSJSON!
+  highConfidenceMismatches: [ValidationMismatch]
+  summary: ValidationSummary!
+}
+
 type Mutation  {
   createDocument(input: CreateDocumentInput!): CreateDocumentOutput @aws_iam
   updateDocument(input: UpdateDocumentInput!): Document @aws_iam
@@ -344,6 +385,7 @@ type Query @aws_cognito_user_pools @aws_iam {
   listAgentJobs(limit: Int, nextToken: String): AgentJobConnection @aws_cognito_user_pools
   getUserCompanies: [UserCompany] @aws_cognito_user_pools
   listExtractionResults(companyNumber: String!, documentType: String!, limit: Int, nextToken: String): ExtractionResultsConnection @aws_cognito_user_pools
+  getValidationMetrics(timeRangeDays: Int, companyNumber: String, userId: String): ValidationMetrics @aws_cognito_user_pools
 }
 
 type Subscription @aws_cognito_user_pools @aws_iam {

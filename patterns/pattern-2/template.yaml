@@ -28,6 +28,10 @@ Parameters:
     Type: String
     Description: "DynamoDB table for storing extraction results"
 
+  ValidationRequestsTable:
+    Type: String
+    Description: "DynamoDB table for tracking classification validation requests"
+
   CustomerManagedEncryptionKeyArn:
     Type: String
 
@@ -1491,6 +1495,7 @@ Resources:
           TRACKING_TABLE: !Ref TrackingTable
           CONFIGURATION_BUCKET: !Ref ConfigurationBucket
           CONFIGURATION_TABLE_NAME: !Ref ConfigurationTable
+          VALIDATION_REQUESTS_TABLE: !Ref ValidationRequestsTable
           LOG_LEVEL: !Ref LogLevel
           APPSYNC_API_URL: !Ref AppSyncApiUrl
           DOCUMENT_TRACKING_MODE: !If [HasAppSyncApi, "appsync", "dynamodb"]
@@ -1514,6 +1519,8 @@ Resources:
             BucketName: !Ref ConfigurationBucket
         - DynamoDBCrudPolicy:
             TableName: !Ref ConfigurationTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ValidationRequestsTable
         - DynamoDBCrudPolicy:
             TableName: !Ref TrackingTable
         - Statement:
