@@ -7907,7 +7907,7 @@ Resources:
         ]
       Role: !GetAtt StartUICodeBuildExecutionRole.Arn
       Runtime: python3.12
-      Timeout: 60
+      Timeout: 900
       MemorySize: 128
       Handler: index.handler
       CodeUri: src/lambda/start_codebuild
@@ -7927,10 +7927,9 @@ Resources:
       ServiceToken: !GetAtt StartUICodeBuild.Arn
       BuildProjectName: !Ref UICodeBuildProject
       SettingsParameter: !Ref SettingsParameter
-      # Temporarily commenting out CodeLocation to prevent unnecessary UI rebuilds
       # Force codebuild to rerun when source code changes (filename will change), and to correctly roll back to
       # previous version if build fails.
-      # CodeLocation: !Sub "arn:${AWS::Partition}:s3:::<ARTIFACT_BUCKET_TOKEN>/<ARTIFACT_PREFIX_TOKEN>/<WEBUI_ZIPFILE_TOKEN>"
+      CodeLocation: !Sub "arn:${AWS::Partition}:s3:::<ARTIFACT_BUCKET_TOKEN>/<ARTIFACT_PREFIX_TOKEN>/<WEBUI_ZIPFILE_TOKEN>"
 
 Outputs:
   ApplicationWebURL:

@@ -84,14 +84,24 @@ def poll_create_or_update(event, _):
             LOGGER.info("build status: [%s]", build_status)
 
             if build_status == "SUCCEEDED":
-                LOGGER.info("returning True")
+                LOGGER.info("build succeeded - returning True")
                 return True
 
             if build_status == "IN_PROGRESS":
-                LOGGER.info("returning None")
+                LOGGER.info("build in progress - continuing to poll")
                 return None
 
-            raise RuntimeError(f"build did not complete - status: [{build_status}]")
+            # Log detailed build information for debugging
+            LOGGER.error(
+                "build failed or stopped - status: [%s], build_id: [%s], phases: %s",
+                build_status,
+                build_id,
+                build.get("phases", [])
+            )
+            raise RuntimeError(
+                f"build did not complete successfully - status: [{build_status}]. "
+                f"Check CloudWatch Logs for build {build_id} for details."
+            )
 
         except Exception as exception:  # pylint: disable=broad-except
             LOGGER.error("build poller - exception: %s", exception)
