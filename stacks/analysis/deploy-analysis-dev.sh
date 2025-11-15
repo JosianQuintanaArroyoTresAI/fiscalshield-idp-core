@@ -70,8 +70,15 @@ SSM_PARAM=$(aws cloudformation describe-stacks \
   --query 'Stacks[0].Outputs[?OutputKey==`ApiUrlParameterName`].OutputValue' \
   --output text 2>/dev/null || echo "Not available")
 
+STATE_MACHINE_ARN=$(aws cloudformation describe-stacks \
+  --stack-name "$STACK_NAME" \
+  --region "$REGION" \
+  --query 'Stacks[0].Outputs[?OutputKey==`TransactionCategorizationStateMachineArn`].OutputValue' \
+  --output text 2>/dev/null || echo "Not available")
+
 echo "API Gateway URL: $API_URL"
 echo "SSM Parameter: $SSM_PARAM"
+echo "State Machine ARN: $STATE_MACHINE_ARN"
 echo ""
 
 # Step 4: Test health endpoint
@@ -99,9 +106,18 @@ echo "📝 Next Steps:"
 echo "  1. Test company intelligence endpoint:"
 echo "     curl $API_URL/company/12345678/intelligence"
 echo ""
-echo "  2. Check logs:"
-echo "     aws logs tail /aws/lambda/fiscalshield-analysis-dev-AssessCompany --follow"
+echo "  2. Test transaction categorization workflow:"
+echo "     aws stepfunctions start-execution \\"
+echo "       --state-machine-arn $STATE_MACHINE_ARN \\"
+echo "       --input '{\"companyNumber\":\"12345678\",\"userId\":\"test-user\"}'"
 echo ""
-echo "  3. Verify SSM parameter:"
+echo "  3. Check Step Functions execution:"
+echo "     aws stepfunctions list-executions --state-machine-arn $STATE_MACHINE_ARN"
+echo ""
+echo "  4. Check logs:"
+echo "     aws logs tail /aws/lambda/fiscalshield-analysis-dev-TriggerAnalysis --follow"
+echo "     aws logs tail /aws/lambda/fiscalshield-analysis-dev-Categorization --follow"
+echo ""
+echo "  5. Verify SSM parameter:"
 echo "     aws ssm get-parameter --name $SSM_PARAM --region $REGION"
 echo ""
