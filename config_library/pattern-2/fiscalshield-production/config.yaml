@@ -223,7 +223,7 @@ classification:
     <classification-examples>
     Example 1 - Invoice Classification:
     Visual evidence: Header text "TAX INVOICE", company logo at top, table with columns (Description, Qty, Unit Price, Amount)
-    Textual evidence: "Invoice Number: INV-2024-12345", "Invoice Date: 15/11/2024", itemized list showing "Office Chairs x 5 @ £120.00", financial calculation showing "Subtotal: £600.00", "VAT 20%: £120.00", "Total Due: £720.00", "Payment Terms: Net 30 days"
+    Textual evidence: "Invoice Number: INV-2024-12345", "Invoice Date: 15/11/2024", itemized list showing "Office Chairs x 5 @ £120.00", financial calculation showing "Subtotal: £600.00", "VAT 20%%: £120.00", "Total Due: £720.00", "Payment Terms: Net 30 days"
     Classification: "invoice"
     Confidence: 0.98
     Reasoning: Clear invoice structure with all distinctive features - invoice number, supplier details, itemized charges, VAT breakdown, payment terms. High confidence due to multiple matching identifiers.
