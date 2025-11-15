@@ -2,30 +2,19 @@
 // SPDX-License-Identifier: MIT-0
 
 // src/components/configuration-layout/breadcrumbs.jsx
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { BreadcrumbGroup } from '@awsui/components-react';
 import { DOCUMENTS_PATH, CONFIGURATION_PATH, COMPANY_SELECT_PATH } from '../../routes/constants';
+import { useCompany } from '../../contexts/company';
 
 const Breadcrumbs = () => {
-  const [companyContext, setCompanyContext] = useState(null);
-
-  useEffect(() => {
-    // Get active company from localStorage
-    try {
-      const stored = localStorage.getItem('active_company');
-      if (stored) {
-        setCompanyContext(JSON.parse(stored));
-      }
-    } catch (err) {
-      console.error('Failed to load company context:', err);
-    }
-  }, []);
+  const { activeCompany, isCompanySelected } = useCompany();
 
   const items = [{ text: 'Company Selection', href: `#${COMPANY_SELECT_PATH}` }];
 
-  if (companyContext) {
+  if (isCompanySelected && activeCompany) {
     items.push({
-      text: `${companyContext.company_name} (${companyContext.company_number})`,
+      text: `${activeCompany.companyName} (${activeCompany.companyNumber})`,
       href: `#${DOCUMENTS_PATH}`,
     });
   } else {

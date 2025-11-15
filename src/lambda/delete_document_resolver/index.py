@@ -20,6 +20,91 @@ dynamodb = boto3.resource("dynamodb")
 s3 = boto3.client("s3")
 
 
+def delete_extraction_results(object_key: str) -> int:
+    """
+    Delete all extraction results for a document from ExtractionResultsTable.
+    
+    Uses GSI4-DocumentSections index to query by DocumentId and delete all related records
+    (invoices, bank statement transactions, etc.).
+    
+    Args:
+        object_key: Document object key (used as DocumentId)
+        
+    Returns:
+        int: Number of extraction result records deleted
+    """
+    deleted_count = 0
+    
+    extraction_table_name = os.environ.get("EXTRACTION_RESULTS_TABLE")
+    if not extraction_table_name:
+        logger.info("EXTRACTION_RESULTS_TABLE not configured - skipping extraction results deletion")
+        return 0
+    
+    try:
+        extraction_table = dynamodb.Table(extraction_table_name)
+        
+        # Use DocumentId as the query key (object_key is the document ID)
+        logger.info(f"Querying extraction results for DocumentId: {object_key}")
+        
+        # Query GSI4-DocumentSections to find all extraction records for this document
+        response = extraction_table.query(
+            IndexName="GSI4-DocumentSections",
+            KeyConditionExpression="DocumentId = :doc_id",
+            ExpressionAttributeValues={
+                ":doc_id": object_key
+            }
+        )
+        
+        items = response.get('Items', [])
+        logger.info(f"Found {len(items)} extraction result records to delete")
+        
+        # Delete each extraction result record
+        for item in items:
+            try:
+                extraction_table.delete_item(
+                    Key={
+                        "PK": item["PK"],
+                        "SK": item["SK"]
+                    }
+                )
+                deleted_count += 1
+                logger.debug(f"Deleted extraction record: PK={item['PK']}, SK={item['SK']}")
+            except Exception as e:
+                logger.error(f"Error deleting extraction record {item['PK']}/{item['SK']}: {str(e)}")
+        
+        # Handle pagination if there are more items
+        while 'LastEvaluatedKey' in response:
+            response = extraction_table.query(
+                IndexName="GSI4-DocumentSections",
+                KeyConditionExpression="DocumentId = :doc_id",
+                ExpressionAttributeValues={
+                    ":doc_id": object_key
+                },
+                ExclusiveStartKey=response['LastEvaluatedKey']
+            )
+            
+            items = response.get('Items', [])
+            for item in items:
+                try:
+                    extraction_table.delete_item(
+                        Key={
+                            "PK": item["PK"],
+                            "SK": item["SK"]
+                        }
+                    )
+                    deleted_count += 1
+                    logger.debug(f"Deleted extraction record: PK={item['PK']}, SK={item['SK']}")
+                except Exception as e:
+                    logger.error(f"Error deleting extraction record {item['PK']}/{item['SK']}: {str(e)}")
+        
+        logger.info(f"Successfully deleted {deleted_count} extraction result records for {object_key}")
+        
+    except Exception as e:
+        logger.error(f"Error deleting extraction results for {object_key}: {str(e)}")
+    
+    return deleted_count
+
+
 def delete_chunk_tracking_records(tracking_table, object_key: str) -> int:
     """
     Delete all chunk tracking records for a document.
@@ -189,8 +274,56 @@ def handler(event, context):
                     logger.warning(
                         f"No list entries were found/deleted for {object_key}"
                     )
+                    # Fallback: Scan for list entries by ObjectKey if robust deletion failed
+                    logger.info(f"Attempting fallback: scanning for list entries by ObjectKey")
+                    try:
+                        scan_response = tracking_table.scan(
+                            FilterExpression="ObjectKey = :obj_key",
+                            ExpressionAttributeValues={":obj_key": object_key}
+                        )
+                        
+                        list_items = scan_response.get('Items', [])
+                        logger.info(f"Found {len(list_items)} list entries via scan for {object_key}")
+                        
+                        for item in list_items:
+                            try:
+                                tracking_table.delete_item(
+                                    Key={"PK": item["PK"], "SK": item["SK"]}
+                                )
+                                logger.info(f"Deleted list entry: PK={item['PK']}, SK={item['SK']}")
+                                deletion_success = True
+                            except Exception as del_err:
+                                logger.error(f"Error deleting scanned list entry: {str(del_err)}")
+                        
+                        # Handle pagination
+                        while 'LastEvaluatedKey' in scan_response:
+                            scan_response = tracking_table.scan(
+                                FilterExpression="ObjectKey = :obj_key",
+                                ExpressionAttributeValues={":obj_key": object_key},
+                                ExclusiveStartKey=scan_response['LastEvaluatedKey']
+                            )
+                            list_items = scan_response.get('Items', [])
+                            for item in list_items:
+                                try:
+                                    tracking_table.delete_item(
+                                        Key={"PK": item["PK"], "SK": item["SK"]}
+                                    )
+                                    logger.info(f"Deleted list entry (paginated): PK={item['PK']}, SK={item['SK']}")
+                                    deletion_success = True
+                                except Exception as del_err:
+                                    logger.error(f"Error deleting paginated list entry: {str(del_err)}")
+                    except Exception as scan_err:
+                        logger.error(f"Error in fallback scan deletion: {str(scan_err)}")
             except Exception as e:
                 logger.error(f"Error in robust list entry deletion: {str(e)}")
+
+            # Delete extraction results (invoices, bank statements, etc.)
+            try:
+                logger.info(f"Deleting extraction results for {object_key}")
+                extraction_count = delete_extraction_results(object_key)
+                logger.info(f"Deleted {extraction_count} extraction result records")
+            except Exception as e:
+                logger.error(f"Error deleting extraction results: {str(e)}")
 
             # Delete chunk tracking records (for chunked extraction feature)
             try:
@@ -200,20 +333,9 @@ def handler(event, context):
             except Exception as e:
                 logger.error(f"Error deleting chunk tracking records: {str(e)}")
 
-            # Finally, delete the document record from tracking table
-            if document_metadata:
-                logger.info(
-                    f"Deleting document record with PK={doc_pk}, SK=none from tracking table"
-                )
-                try:
-                    tracking_table.delete_item(Key={"PK": doc_pk, "SK": "none"})
-                    logger.info(
-                        "Successfully deleted document record from tracking table"
-                    )
-                except Exception as e:
-                    logger.error(
-                        f"Error deleting document record from tracking table: {str(e)}"
-                    )
+            # Note: In this architecture, documents exist ONLY as list entries.
+            # There is no separate doc#{object_key} record to delete.
+            # The document_metadata query above is only used to get timestamp for list deletion.
 
             deleted_count += 1
             logger.info(f"Completed deletion process for document: {object_key}")

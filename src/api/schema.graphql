@@ -245,6 +245,71 @@ type UserCompany @aws_cognito_user_pools @aws_iam {
   document_types: [String]
 }
 
+type ExtractionResult @aws_cognito_user_pools @aws_iam {
+  PK: ID!
+  SK: ID!
+  DocumentId: String!
+  DocumentType: String!
+  CompanyNumber: String
+  CompanyName: String
+  UserId: String!
+  ExtractionStatus: String
+  ProcessedAt: AWSTimestamp
+  SectionId: String
+  ConfidenceScore: Float
+  # Invoice-specific fields
+  InvoiceType: String
+  InvoiceNumber: String
+  InvoiceDate: String
+  DueDate: String
+  VendorName: String
+  SupplierAddress: String
+  TotalAmount: Float
+  Currency: String
+  # Bank Statement-specific fields
+  BankName: String
+  AccountNumber: String
+  StatementDate: String
+  StatementPeriod: String
+  OpeningBalance: Float
+  ClosingBalance: Float
+  TransactionCount: Int
+  TotalCredits: Float
+  TotalDebits: Float
+  # Bank Statement Transaction fields
+  TransactionId: String
+  TransactionDate: String
+  TransactionDescription: String
+  TransactionAmount: Float
+  TransactionType: String
+  AccountBalance: Float
+  Reference: String
+  SourcePage: String
+  SortCode: String
+  # Common metadata
+  S3Uri: String
+  ModelUsed: String
+  ExtractedData: AWSJSON
+  # Field-level confidence scores
+  InvoiceTypeConfidence: Float
+  SupplierNameConfidence: Float
+  TotalAmountConfidence: Float
+  InvoiceNumberConfidence: Float
+  VATNumberConfidence: Float
+  InvoiceDateConfidence: Float
+  # Composite confidence and quality metrics
+  CompositeConfidence: Float
+  QualityTier: String
+  # HITL (Human-In-The-Loop) flags
+  HITLRequired: Boolean
+  HITLReason: String
+}
+
+type ExtractionResultsConnection @aws_cognito_user_pools @aws_iam {
+  items: [ExtractionResult]
+  nextToken: String
+}
+
 type Mutation  {
   createDocument(input: CreateDocumentInput!): CreateDocumentOutput @aws_iam
   updateDocument(input: UpdateDocumentInput!): Document @aws_iam
@@ -278,6 +343,7 @@ type Query @aws_cognito_user_pools @aws_iam {
   getAgentJobStatus(jobId: ID!): AgentJob @aws_cognito_user_pools
   listAgentJobs(limit: Int, nextToken: String): AgentJobConnection @aws_cognito_user_pools
   getUserCompanies: [UserCompany] @aws_cognito_user_pools
+  listExtractionResults(companyNumber: String!, documentType: String!, limit: Int, nextToken: String): ExtractionResultsConnection @aws_cognito_user_pools
 }
 
 type Subscription @aws_cognito_user_pools @aws_iam {

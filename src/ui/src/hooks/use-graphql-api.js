@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { API, Logger, graphqlOperation } from 'aws-amplify';
 
 import useAppContext from '../contexts/app';
+import { useCompany } from '../contexts/company';
 
 import listDocumentsDateShard from '../graphql/queries/listDocumentsDateShard';
 import listDocumentsDateHour from '../graphql/queries/listDocumentsDateHour';
@@ -23,6 +24,7 @@ const useGraphQlApi = ({ initialPeriodsToLoad = DOCUMENT_LIST_SHARDS_PER_DAY * 2
   const [isDocumentsListLoading, setIsDocumentsListLoading] = useState(false);
   const [documents, setDocuments] = useState([]);
   const { setErrorMessage } = useAppContext();
+  const { activeCompany } = useCompany();
 
   const setDocumentsDeduped = (documentValues) => {
     setDocuments((currentDocuments) => {
@@ -107,9 +109,8 @@ const useGraphQlApi = ({ initialPeriodsToLoad = DOCUMENT_LIST_SHARDS_PER_DAY * 2
   }, []);
 
   const listDocumentIdsByDateShards = async ({ date, shards }) => {
-    // Read active company from localStorage for company filtering
-    const activeCompany = JSON.parse(localStorage.getItem('active_company') || 'null');
-    const companyNumber = activeCompany?.company_number || null;
+    // Get active company from context for company filtering
+    const companyNumber = activeCompany?.companyNumber || null;
 
     logger.debug('[USER-DEBUG] Querying documents by date shards:', { date, shards, companyNumber });
     logger.debug("[USER-DEBUG] These queries will be filtered by the authenticated user's sub (UserId)");
@@ -158,9 +159,8 @@ const useGraphQlApi = ({ initialPeriodsToLoad = DOCUMENT_LIST_SHARDS_PER_DAY * 2
   };
 
   const listDocumentIdsByDateHours = async ({ date, hours }) => {
-    // Read active company from localStorage for company filtering
-    const activeCompany = JSON.parse(localStorage.getItem('active_company') || 'null');
-    const companyNumber = activeCompany?.company_number || null;
+    // Get active company from context for company filtering
+    const companyNumber = activeCompany?.companyNumber || null;
 
     const listDocumentsDateHourPromises = hours.map((i) => {
       logger.debug('sending list document date hour', date, i, 'company:', companyNumber);
