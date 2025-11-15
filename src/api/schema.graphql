@@ -1,3 +1,4 @@
+# GraphQL Schema for FiscalShield IDP Core
 interface DynamoDbBase {
 	PK: ID!
 	SK: ID!
