@@ -217,6 +217,7 @@ def handler(event, context):
                 import boto3
                 import uuid
                 from datetime import datetime
+                from decimal import Decimal
                 
                 validation_table_name = os.environ.get("VALIDATION_REQUESTS_TABLE")
                 if validation_table_name:
@@ -237,7 +238,7 @@ def handler(event, context):
                         "CompanyName": document.company_name if hasattr(document, 'company_name') and document.company_name else None,
                         "UserSelection": user_hint,
                         "ModelPrediction": model_classification,
-                        "ModelConfidence": model_confidence,
+                        "ModelConfidence": Decimal(str(model_confidence)),  # Convert float to Decimal for DynamoDB
                         "ValidationMatch": validation_match,
                         "ValidationStatus": "auto_logged",  # vs "pending_user_confirmation" for future
                         "CreatedAt": timestamp,
