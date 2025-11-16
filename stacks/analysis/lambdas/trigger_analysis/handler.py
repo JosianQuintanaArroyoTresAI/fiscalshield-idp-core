@@ -30,7 +30,7 @@ class DecimalEncoder(json.JSONEncoder):
 def query_pending_transactions(company_number: str, user_id: str, limit: int = 1000) -> List[Dict]:
     """
     Query pending transactions for a company/user from ExtractionResultsTable.
-    Uses GSI6-ClientTypeDate index to filter by company.
+    Uses GSI7-ClientTypeDate index which projects ALL attributes including AnalysisStatus.
     """
     
     extraction_table = dynamodb.Table(EXTRACTION_RESULTS_TABLE)
@@ -38,9 +38,9 @@ def query_pending_transactions(company_number: str, user_id: str, limit: int = 1
     print(f"Querying pending transactions for company {company_number}, user {user_id}")
     
     try:
-        # Query using GSI6 for company-level access
+        # Query using GSI7 for company-level access with ALL attributes
         response = extraction_table.query(
-            IndexName='GSI6-ClientTypeDate',
+            IndexName='GSI7-ClientTypeDate',
             KeyConditionExpression='GSI6PK = :gsi6pk',
             FilterExpression='UserId = :user_id AND AnalysisStatus = :status',
             ExpressionAttributeValues={
