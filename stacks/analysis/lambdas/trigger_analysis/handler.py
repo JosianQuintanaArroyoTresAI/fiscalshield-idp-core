@@ -72,9 +72,15 @@ def prepare_batches(transactions: List[Dict], company_number: str, user_id: str)
     
     batches = []
     
+    # Filter out transactions without TransactionId (invalid records)
+    valid_transactions = [t for t in transactions if t.get('TransactionId')]
+    
+    if len(valid_transactions) < len(transactions):
+        print(f"Warning: Filtered out {len(transactions) - len(valid_transactions)} transactions without TransactionId")
+    
     # Split into batches
-    for i in range(0, len(transactions), BATCH_SIZE):
-        batch = transactions[i:i + BATCH_SIZE]
+    for i in range(0, len(valid_transactions), BATCH_SIZE):
+        batch = valid_transactions[i:i + BATCH_SIZE]
         
         # Extract transaction IDs for this batch
         transaction_ids = [t['TransactionId'] for t in batch]
