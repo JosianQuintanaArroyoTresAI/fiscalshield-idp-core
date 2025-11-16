@@ -245,6 +245,13 @@ Resources:
                 Resource:
                   - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${ExtractionResultsTableName}'
                   - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${ExtractionResultsTableName}/index/*'
+              - Sid: DecryptExtractionResultsTableKMS
+                Effect: Allow
+                Action:
+                  - kms:Decrypt
+                  - kms:DescribeKey
+                Resource:
+                  - 'arn:aws:kms:eu-central-1:864899848062:key/a960f907-4d93-49c2-b05f-acc470fcf9cb'
               - Sid: ReadDataCollectionTables
                 Effect: Allow
                 Action:
