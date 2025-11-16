@@ -318,21 +318,39 @@ def get_transactions_by_ids(transaction_ids: List[str], company_number: str, use
     
     for transaction_id in transaction_ids:
         try:
-            # Query by primary key using PK (UserId) and SK (TransactionId)
-            # This is more efficient than querying a GSI
-            response = extraction_table.query(
-                KeyConditionExpression='PK = :pk AND SK = :sk',
-                ExpressionAttributeValues={
-                    ':pk': f"USER#{user_id}",
-                    ':sk': f"TRANSACTION#{transaction_id}"
-                }
+            # TransactionId format: users/{userId}/{document}.pdf-bank-{section}-{txn}-{hash}
+            # Need to extract document path and transaction number to build PK/SK
+            
+            # Extract document path (everything before -bank-)
+            parts = transaction_id.split('-bank-')
+            if len(parts) < 2:
+                log_with_timestamp(f"Invalid transaction ID format: {transaction_id}")
+                continue
+                
+            document_path = parts[0] + '.pdf'  # Reconstruct document path
+            bank_parts = parts[1].split('-')  # e.g., ['1', '3', 'd4cf0ecb']
+            
+            if len(bank_parts) < 2:
+                log_with_timestamp(f"Invalid transaction ID format: {transaction_id}")
+                continue
+                
+            section_num = bank_parts[0]
+            txn_num = bank_parts[1]
+            
+            # Build PK and SK based on actual table structure
+            pk = f"user#{user_id}#doc#{document_path}"
+            sk = f"type#BANK_STATEMENT#section#{section_num}#txn#{txn_num}"
+            
+            # Get item by primary key
+            response = extraction_table.get_item(
+                Key={'PK': pk, 'SK': sk}
             )
             
-            if response.get('Items'):
-                transactions.append(response['Items'][0])
+            if 'Item' in response:
+                transactions.append(response['Item'])
                 log_with_timestamp(f"Found transaction {transaction_id}")
             else:
-                log_with_timestamp(f"Transaction {transaction_id} not found")
+                log_with_timestamp(f"Transaction {transaction_id} not found (PK: {pk}, SK: {sk})")
                 
         except Exception as e:
             log_with_timestamp(f"Error retrieving transaction {transaction_id}: {str(e)}")
