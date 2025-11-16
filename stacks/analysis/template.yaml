@@ -55,6 +55,11 @@ Parameters:
     AllowedValues: [1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1827, 3653]
     Default: 7
 
+  ExtractionResultsTableName:
+    Type: String
+    Description: Name of the DynamoDB ExtractionResults table from IDP Core stack
+    Default: ''
+
 Conditions:
   IsProduction: !Equals [!Ref Environment, 'prod']
   EnableTracing: !Equals [!Ref EnableXRayTracing, 'true']
@@ -458,7 +463,7 @@ Resources:
       MemorySize: 512
       Environment:
         Variables:
-          EXTRACTION_RESULTS_TABLE: ExtractionResultsTable
+          EXTRACTION_RESULTS_TABLE: !Ref ExtractionResultsTableName
           BATCH_SIZE: '15'
       Tags:
         Purpose: Trigger transaction categorization workflow
@@ -475,7 +480,7 @@ Resources:
       MemorySize: 1024
       Environment:
         Variables:
-          EXTRACTION_RESULTS_TABLE: ExtractionResultsTable
+          EXTRACTION_RESULTS_TABLE: !Ref ExtractionResultsTableName
           BEDROCK_MODEL_ID: 'eu.anthropic.claude-3-5-sonnet-20240620-v1:0'
       Tags:
         Purpose: Transaction categorization and risk scoring
