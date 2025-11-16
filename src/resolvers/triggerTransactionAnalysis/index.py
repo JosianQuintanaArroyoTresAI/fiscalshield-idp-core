@@ -6,7 +6,14 @@ Starts Step Functions execution for transaction categorization workflow.
 import json
 import boto3
 import os
+import time
+import traceback
+import logging
 from datetime import datetime
+
+# Configure logging
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 # AWS clients
 stepfunctions = boto3.client('stepfunctions')
@@ -17,108 +24,79 @@ STATE_MACHINE_ARN = os.environ.get('STATE_MACHINE_ARN')
 
 def lambda_handler(event, context):
     """
-    Lambda handler for triggerTransactionAnalysis GraphQL mutation.
-    
-    Expected event from AppSync:
-    {
-        "arguments": {
-            "companyNumber": "12345678"
-        },
-        "identity": {
-            "sub": "user-id-from-cognito",
-            "username": "user@example.com"
-        }
-    }
-    
-    Returns:
-    {
-        "success": true,
-        "message": "Analysis workflow started",
-        "executionArn": "arn:aws:states:...",
-        "executionName": "categorization-12345678-1234567890"
-    }
+    GraphQL resolver to trigger transaction categorization Step Functions workflow.
     """
-    
-    print(f"Received event: {json.dumps(event, default=str)}")
-    
-    try:
-        # Extract parameters
-        arguments = event.get('arguments', {})
-        company_number = arguments.get('companyNumber')
-        
-        # Get user ID from Cognito identity
-        identity = event.get('identity', {})
-        user_id = identity.get('sub') or identity.get('username')
-        
-        if not company_number:
-            return {
-                'success': False,
-                'message': 'Missing required parameter: companyNumber',
-                'executionArn': None,
-                'executionName': None
-            }
-        
-        if not user_id:
-            return {
-                'success': False,
-                'message': 'User authentication required',
-                'executionArn': None,
-                'executionName': None
-            }
-        
-        # Create execution name with timestamp
-        timestamp = int(datetime.now().timestamp())
-        execution_name = f"categorization-{company_number}-{timestamp}"
-        
-        # Prepare Step Functions input
-        execution_input = {
-            'companyNumber': company_number,
-            'userId': user_id,
-            'triggeredAt': timestamp,
-            'triggeredBy': identity.get('username', user_id)
+    logger.info("triggerTransactionAnalysis resolver invoked")
+    logger.info(f"Event: {json.dumps(event)}")
+
+    # Extract arguments from the GraphQL event
+    arguments = event.get('arguments', {})
+    company_number = arguments.get('companyNumber')
+
+    if not company_number:
+        logger.error("Missing required parameter: companyNumber")
+        return {
+            'success': False,
+            'message': 'Missing required parameter: companyNumber',
+            'executionArn': None,
+            'executionName': None,
         }
-        
-        print(f"Starting Step Functions execution: {execution_name}")
-        print(f"Input: {json.dumps(execution_input)}")
-        
-        # Start Step Functions execution
-        execution = stepfunctions.start_execution(
-            stateMachineArn=STATE_MACHINE_ARN,
-            name=execution_name,
-            input=json.dumps(execution_input)
+
+    try:
+        state_machine_arn = os.environ['STATE_MACHINE_ARN']
+        logger.info(f"State Machine ARN: {state_machine_arn}")
+
+        # Check for running executions for this company
+        logger.info(f"Checking for running executions for company {company_number}")
+        running_executions = stepfunctions.list_executions(
+            stateMachineArn=state_machine_arn,
+            statusFilter='RUNNING',
+            maxResults=10,
         )
-        
-        execution_arn = execution['executionArn']
-        print(f"Started Step Functions execution: {execution_arn}")
-        
-        # Extract execution name from ARN
-        execution_name_from_arn = execution_arn.split(':')[-1]
-        
+
+        # Check if any running execution is for this company
+        for execution in running_executions.get('executions', []):
+            execution_name = execution['name']
+            # Execution name format: categorization-{companyNumber}-{timestamp}
+            if execution_name.startswith(f"categorization-{company_number}-"):
+                logger.info(f"Found running execution: {execution_name}")
+                return {
+                    'success': False,
+                    'message': f'Analysis already in progress for company {company_number}. Please wait for the current analysis to complete.',
+                    'executionArn': execution['executionArn'],
+                    'executionName': execution_name,
+                }
+
+        # Generate unique execution name with timestamp
+        timestamp = int(time.time())
+        execution_name = f"categorization-{company_number}-{timestamp}"
+
+        # Start Step Functions execution
+        logger.info(f"Starting execution: {execution_name}")
+        response = stepfunctions.start_execution(
+            stateMachineArn=state_machine_arn,
+            name=execution_name,
+            input=json.dumps({
+                'companyNumber': company_number,
+            }),
+        )
+
+        execution_arn = response['executionArn']
+        logger.info(f"Execution started successfully: {execution_arn}")
+
         return {
             'success': True,
-            'message': f'Transaction analysis workflow started successfully',
+            'message': f'Transaction analysis workflow started for company {company_number}',
             'executionArn': execution_arn,
-            'executionName': execution_name_from_arn
+            'executionName': execution_name,
         }
-        
-    except stepfunctions.exceptions.ExecutionAlreadyExists:
-        # Handle duplicate execution (e.g., user clicked button twice)
-        print(f"Execution already exists: {execution_name}")
-        return {
-            'success': False,
-            'message': 'Analysis workflow already in progress for this company',
-            'executionArn': None,
-            'executionName': execution_name
-        }
-        
+
     except Exception as e:
-        print(f"Error starting execution: {str(e)}")
-        import traceback
-        print(f"Traceback: {traceback.format_exc()}")
-        
+        logger.error(f"Error starting Step Functions execution: {str(e)}")
+        logger.error(traceback.format_exc())
         return {
             'success': False,
-            'message': f'Failed to start analysis workflow: {str(e)}',
+            'message': f'Error starting analysis workflow: {str(e)}',
             'executionArn': None,
-            'executionName': None
+            'executionName': None,
         }

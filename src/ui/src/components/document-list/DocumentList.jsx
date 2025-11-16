@@ -63,6 +63,7 @@ const DocumentList = () => {
   const [bankStatements, setBankStatements] = useState([]);
   const [isLoadingInvoices, setIsLoadingInvoices] = useState(false);
   const [isLoadingBankStatements, setIsLoadingBankStatements] = useState(false);
+  const [isAnalysisRunning, setIsAnalysisRunning] = useState(false);
   const [invoicesNextToken, setInvoicesNextToken] = useState(null);
   const [bankStatementsNextToken, setBankStatementsNextToken] = useState(null);
 
@@ -532,6 +533,7 @@ const DocumentList = () => {
                     (item) => (item.analysisStatus || 'PENDING') === 'PENDING',
                   ).length;
 
+                  setIsAnalysisRunning(true);
                   try {
                     console.log(
                       `Starting analysis for ${activeCompany.companyNumber} - ${pendingCount} pending transactions`,
@@ -562,9 +564,13 @@ const DocumentList = () => {
                   } catch (error) {
                     console.error('Error triggering analysis:', error);
                     alert(`✗ Error starting analysis: ${error.message || 'Unknown error'}`);
+                  } finally {
+                    setIsAnalysisRunning(false);
                   }
                 }}
+                loading={isAnalysisRunning}
                 disabled={
+                  isAnalysisRunning ||
                   bankStatements.length === 0 ||
                   !bankStatements.some((item) => (item.analysisStatus || 'PENDING') === 'PENDING')
                 }
