@@ -327,7 +327,7 @@ def get_transactions_by_ids(transaction_ids: List[str], company_number: str, use
                 log_with_timestamp(f"Invalid transaction ID format: {transaction_id}")
                 continue
                 
-            document_path = parts[0] + '.pdf'  # Reconstruct document path
+            document_path = parts[0]  # Already includes .pdf extension
             bank_parts = parts[1].split('-')  # e.g., ['1', '3', 'd4cf0ecb']
             
             if len(bank_parts) < 2:
