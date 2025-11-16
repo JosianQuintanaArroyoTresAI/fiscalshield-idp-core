@@ -64,8 +64,55 @@ classes:
                 Transaction amount (positive for deposits, negative for
                 withdrawals)
               evaluation_method: NUMERIC_EXACT
-          itemDescription: Individual transaction record
-        description: List of all transactions in the statement period
+            - name: CounterpartyName
+              description: >-
+                Name of the counterparty (merchant, company, or individual). 
+                Extract the primary entity name from the transaction description.
+                If not explicitly stated or unclear, return "NOT_AVAILABLE".
+                Examples: "GITHUB, INC." from "GITHUB, INC. SAN FRANCISCO USA", 
+                "TESCO" from "TESCO SUPERSTORE 1234".
+                CRITICAL: Do NOT hallucinate or guess - only extract if clearly visible.
+              evaluation_threshold: '0.8'
+              evaluation_method: FUZZY
+            - name: Direction
+              description: >-
+                Transaction direction: "INBOUND" for money received (deposits, credits) 
+                or "OUTBOUND" for money sent (withdrawals, debits, payments).
+                Look for indicators like DR/CR, DEBIT/CREDIT, negative/positive amounts.
+                If amount is positive = INBOUND, if negative = OUTBOUND.
+                If unclear, return "UNKNOWN".
+                CRITICAL: Base this on actual indicators in the statement, not assumptions.
+              evaluation_threshold: '0.95'
+              evaluation_method: EXACT
+            - name: PaymentMethod
+              description: >-
+                Payment method or transaction type. Look for explicit keywords in description:
+                "CARD", "CARD PAYMENT", "ATM", "CASH", "BACS", "CHAPS", "FASTER PAYMENT" (or "FP"),
+                "DIRECT DEBIT" (or "DD"), "STANDING ORDER" (or "SO"), "CHEQUE", "TRANSFER", "ONLINE".
+                Extract the most specific method found.
+                If no payment method keywords found, return "UNKNOWN".
+                CRITICAL: Only extract if explicitly mentioned - do NOT infer payment type.
+              evaluation_threshold: '0.9'
+              evaluation_method: FUZZY
+            - name: CounterpartyCountry
+              description: >-
+                Country of the counterparty if explicitly stated in transaction description.
+                Look for: country names (USA, UK, GERMANY), country codes (US, GB, DE),
+                or city + country patterns ("SAN FRANCISCO USA", "LONDON GB").
+                If clearly stated, extract country code (2-letter ISO: US, GB, DE).
+                If not explicitly mentioned, return "NOT_AVAILABLE".
+                CRITICAL: Do NOT infer country from company names - only extract if location text is present.
+              evaluation_threshold: '0.7'
+              evaluation_method: FUZZY
+            - name: Reference
+              description: >-
+                Transaction reference number, invoice number, or additional reference text.
+                Look for: reference numbers, invoice IDs, transaction IDs, or secondary description text.
+                If no reference information available, return "NOT_AVAILABLE".
+              evaluation_threshold: '0.8'
+              evaluation_method: FUZZY
+          itemDescription: Individual transaction record with enhanced compliance fields
+        description: List of all transactions in the statement period with counterparty and payment details
         attributeType: list
 classification:
   maxPagesForClassification: "ALL"
@@ -260,6 +307,13 @@ extraction:
             - When a mark touches multiple options, analyze which option was most likely intended based on position and density. For handwritten checks, the mark typically flows from the selected checkbox outward.
             - Carefully analyze visual cues and contextual hints. Think from a human perspective, anticipate natural tendencies, and apply thoughtful reasoning to make the best possible judgment.
         10. Think step by step first and then answer.
+        11. CRITICAL ANTI-HALLUCINATION RULES FOR BANK TRANSACTIONS:
+         11.A. CounterpartyName: Only extract merchant/company names that are EXPLICITLY visible in the transaction description. Do NOT invent names.
+         11.B. Direction: Base on actual transaction indicators (DR/CR, DEBIT/CREDIT, positive/negative amounts). If truly unclear, use "UNKNOWN" - never guess.
+         11.C. PaymentMethod: Only extract if keywords like CARD, ATM, BACS, DD, SO are EXPLICITLY present. If not mentioned, return "UNKNOWN" - do NOT infer from context.
+         11.D. CounterpartyCountry: Only extract if country name or code is EXPLICITLY stated (e.g., "USA", "GB", "LONDON UK"). Do NOT guess country from merchant name - use "NOT_AVAILABLE" if not stated.
+         11.E. Reference: Only extract actual reference numbers or IDs visible in the statement. If no reference shown, use "NOT_AVAILABLE".
+         11.F. For ALL optional fields: Better to return "NOT_AVAILABLE" or "UNKNOWN" than to hallucinate data. Accuracy over completeness.
 
     </extraction-guidelines>
 

@@ -106,19 +106,101 @@ def get_day_of_week(date_string):
     except:
         return "Unknown"
 
+def get_counterparty_name(transaction: Dict) -> str:
+    """Extract counterparty name with fallback to description"""
+    counterparty = transaction.get('CounterpartyName')
+    if counterparty and counterparty != 'NOT_AVAILABLE':
+        return counterparty
+    # Fallback to description for backward compatibility
+    return transaction.get('TransactionDescription') or transaction.get('Description') or 'Unknown'
+
+def get_direction(transaction: Dict) -> str:
+    """Extract transaction direction with fallback logic"""
+    # First, check for new Direction field
+    direction = transaction.get('Direction')
+    if direction and direction != 'UNKNOWN':
+        return direction
+    
+    # Fallback: infer from TransactionType
+    txn_type = transaction.get('TransactionType', '').upper()
+    if txn_type == 'DEBIT':
+        return 'OUTBOUND'
+    elif txn_type == 'CREDIT':
+        return 'INBOUND'
+    
+    # Fallback: infer from MoneyIn/MoneyOut
+    if transaction.get('MoneyOut'):
+        return 'OUTBOUND'
+    elif transaction.get('MoneyIn'):
+        return 'INBOUND'
+    
+    # Fallback: infer from amount sign
+    amount = transaction.get('TransactionAmount')
+    if amount:
+        try:
+            amount_val = float(amount)
+            return 'INBOUND' if amount_val > 0 else 'OUTBOUND'
+        except:
+            pass
+    
+    return 'UNKNOWN'
+
+def get_payment_method(transaction: Dict) -> str:
+    """Extract payment method with fallback to description parsing"""
+    # First, check for new PaymentMethod field
+    method = transaction.get('PaymentMethod')
+    if method and method != 'UNKNOWN':
+        return method
+    
+    # Fallback: infer from description
+    description = transaction.get('TransactionDescription') or transaction.get('Description') or ''
+    description_upper = description.upper()
+    
+    # Common payment method keywords
+    if 'CARD' in description_upper or 'VISA' in description_upper or 'MASTERCARD' in description_upper:
+        return 'CARD'
+    elif 'ATM' in description_upper:
+        return 'ATM'
+    elif 'CASH' in description_upper:
+        return 'CASH'
+    elif 'BACS' in description_upper:
+        return 'BACS'
+    elif 'CHAPS' in description_upper:
+        return 'CHAPS'
+    elif 'FP' in description_upper or 'FASTER PAYMENT' in description_upper:
+        return 'FASTER_PAYMENT'
+    elif 'DD' in description_upper or 'DIRECT DEBIT' in description_upper:
+        return 'DIRECT_DEBIT'
+    elif 'SO' in description_upper or 'STANDING ORDER' in description_upper:
+        return 'STANDING_ORDER'
+    elif 'CHQ' in description_upper or 'CHEQUE' in description_upper:
+        return 'CHEQUE'
+    elif 'TRANSFER' in description_upper:
+        return 'TRANSFER'
+    
+    return 'UNKNOWN'
+
 def create_batch_categorization_prompt(transaction_batch, categories: str):
     """Create sophisticated prompt for Claude to categorize bank transactions"""
     
     # Convert transactions to formatted text with context
     transaction_list = []
     for transaction in transaction_batch:
+        counterparty = get_counterparty_name(transaction)
+        direction = get_direction(transaction)
+        payment_method = get_payment_method(transaction)
+        country = transaction.get('CounterpartyCountry', 'NOT_AVAILABLE')
+        
         transaction_text = f"""
 Transaction ID: {transaction.get('TransactionId', 'Unknown')}
 Date: {transaction.get('TransactionDate') or 'Unknown'}
 Day of Week: {get_day_of_week(transaction.get('TransactionDate'))}
-Description: {transaction.get('TransactionDescription') or 'No description'}
-Amount: £{transaction.get('TransactionAmount') or '0'}
-Type: {transaction.get('TransactionType') or 'Unknown'} 
+Counterparty: {counterparty}
+Description: {transaction.get('TransactionDescription') or transaction.get('Description') or 'No description'}
+Amount: £{transaction.get('TransactionAmount') or transaction.get('MoneyOut') or transaction.get('MoneyIn') or '0'}
+Direction: {direction}
+Payment Method: {payment_method}
+Country: {country if country and country != 'NOT_AVAILABLE' else 'Not stated'}
 Reference: {transaction.get('Reference') or 'N/A'}
 """
         transaction_list.append(transaction_text)
