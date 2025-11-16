@@ -82,22 +82,25 @@ def lambda_handler(event, context):
         print(f"Input: {json.dumps(execution_input)}")
         
         # Start Step Functions execution
-        response = stepfunctions.start_execution(
-            stateMachineArn=STATE_MACHINE_ARN,
-            name=execution_name,
-            input=json.dumps(execution_input)
-        )
-        
-        execution_arn = response['executionArn']
-        
-        print(f"Execution started successfully: {execution_arn}")
-        
-        return {
-            'success': True,
-            'message': f'Transaction analysis workflow started for company {company_number}',
-            'executionArn': execution_arn,
-            'executionName': execution_name
-        }
+    execution = stepfunctions.start_execution(
+        stateMachineArn=STATE_MACHINE_ARN,
+        name=execution_name,
+        input=json.dumps({
+            'companyNumber': company_number
+        })
+    )
+    
+    logger.info(f"Started Step Functions execution: {execution['executionArn']}")
+    
+    # Extract execution name from ARN
+    execution_name_from_arn = execution['executionArn'].split(':')[-1]
+    
+    return {
+        'success': True,
+        'message': f'Transaction analysis workflow started successfully',
+        'executionArn': execution['executionArn'],
+        'executionName': execution_name_from_arn
+    }
         
     except stepfunctions.exceptions.ExecutionAlreadyExists:
         # Handle duplicate execution (e.g., user clicked button twice)

@@ -358,6 +358,8 @@ type TransactionAnalysisResponse @aws_cognito_user_pools {
   message: String!
   pending_count: Int
   batches_queued: Int
+  executionArn: String
+  executionName: String
 }
 
 type Mutation  {
