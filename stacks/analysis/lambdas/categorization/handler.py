@@ -318,15 +318,13 @@ def get_transactions_by_ids(transaction_ids: List[str], company_number: str, use
     
     for transaction_id in transaction_ids:
         try:
-            # Query using GSI6PK for company-level access
+            # Query by primary key using PK (UserId) and SK (TransactionId)
+            # This is more efficient than querying a GSI
             response = extraction_table.query(
-                IndexName='GSI6-ClientTypeDate',
-                KeyConditionExpression='GSI6PK = :gsi6pk',
-                FilterExpression='TransactionId = :txn_id AND UserId = :user_id',
+                KeyConditionExpression='PK = :pk AND SK = :sk',
                 ExpressionAttributeValues={
-                    ':gsi6pk': f"client#{company_number}#type#BANK_STATEMENT",
-                    ':txn_id': transaction_id,
-                    ':user_id': user_id
+                    ':pk': f"USER#{user_id}",
+                    ':sk': f"TRANSACTION#{transaction_id}"
                 }
             )
             
