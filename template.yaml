@@ -5662,6 +5662,7 @@ Resources:
                   - !GetAtt ListUserCompaniesFunction.Arn
                   - !GetAtt DeleteUserCompanyFunction.Arn
                   - !GetAtt ListExtractionResultsFunction.Arn
+                  - !GetAtt TriggerTransactionAnalysisFunction.Arn
 
   # Lambda function for Create Document resolver
   CreateDocumentResolverFunction:
