@@ -1,6 +1,5 @@
-import { gql } from '@apollo/client';
-
-export const TRIGGER_TRANSACTION_ANALYSIS = gql`
+// GraphQL mutation for triggering transaction analysis workflow
+export const TRIGGER_TRANSACTION_ANALYSIS = `
   mutation TriggerTransactionAnalysis($companyNumber: String!) {
     triggerTransactionAnalysis(companyNumber: $companyNumber) {
       success
