@@ -116,7 +116,7 @@ LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')
 EXTRACTION_RESULTS_TABLE = os.environ.get('EXTRACTION_RESULTS_TABLE')
 CONFIGURATION_TABLE = os.environ.get('CONFIGURATION_TABLE')
 TRACKING_TABLE = os.environ.get('TRACKING_TABLE')
-BEDROCK_MODEL_ID = os.environ.get('BEDROCK_MODEL_ID', 'anthropic.claude-3-7-sonnet-20250219-v1:0')
+BEDROCK_MODEL_ID = os.environ.get('BEDROCK_MODEL_ID', 'eu.anthropic.claude-3-7-sonnet-20250219-v1:0')
 AWS_REGION = os.environ.get('AWS_REGION', 'eu-central-1')
 BEDROCK_INFERENCE_PROFILE_ARN = os.environ.get('BEDROCK_INFERENCE_PROFILE_ARN', '').strip()
 FALLBACK_BEDROCK_MODEL_ID = os.environ.get('FALLBACK_BEDROCK_MODEL_ID', '').strip()
@@ -1131,11 +1131,13 @@ def lambda_handler(event, context):
         log_with_timestamp(f"🔍 Extracted metadata - ID: {document_id}, User: {user_id}, Client: {client_id}, Company: {company_name} ({company_number})")
         
         # CRITICAL SECURITY: Validate required fields to prevent document leaks between users/companies
-        # Both user_id and client_id MUST be present to ensure proper document isolation
+        # Both user_id and client_id (company_number) MUST be present to ensure proper document isolation
         if not all([document_id, section_id, user_id, client_id]):
             raise ValueError(
-                f"Missing required fields in event: document_id={document_id}, "
-                f"section_id={section_id}, user_id={user_id}, client_id={client_id}"
+                f"SECURITY ERROR: Missing required fields for document isolation. "
+                f"document_id={document_id}, section_id={section_id}, "
+                f"user_id={user_id}, client_id={client_id}, company_number={company_number}. "
+                f"All bank statements MUST be associated with a company to prevent data leakage."
             )
         
         log_with_timestamp(

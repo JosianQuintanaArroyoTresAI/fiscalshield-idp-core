@@ -17,6 +17,7 @@ set -e
 STACK_NAME="${STACK_NAME:-fiscalshield-idp-dev}"
 REGION="${REGION:-eu-central-1}"
 BUCKET_BASENAME="${BUCKET_BASENAME:-fiscalshield-templates}"
+AUTO_REBUILD="${AUTO_REBUILD:-true}"  # Set to false to skip auto-rebuild
 
 if [ -f "VERSION" ]; then
     ARTIFACT_VERSION=$(tr -d '\r' < VERSION)
@@ -146,8 +147,40 @@ for func_def in "${FUNCTIONS[@]}"; do
     
     # Check if we should use SAM-built package or build locally
     if [ -n "$sam_build_path" ]; then
+        # Auto-rebuild if enabled and build directory doesn't exist or source is newer
+        if [ "$AUTO_REBUILD" = "true" ]; then
+            SAM_PROJECT_DIR=$(dirname "$sam_build_path" | sed 's|/.aws-sam/build||')
+            
+            # Check if build is stale (source newer than build or build doesn't exist)
+            REBUILD_NEEDED=false
+            
+            if [ ! -d "$sam_build_path" ]; then
+                echo "   ℹ️  Build directory not found, will rebuild..."
+                REBUILD_NEEDED=true
+            else
+                # Check if any source file is newer than the build
+                NEWEST_SOURCE=$(find "$SAM_PROJECT_DIR/lambdas" -type f -name "*.py" -newer "$sam_build_path" 2>/dev/null | head -1)
+                if [ -n "$NEWEST_SOURCE" ]; then
+                    echo "   ℹ️  Source code is newer than build, will rebuild..."
+                    REBUILD_NEEDED=true
+                fi
+            fi
+            
+            if [ "$REBUILD_NEEDED" = "true" ]; then
+                echo "   🔨 Running SAM build in $SAM_PROJECT_DIR..."
+                (cd "$SAM_PROJECT_DIR" && sam build --config-env dev 2>&1 | grep -E "(Building|Succeeded|Failed)" || true)
+                
+                if [ ! -d "$sam_build_path" ]; then
+                    echo "   ❌ SAM build failed, skipping..."
+                    continue
+                fi
+                echo "   ✅ Build complete!"
+            fi
+        fi
+        
         if [ ! -d "$sam_build_path" ]; then
             echo "   ⚠️  SAM build directory not found: $sam_build_path, skipping..."
+            echo "   💡 Hint: Run 'cd $SAM_PROJECT_DIR && sam build' or set AUTO_REBUILD=true"
             continue
         fi
         

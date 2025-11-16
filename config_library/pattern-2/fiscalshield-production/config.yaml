@@ -365,12 +365,17 @@ classification:
 
 # Extraction Configuration
 extraction:
+  model: eu.anthropic.claude-3-7-sonnet-20250219-v1:0
+  fallback_models:
+    - eu.anthropic.claude-3-5-sonnet-20240620-v1:0
+    - eu.amazon.nova-pro-v1:0
   agentic:
     enabled: false
     review_agent: false
   image:
     target_width: ""
     target_height: ""
+  temperature: "0.0"
   top_p: "0.1"
   max_tokens: "10000"
   top_k: "5"
