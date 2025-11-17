@@ -18,12 +18,15 @@ import {
   Button,
   ProgressBar,
   Popover,
+  ExpandableSection,
+  Link,
 } from '@awsui/components-react';
 
 import { useCompany } from '../../contexts/company';
 import { COMPANY_SELECT_PATH } from '../../routes/constants';
 import GenAIIDPTopNavigation from '../genai-idp-top-navigation';
 import { fetchExtractionResults, formatBankStatementData, DOCUMENT_TYPES } from '../../services/extractionService';
+import TransactionDetailDrawer from './TransactionDetailDrawer';
 
 import '@awsui/global-styles/index.css';
 
@@ -36,6 +39,8 @@ const BankStatementInsights = () => {
   const [transactions, setTransactions] = useState([]);
   const [loadingTransactions, setLoadingTransactions] = useState(false);
   const [error, setError] = useState(null);
+  const [expandedItems, setExpandedItems] = useState(new Set());
+  const [selectedTransaction, setSelectedTransaction] = useState(null);
 
   useEffect(() => {
     // Redirect if no company selected
@@ -128,6 +133,115 @@ const BankStatementInsights = () => {
       </Box>
     </Container>
   );
+
+  );
+  };
+
+  const toggleExpanded = (itemId) => {
+    const newExpanded = new Set(expandedItems);
+    if (newExpanded.has(itemId)) {
+      newExpanded.delete(itemId);
+    } else {
+      newExpanded.add(itemId);
+    }
+    setExpandedItems(newExpanded);
+  };
+
+  const renderExpandedContent = (item) => {
+    if (item.analysisStatus !== 'ANALYZED') {
+      return (
+        <Box padding="l" color="text-body-secondary">
+          <SpaceBetween size="s">
+            <Box>This transaction has not been analyzed yet.</Box>
+            <Box variant="small">
+              Run transaction analysis to see detailed compliance information, categorization reasoning, and risk
+              assessment.
+            </Box>
+          </SpaceBetween>
+        </Box>
+      );
+    }
+
+    const rawData = item.rawData || {};
+
+    return (
+      <Box padding="l" variant="div">
+        <SpaceBetween size="m">
+          {/* Transaction Summary */}
+          <ColumnLayout columns={3} variant="text-grid">
+            <div>
+              <Box variant="awsui-key-label">Counterparty</Box>
+              <Box>{rawData.CounterpartyName || 'N/A'}</Box>
+            </div>
+            <div>
+              <Box variant="awsui-key-label">Payment Method</Box>
+              <Badge>{rawData.PaymentMethod || 'N/A'}</Badge>
+            </div>
+            <div>
+              <Box variant="awsui-key-label">Direction</Box>
+              <Badge color={rawData.Direction === 'INBOUND' ? 'green' : 'blue'}>
+                {rawData.Direction || 'N/A'}
+              </Badge>
+            </div>
+          </ColumnLayout>
+
+          {/* Categorization Reasoning */}
+          {rawData.CategorizationReasoning && (
+            <div>
+              <Box variant="h4" padding={{ bottom: 'xs' }}>
+                Categorization Reasoning
+              </Box>
+              <Box variant="p" color="text-body-secondary">
+                {rawData.CategorizationReasoning}
+              </Box>
+            </div>
+          )}
+
+          {/* Risk Flags Detail */}
+          {rawData.RiskFlags && rawData.RiskFlags.length > 0 && rawData.RiskFlags[0] !== 'CLEAN' && (
+            <div>
+              <Box variant="h4" padding={{ bottom: 'xs' }}>
+                Risk Flags
+              </Box>
+              <SpaceBetween direction="horizontal" size="xs">
+                {rawData.RiskFlags.map((flag, idx) => (
+                  <Badge key={idx} color="red">
+                    {flag.replace(/_/g, ' ')}
+                  </Badge>
+                ))}
+              </SpaceBetween>
+            </div>
+          )}
+
+          {/* Compliance Reasons */}
+          {rawData.ComplianceReasons && rawData.ComplianceReasons.length > 0 && (
+            <div>
+              <Box variant="h4" padding={{ bottom: 'xs' }}>
+                Compliance Notes
+              </Box>
+              <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                {rawData.ComplianceReasons.map((reason, idx) => (
+                  <li key={idx}>
+                    <Box variant="small">{reason}</Box>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Actions */}
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button variant="primary" onClick={() => setSelectedTransaction(item)}>
+              View Full Details
+            </Button>
+            {rawData.SourcePage && (
+              <Button iconName="external">View Source Document (Page {rawData.SourcePage})</Button>
+            )}
+          </SpaceBetween>
+        </SpaceBetween>
+      </Box>
+    );
+  };
 
   const getComplianceScoreColor = (score) => {
     if (!score) return 'grey';
@@ -249,6 +363,21 @@ const BankStatementInsights = () => {
 
         <Table
           columnDefinitions={[
+            {
+              id: 'expander',
+              header: '',
+              cell: (item) => (
+                <Button
+                  variant="icon"
+                  iconName={expandedItems.has(item.id) ? 'angle-down' : 'angle-right'}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleExpanded(item.id);
+                  }}
+                />
+              ),
+              width: 50,
+            },
             {
               id: 'date',
               header: 'Date',
@@ -377,6 +506,15 @@ const BankStatementInsights = () => {
           loadingText="Loading transactions"
           sortingDisabled={false}
           variant="container"
+          expandableRows={{
+            getItemChildren: (item) => {
+              if (!expandedItems.has(item.id)) return [];
+              return [{ content: renderExpandedContent(item) }];
+            },
+            isItemExpandable: () => true,
+            expandedItems: Array.from(expandedItems).map((id) => transactions.find((t) => t.id === id)),
+            onExpandableItemToggle: ({ detail }) => toggleExpanded(detail.item.id),
+          }}
           empty={
             <Box textAlign="center" color="inherit">
               <b>No transactions</b>
@@ -460,6 +598,13 @@ const BankStatementInsights = () => {
           ]}
         />
       </SpaceBetween>
+
+      {/* Transaction Detail Drawer */}
+      <TransactionDetailDrawer
+        transaction={selectedTransaction}
+        visible={!!selectedTransaction}
+        onDismiss={() => setSelectedTransaction(null)}
+      />
     </>
   );
 };
