@@ -1,0 +1,257 @@
+{
+  "version": "2025-02-01",
+  "last_updated": "2025-02-01",
+  "source": "FATF High-Risk Jurisdictions (February 2025) + OFAC/EU/UK Sanctions",
+  "update_frequency": "Quarterly (February, June, October)",
+  "next_update_due": "2025-06-01",
+  "countries": {
+    "PRK": {
+      "name": "North Korea (Democratic People's Republic of Korea)",
+      "iso3": "PRK",
+      "iso2": "KP",
+      "risk_level": "CRITICAL",
+      "risk_score": 100,
+      "sources": ["FATF", "OFAC", "EU", "UK"],
+      "category": "FATF High-Risk"
+    },
+    "IRN": {
+      "name": "Iran (Islamic Republic of Iran)",
+      "iso3": "IRN",
+      "iso2": "IR",
+      "risk_level": "CRITICAL",
+      "risk_score": 100,
+      "sources": ["FATF", "OFAC", "EU", "UK"],
+      "category": "FATF High-Risk"
+    },
+    "MMR": {
+      "name": "Myanmar (Burma)",
+      "iso3": "MMR",
+      "iso2": "MM",
+      "risk_level": "HIGH",
+      "risk_score": 90,
+      "sources": ["FATF", "OFAC", "UK"],
+      "category": "FATF High-Risk"
+    },
+    "SYR": {
+      "name": "Syria (Syrian Arab Republic)",
+      "iso3": "SYR",
+      "iso2": "SY",
+      "risk_level": "CRITICAL",
+      "risk_score": 100,
+      "sources": ["FATF", "OFAC", "EU", "UK"],
+      "category": "FATF Increased Monitoring + Sanctions"
+    },
+    "YEM": {
+      "name": "Yemen",
+      "iso3": "YEM",
+      "iso2": "YE",
+      "risk_level": "HIGH",
+      "risk_score": 85,
+      "sources": ["FATF", "OFAC"],
+      "category": "FATF Increased Monitoring"
+    },
+    "RUS": {
+      "name": "Russia (Russian Federation)",
+      "iso3": "RUS",
+      "iso2": "RU",
+      "risk_level": "HIGH",
+      "risk_score": 95,
+      "sources": ["OFAC", "EU", "UK"],
+      "category": "Major Sanctions"
+    },
+    "BLR": {
+      "name": "Belarus",
+      "iso3": "BLR",
+      "iso2": "BY",
+      "risk_level": "HIGH",
+      "risk_score": 90,
+      "sources": ["OFAC", "EU", "UK"],
+      "category": "Major Sanctions"
+    },
+    "VEN": {
+      "name": "Venezuela (Bolivarian Republic of Venezuela)",
+      "iso3": "VEN",
+      "iso2": "VE",
+      "risk_level": "HIGH",
+      "risk_score": 85,
+      "sources": ["OFAC"],
+      "category": "OFAC Sanctions"
+    },
+    "CUB": {
+      "name": "Cuba",
+      "iso3": "CUB",
+      "iso2": "CU",
+      "risk_level": "HIGH",
+      "risk_score": 80,
+      "sources": ["OFAC"],
+      "category": "OFAC Sanctions"
+    },
+    "SDN": {
+      "name": "Sudan",
+      "iso3": "SDN",
+      "iso2": "SD",
+      "risk_level": "HIGH",
+      "risk_score": 75,
+      "sources": ["OFAC"],
+      "category": "OFAC Sanctions"
+    },
+    "BGR": {
+      "name": "Bulgaria",
+      "iso3": "BGR",
+      "iso2": "BG",
+      "risk_level": "MEDIUM",
+      "risk_score": 60,
+      "sources": ["FATF"],
+      "category": "FATF Increased Monitoring"
+    },
+    "BFA": {
+      "name": "Burkina Faso",
+      "iso3": "BFA",
+      "iso2": "BF",
+      "risk_level": "MEDIUM",
+      "risk_score": 60,
+      "sources": ["FATF"],
+      "category": "FATF Increased Monitoring"
+    },
+    "CMR": {
+      "name": "Cameroon",
+      "iso3": "CMR",
+      "iso2": "CM",
+      "risk_level": "MEDIUM",
+      "risk_score": 60,
+      "sources": ["FATF"],
+      "category": "FATF Increased Monitoring"
+    },
+    "HTI": {
+      "name": "Haiti",
+      "iso3": "HTI",
+      "iso2": "HT",
+      "risk_level": "MEDIUM",
+      "risk_score": 60,
+      "sources": ["FATF"],
+      "category": "FATF Increased Monitoring"
+    },
+    "JAM": {
+      "name": "Jamaica",
+      "iso3": "JAM",
+      "iso2": "JM",
+      "risk_level": "MEDIUM",
+      "risk_score": 60,
+      "sources": ["FATF"],
+      "category": "FATF Increased Monitoring"
+    },
+    "MLI": {
+      "name": "Mali",
+      "iso3": "MLI",
+      "iso2": "ML",
+      "risk_level": "MEDIUM",
+      "risk_score": 60,
+      "sources": ["FATF"],
+      "category": "FATF Increased Monitoring"
+    },
+    "MOZ": {
+      "name": "Mozambique",
+      "iso3": "MOZ",
+      "iso2": "MZ",
+      "risk_level": "MEDIUM",
+      "risk_score": 60,
+      "sources": ["FATF"],
+      "category": "FATF Increased Monitoring"
+    },
+    "NGA": {
+      "name": "Nigeria",
+      "iso3": "NGA",
+      "iso2": "NG",
+      "risk_level": "MEDIUM",
+      "risk_score": 60,
+      "sources": ["FATF"],
+      "category": "FATF Increased Monitoring"
+    },
+    "PHL": {
+      "name": "Philippines",
+      "iso3": "PHL",
+      "iso2": "PH",
+      "risk_level": "MEDIUM",
+      "risk_score": 60,
+      "sources": ["FATF"],
+      "category": "FATF Increased Monitoring"
+    },
+    "SEN": {
+      "name": "Senegal",
+      "iso3": "SEN",
+      "iso2": "SN",
+      "risk_level": "MEDIUM",
+      "risk_score": 60,
+      "sources": ["FATF"],
+      "category": "FATF Increased Monitoring"
+    },
+    "ZAF": {
+      "name": "South Africa",
+      "iso3": "ZAF",
+      "iso2": "ZA",
+      "risk_level": "MEDIUM",
+      "risk_score": 60,
+      "sources": ["FATF"],
+      "category": "FATF Increased Monitoring"
+    },
+    "TZA": {
+      "name": "Tanzania (United Republic of Tanzania)",
+      "iso3": "TZA",
+      "iso2": "TZ",
+      "risk_level": "MEDIUM",
+      "risk_score": 60,
+      "sources": ["FATF"],
+      "category": "FATF Increased Monitoring"
+    },
+    "UGA": {
+      "name": "Uganda",
+      "iso3": "UGA",
+      "iso2": "UG",
+      "risk_level": "MEDIUM",
+      "risk_score": 60,
+      "sources": ["FATF"],
+      "category": "FATF Increased Monitoring"
+    },
+    "VNM": {
+      "name": "Vietnam",
+      "iso3": "VNM",
+      "iso2": "VN",
+      "risk_level": "MEDIUM",
+      "risk_score": 60,
+      "sources": ["FATF"],
+      "category": "FATF Increased Monitoring"
+    },
+    "ZWE": {
+      "name": "Zimbabwe",
+      "iso3": "ZWE",
+      "iso2": "ZW",
+      "risk_level": "MEDIUM",
+      "risk_score": 60,
+      "sources": ["OFAC", "UK"],
+      "category": "Targeted Sanctions"
+    }
+  },
+  "risk_levels": {
+    "CRITICAL": {
+      "score_range": [95, 100],
+      "description": "FATF Call for Action - Enhanced Due Diligence Required",
+      "action_required": "Block or seek senior management approval"
+    },
+    "HIGH": {
+      "score_range": [75, 94],
+      "description": "Major sanctions or FATF High-Risk",
+      "action_required": "Enhanced monitoring and documentation required"
+    },
+    "MEDIUM": {
+      "score_range": [50, 74],
+      "description": "FATF Increased Monitoring (Grey List)",
+      "action_required": "Standard monitoring with periodic review"
+    },
+    "LOW": {
+      "score_range": [0, 49],
+      "description": "No specific concerns",
+      "action_required": "Standard processing"
+    }
+  },
+  "update_instructions": "See UPDATE_INSTRUCTIONS.md for quarterly update process"
+}

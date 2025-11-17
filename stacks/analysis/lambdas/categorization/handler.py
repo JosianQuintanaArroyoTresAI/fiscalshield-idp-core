@@ -12,11 +12,341 @@ import os
 from datetime import datetime
 from decimal import Decimal
 from typing import Dict, List, Any, Optional
+from pathlib import Path
 
 def log_with_timestamp(message):
     """Helper function to log messages with timestamps"""
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
     print(f"[{timestamp}] {message}")
+
+# Load high-risk countries list at module level (cold start)
+HIGH_RISK_COUNTRIES = {}
+try:
+    countries_file = Path(__file__).parent / 'high_risk_countries.json'
+    with open(countries_file, 'r') as f:
+        country_data = json.load(f)
+        HIGH_RISK_COUNTRIES = country_data.get('countries', {})
+        log_with_timestamp(f"✅ Loaded {len(HIGH_RISK_COUNTRIES)} high-risk countries from {country_data.get('version', 'unknown version')}")
+except Exception as e:
+    log_with_timestamp(f"⚠️ Could not load high-risk countries list: {e}")
+    HIGH_RISK_COUNTRIES = {}
+
+
+# ==============================================================================
+# HMRC Compliance Risk Checking Functions
+# ==============================================================================
+
+def normalize_country_code(country: str) -> str:
+    """Normalize country code to ISO3 format for lookup."""
+    if not country or country == 'UNKNOWN':
+        return ''
+    
+    country_upper = country.strip().upper()
+    
+    # Common aliases
+    aliases = {
+        'UK': 'GBR',
+        'USA': 'USA',
+        'US': 'USA', 
+        'UNITED KINGDOM': 'GBR',
+        'UNITED STATES': 'USA',
+        'RUSSIA': 'RUS',
+        'NORTH KOREA': 'PRK'
+    }
+    
+    if country_upper in aliases:
+        return aliases[country_upper]
+    
+    # If already ISO3 (3 letters), return as-is
+    if len(country_upper) == 3 and country_upper.isalpha():
+        return country_upper
+    
+    # If ISO2 (2 letters), try to find in our list
+    if len(country_upper) == 2 and country_upper.isalpha():
+        for code, data in HIGH_RISK_COUNTRIES.items():
+            if data.get('iso2') == country_upper:
+                return code
+    
+    return country_upper
+
+
+def check_threshold_breach(amount: float) -> Dict[str, Any]:
+    """
+    Check if transaction breaches MLR 2017 threshold reporting requirements.
+    
+    Returns:
+        {
+            'flag': 'NONE' | 'HVD_10K' | 'GENERAL_15K',
+            'threshold_value': int,
+            'description': str
+        }
+    """
+    abs_amount = abs(amount)
+    
+    if abs_amount >= 15000:
+        return {
+            'flag': 'GENERAL_15K',
+            'threshold_value': 15000,
+            'description': f'Transaction £{abs_amount:,.2f} exceeds £15,000 threshold (MLR 2017 Reg 33)'
+        }
+    elif abs_amount >= 10000:
+        return {
+            'flag': 'HVD_10K',
+            'threshold_value': 10000,
+            'description': f'Transaction £{abs_amount:,.2f} exceeds £10,000 HVD threshold (MLR 2017 Reg 39)'
+        }
+    else:
+        return {
+            'flag': 'NONE',
+            'threshold_value': 0,
+            'description': ''
+        }
+
+
+def check_cash_risk(amount: float, payment_method: str) -> Dict[str, Any]:
+    """
+    Check for large cash transactions requiring source verification.
+    
+    Returns:
+        {
+            'flag': 'NONE' | 'LARGE_CASH_DEPOSIT' | 'LARGE_CASH_WITHDRAWAL',
+            'description': str
+        }
+    """
+    if not payment_method:
+        return {'flag': 'NONE', 'description': ''}
+    
+    abs_amount = abs(amount)
+    payment_upper = payment_method.upper()
+    
+    is_cash = any(keyword in payment_upper for keyword in ['CASH', 'ATM'])
+    
+    if is_cash and abs_amount >= 5000:
+        if amount > 0:
+            return {
+                'flag': 'LARGE_CASH_DEPOSIT',
+                'description': f'Large cash deposit £{abs_amount:,.2f} - source verification required'
+            }
+        else:
+            return {
+                'flag': 'LARGE_CASH_WITHDRAWAL',
+                'description': f'Large cash withdrawal £{abs_amount:,.2f} - unusual for business'
+            }
+    
+    return {'flag': 'NONE', 'description': ''}
+
+
+def check_geographic_risk(country: str) -> Dict[str, Any]:
+    """
+    Check if counterparty country is high-risk jurisdiction.
+    
+    Returns:
+        {
+            'flag': 'NONE' | 'FATF_CRITICAL' | 'FATF_HIGH' | 'FATF_MEDIUM',
+            'country_name': str,
+            'risk_level': str,
+            'risk_score': int,
+            'description': str
+        }
+    """
+    if not country or country == 'UNKNOWN':
+        return {'flag': 'NONE', 'country_name': country, 'risk_level': '', 'risk_score': 0, 'description': ''}
+    
+    # Normalize country code
+    country_code = normalize_country_code(country)
+    
+    # Check against high-risk list
+    if country_code in HIGH_RISK_COUNTRIES:
+        country_info = HIGH_RISK_COUNTRIES[country_code]
+        risk_level = country_info.get('risk_level', 'UNKNOWN')
+        risk_score = country_info.get('risk_score', 0)
+        
+        flag_map = {
+            'CRITICAL': 'FATF_CRITICAL',
+            'HIGH': 'FATF_HIGH',
+            'MEDIUM': 'FATF_MEDIUM'
+        }
+        
+        return {
+            'flag': flag_map.get(risk_level, 'FATF_MEDIUM'),
+            'country_name': country_info.get('name', country),
+            'risk_level': risk_level,
+            'risk_score': risk_score,
+            'description': f"{country_info.get('name', country)} - {country_info.get('category', 'High-Risk')} ({', '.join(country_info.get('sources', []))})"
+        }
+    
+    # Not in high-risk list
+    return {'flag': 'NONE', 'country_name': country, 'risk_level': 'LOW', 'risk_score': 0, 'description': ''}
+
+
+def check_structuring_pattern(amount: float) -> Dict[str, Any]:
+    """
+    Check for suspicious round numbers just below thresholds.
+    
+    Returns:
+        {
+            'flag': 'NONE' | 'SUSPICIOUS_ROUND_NUMBER',
+            'pattern': str,
+            'description': str
+        }
+    """
+    abs_amount = abs(amount)
+    
+    # Suspicious patterns: just below thresholds with round numbers
+    suspicious_patterns = [
+        (9999, 10000, '£9,999 - just below £10k threshold'),
+        (9998, 10000, '£9,998 - just below £10k threshold'),
+        (9995, 10000, '£9,995 - just below £10k threshold'),
+        (9990, 10000, '£9,990 - just below £10k threshold'),
+        (9900, 10000, '£9,900 - round number below £10k threshold'),
+        (9950, 10000, '£9,950 - round number below £10k threshold'),
+        (14999, 15000, '£14,999 - just below £15k threshold'),
+        (14998, 15000, '£14,998 - just below £15k threshold'),
+        (14995, 15000, '£14,995 - just below £15k threshold'),
+        (14990, 15000, '£14,990 - just below £15k threshold'),
+        (14900, 15000, '£14,900 - round number below £15k threshold'),
+        (14950, 15000, '£14,950 - round number below £15k threshold'),
+        (4999, 5000, '£4,999 - just below £5k cash threshold'),
+        (4998, 5000, '£4,998 - just below £5k cash threshold'),
+        (4995, 5000, '£4,995 - just below £5k cash threshold'),
+        (4990, 5000, '£4,990 - just below £5k cash threshold'),
+    ]
+    
+    for pattern_amount, threshold, description in suspicious_patterns:
+        if abs_amount == pattern_amount:
+            return {
+                'flag': 'SUSPICIOUS_ROUND_NUMBER',
+                'pattern': f'{pattern_amount}',
+                'description': description
+            }
+    
+    return {'flag': 'NONE', 'pattern': '', 'description': ''}
+
+
+def check_vague_description(description: str, amount: float) -> Dict[str, Any]:
+    """
+    Check for vague descriptions on high-value transactions.
+    
+    Returns:
+        {
+            'flag': 'NONE' | 'VAGUE_HIGH_VALUE',
+            'keywords_found': list,
+            'description': str
+        }
+    """
+    if not description:
+        return {'flag': 'NONE', 'keywords_found': [], 'description': ''}
+    
+    abs_amount = abs(amount)
+    
+    # Only flag if amount > £1,000
+    if abs_amount < 1000:
+        return {'flag': 'NONE', 'keywords_found': [], 'description': ''}
+    
+    desc_upper = description.upper()
+    
+    vague_keywords = [
+        'SERVICES', 'SERVICE', 'CONSULTANCY', 'CONSULTING', 'CONSULTANT',
+        'MISCELLANEOUS', 'MISC', 'VARIOUS', 'PAYMENT', 'TRANSFER',
+        'GENERAL', 'OTHER', 'SUNDRY', 'EXPENSES', 'EXPENSE'
+    ]
+    
+    found_keywords = [kw for kw in vague_keywords if kw in desc_upper]
+    
+    # Check if description is very short (< 10 chars excluding spaces)
+    cleaned_desc = re.sub(r'\s+', '', description)
+    is_short = len(cleaned_desc) < 10
+    
+    if found_keywords or is_short:
+        return {
+            'flag': 'VAGUE_HIGH_VALUE',
+            'keywords_found': found_keywords,
+            'description': f'High-value transaction (£{abs_amount:,.2f}) with vague description'
+        }
+    
+    return {'flag': 'NONE', 'keywords_found': [], 'description': ''}
+
+
+def calculate_compliance_risk_score(
+    threshold_check: Dict,
+    cash_check: Dict,
+    geo_check: Dict,
+    structuring_check: Dict,
+    vague_desc_check: Dict
+) -> Dict[str, Any]:
+    """
+    Calculate composite compliance risk score from all checks.
+    
+    Returns:
+        {
+            'score': int (0-100),
+            'tier': 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL',
+            'flags': list of active flags,
+            'reasons': list of risk reasons
+        }
+    """
+    score = 0
+    flags = []
+    reasons = []
+    
+    # Threshold breach: +40 points
+    if threshold_check['flag'] != 'NONE':
+        if threshold_check['flag'] == 'GENERAL_15K':
+            score += 40
+        elif threshold_check['flag'] == 'HVD_10K':
+            score += 35
+        flags.append(threshold_check['flag'])
+        reasons.append(threshold_check['description'])
+    
+    # Cash risk: +30 points
+    if cash_check['flag'] != 'NONE':
+        score += 30
+        flags.append(cash_check['flag'])
+        reasons.append(cash_check['description'])
+    
+    # Geographic risk: +50 (critical), +35 (high), +20 (medium)
+    if geo_check['flag'] != 'NONE':
+        if geo_check['flag'] == 'FATF_CRITICAL':
+            score += 50
+        elif geo_check['flag'] == 'FATF_HIGH':
+            score += 35
+        elif geo_check['flag'] == 'FATF_MEDIUM':
+            score += 20
+        flags.append(geo_check['flag'])
+        reasons.append(geo_check['description'])
+    
+    # Structuring: +25 points
+    if structuring_check['flag'] != 'NONE':
+        score += 25
+        flags.append(structuring_check['flag'])
+        reasons.append(structuring_check['description'])
+    
+    # Vague description: +15 points
+    if vague_desc_check['flag'] != 'NONE':
+        score += 15
+        flags.append(vague_desc_check['flag'])
+        reasons.append(vague_desc_check['description'])
+    
+    # Cap at 100
+    score = min(score, 100)
+    
+    # Determine tier
+    if score >= 80:
+        tier = 'CRITICAL'
+    elif score >= 60:
+        tier = 'HIGH'
+    elif score >= 30:
+        tier = 'MEDIUM'
+    else:
+        tier = 'LOW'
+    
+    return {
+        'score': score,
+        'tier': tier,
+        'flags': flags,
+        'reasons': reasons
+    }
+
 
 # AWS clients
 dynamodb = boto3.resource('dynamodb')
