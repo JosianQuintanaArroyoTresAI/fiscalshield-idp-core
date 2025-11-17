@@ -3,6 +3,7 @@
 
 /**
  * Service for fetching extraction results (invoices, bank statements)
+ * Updated: Nov 17, 2025 - Added transaction analysis field support
  */
 
 import { API, graphqlOperation, Logger } from 'aws-amplify';
