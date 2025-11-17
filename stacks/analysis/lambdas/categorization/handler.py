@@ -769,15 +769,15 @@ def get_transactions_by_ids(transaction_ids: List[str], company_number: str, use
     
     return transactions
 
-def update_transaction_analysis(pk: str, sk: str, analysis_result: Dict) -> bool:
-    """Update transaction record in DynamoDB with Claude's analysis"""
+def update_transaction_analysis(pk: str, sk: str, analysis_result: Dict, compliance_result: Dict) -> bool:
+    """Update transaction record in DynamoDB with Claude's analysis and compliance risk scores"""
     
     try:
         extraction_table = dynamodb.Table(EXTRACTION_RESULTS_TABLE)
         
         current_time = int(time.time())
         
-        # Build update expression with Claude's complete analysis
+        # Build update expression with Claude's complete analysis + compliance risk scores
         update_expression = """
             SET ExpenseCategory = :category,
                 CategorizationConfidence = :confidence,
@@ -788,7 +788,16 @@ def update_transaction_analysis(pk: str, sk: str, analysis_result: Dict) -> bool
                 HMRCConcern = :hmrc,
                 AnalysisStatus = :status,
                 AnalyzedAt = :timestamp,
-                UpdatedAt = :timestamp
+                UpdatedAt = :timestamp,
+                ComplianceRiskScore = :compliance_score,
+                ComplianceRiskTier = :compliance_tier,
+                ComplianceFlags = :compliance_flags,
+                ComplianceReasons = :compliance_reasons,
+                ThresholdFlag = :threshold_flag,
+                CashRiskFlag = :cash_flag,
+                GeographicRiskFlag = :geo_flag,
+                StructuringFlag = :structuring_flag,
+                VagueDescriptionFlag = :vague_flag
         """
         
         expression_values = {
@@ -800,7 +809,16 @@ def update_transaction_analysis(pk: str, sk: str, analysis_result: Dict) -> bool
             ':action': analysis_result['recommended_action'],
             ':hmrc': analysis_result['hmrc_concern'],
             ':status': 'ANALYZED',
-            ':timestamp': current_time
+            ':timestamp': current_time,
+            ':compliance_score': Decimal(str(compliance_result['score'])),
+            ':compliance_tier': compliance_result['tier'],
+            ':compliance_flags': compliance_result['flags'],
+            ':compliance_reasons': compliance_result['reasons'],
+            ':threshold_flag': compliance_result.get('threshold_flag', 'NONE'),
+            ':cash_flag': compliance_result.get('cash_flag', 'NONE'),
+            ':geo_flag': compliance_result.get('geo_flag', 'NONE'),
+            ':structuring_flag': compliance_result.get('structuring_flag', 'NONE'),
+            ':vague_flag': compliance_result.get('vague_flag', 'NONE')
         }
         
         # Perform the update
@@ -815,7 +833,8 @@ def update_transaction_analysis(pk: str, sk: str, analysis_result: Dict) -> bool
         
         log_with_timestamp(
             f"Updated transaction: {analysis_result['category']} "
-            f"(score: {analysis_result['legitimacy_score']}, action: {analysis_result['recommended_action']})"
+            f"(legitimacy: {analysis_result['legitimacy_score']}, compliance: {compliance_result['score']}/{compliance_result['tier']}, "
+            f"action: {analysis_result['recommended_action']})"
         )
         
         return True
@@ -858,7 +877,7 @@ def process_transaction_batch(message_body: Dict) -> Dict:
             'failed_transaction_ids': transaction_ids
         }
     
-    # Step 3: Update each transaction with analysis
+    # Step 3: Update each transaction with analysis and compliance checks
     successful_count = 0
     failed_transaction_ids = []
     
@@ -871,12 +890,44 @@ def process_transaction_batch(message_body: Dict) -> Dict:
             analysis = analysis_results[transaction_id]
             
             try:
-                if update_transaction_analysis(pk, sk, analysis):
+                # Run compliance risk checks
+                amount = float(transaction.get('TransactionAmount', 0))
+                description = transaction.get('TransactionDescription') or transaction.get('Description') or ''
+                payment_method = get_payment_method(transaction)
+                country = transaction.get('CounterpartyCountry', '')
+                
+                # Execute all compliance checks
+                threshold_check = check_threshold_breach(amount)
+                cash_check = check_cash_risk(amount, payment_method)
+                geo_check = check_geographic_risk(country)
+                structuring_check = check_structuring_pattern(amount)
+                vague_check = check_vague_description(description, amount)
+                
+                # Calculate composite risk score
+                compliance_risk = calculate_compliance_risk_score(
+                    threshold_check,
+                    cash_check,
+                    geo_check,
+                    structuring_check,
+                    vague_check
+                )
+                
+                # Add individual flags to compliance result for DynamoDB storage
+                compliance_risk['threshold_flag'] = threshold_check['flag']
+                compliance_risk['cash_flag'] = cash_check['flag']
+                compliance_risk['geo_flag'] = geo_check['flag']
+                compliance_risk['structuring_flag'] = structuring_check['flag']
+                compliance_risk['vague_flag'] = vague_check['flag']
+                
+                # Update DynamoDB with both analysis and compliance results
+                if update_transaction_analysis(pk, sk, analysis, compliance_risk):
                     successful_count += 1
-                    flags_summary = ', '.join(analysis['risk_flags'][:3])
+                    flags_summary = ', '.join(analysis['risk_flags'][:2])
+                    compliance_summary = f"{compliance_risk['score']}/{compliance_risk['tier']}"
                     log_with_timestamp(
                         f"✅ {transaction_id}: {analysis['category']} "
-                        f"(score: {analysis['legitimacy_score']}, flags: {flags_summary})"
+                        f"(legitimacy: {analysis['legitimacy_score']}, compliance: {compliance_summary}, "
+                        f"flags: {flags_summary})"
                     )
                 else:
                     failed_transaction_ids.append(transaction_id)
