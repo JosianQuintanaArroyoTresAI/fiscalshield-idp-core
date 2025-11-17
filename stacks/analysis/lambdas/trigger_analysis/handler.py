@@ -27,11 +27,22 @@ class DecimalEncoder(json.JSONEncoder):
         return super(DecimalEncoder, self).default(obj)
 
 
-def query_pending_transactions(company_number: str, user_id: str, limit: int = 1000) -> List[Dict]:
+def query_pending_transactions(company_number: str, user_id: str, max_items: int = 5000) -> List[Dict]:
     """
     Query pending transactions for a company/user from ExtractionResultsTable.
-    Uses GSI6-ClientTypeDate index (only projects UserId, TransactionAmount, etc. - NOT AnalysisStatus).
-    Filters by userId in query, then fetches full items and filters by AnalysisStatus in code.
+    Uses GSI6-ClientTypeDate index with pagination to handle large datasets.
+    
+    Note: GSI6 only projects UserId, TransactionAmount, etc. (NOT AnalysisStatus),
+    but DynamoDB automatically fetches ALL attributes for matched items, so we can
+    filter by AnalysisStatus in code after the query.
+    
+    Args:
+        company_number: Company number to filter transactions
+        user_id: User ID to filter transactions
+        max_items: Maximum number of items to fetch (default 5000, prevents runaway queries)
+    
+    Returns:
+        List of pending transactions (AnalysisStatus is None or 'PENDING')
     """
     
     extraction_table = dynamodb.Table(EXTRACTION_RESULTS_TABLE)
@@ -39,24 +50,37 @@ def query_pending_transactions(company_number: str, user_id: str, limit: int = 1
     print(f"Querying pending transactions for company {company_number}, user {user_id}")
     
     try:
-        # Query using GSI6 for company-level access
-        # Can only filter on UserId (which IS projected in GSI6)
-        # Cannot filter on AnalysisStatus (NOT projected in GSI6)
-        response = extraction_table.query(
-            IndexName='GSI6-ClientTypeDate',
-            KeyConditionExpression='GSI6PK = :gsi6pk',
-            FilterExpression='UserId = :user_id',
-            ExpressionAttributeValues={
-                ':gsi6pk': f"client#{company_number}#type#BANK_STATEMENT",
-                ':user_id': user_id
-            },
-            Limit=limit
-        )
+        all_items = []
+        last_evaluated_key = None
         
-        all_items = response.get('Items', [])
-        print(f"Found {len(all_items)} total transactions for user")
+        # Paginate through results to handle large datasets
+        while True:
+            query_params = {
+                'IndexName': 'GSI6-ClientTypeDate',
+                'KeyConditionExpression': 'GSI6PK = :gsi6pk',
+                'FilterExpression': 'UserId = :user_id',
+                'ExpressionAttributeValues': {
+                    ':gsi6pk': f"client#{company_number}#type#BANK_STATEMENT",
+                    ':user_id': user_id
+                }
+            }
+            
+            if last_evaluated_key:
+                query_params['ExclusiveStartKey'] = last_evaluated_key
+            
+            response = extraction_table.query(**query_params)
+            all_items.extend(response.get('Items', []))
+            
+            # Check if we have more pages
+            last_evaluated_key = response.get('LastEvaluatedKey')
+            
+            # Stop if no more pages or we've hit max_items limit
+            if not last_evaluated_key or len(all_items) >= max_items:
+                break
         
-        # Filter for pending transactions in code (since AnalysisStatus isn't in GSI6)
+        print(f"Found {len(all_items)} total transactions for user (paginated)")
+        
+        # Filter for pending transactions in code (since AnalysisStatus isn't in GSI6 projection)
         # Include transactions where AnalysisStatus doesn't exist OR equals 'PENDING'
         pending_items = [
             item for item in all_items 
@@ -64,7 +88,7 @@ def query_pending_transactions(company_number: str, user_id: str, limit: int = 1
         ]
         
         print(f"Found {len(pending_items)} pending transactions for analysis")
-        return pending_items
+        return pending_items[:max_items]  # Enforce max_items limit
         
     except Exception as e:
         print(f"Error querying pending transactions: {str(e)}")
