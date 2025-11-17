@@ -43,7 +43,7 @@ def query_pending_transactions(company_number: str, user_id: str, limit: int = 1
         # - Records where AnalysisStatus = 'PENDING', OR
         # - Records where AnalysisStatus attribute doesn't exist
         response = extraction_table.query(
-            IndexName='GSI6-ClientType',
+            IndexName='GSI6-ClientTypeDate',
             KeyConditionExpression='GSI6PK = :gsi6pk',
             FilterExpression='UserId = :user_id AND (attribute_not_exists(AnalysisStatus) OR AnalysisStatus = :status)',
             ExpressionAttributeValues={
