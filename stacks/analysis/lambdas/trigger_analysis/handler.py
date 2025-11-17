@@ -30,7 +30,7 @@ class DecimalEncoder(json.JSONEncoder):
 def query_pending_transactions(company_number: str, user_id: str, limit: int = 1000) -> List[Dict]:
     """
     Query pending transactions for a company/user from ExtractionResultsTable.
-    Uses GSI7-ClientTypeDate index which projects ALL attributes including AnalysisStatus.
+    Uses GSI6-ClientType index which projects ALL attributes including AnalysisStatus.
     """
     
     extraction_table = dynamodb.Table(EXTRACTION_RESULTS_TABLE)
@@ -38,12 +38,12 @@ def query_pending_transactions(company_number: str, user_id: str, limit: int = 1
     print(f"Querying pending transactions for company {company_number}, user {user_id}")
     
     try:
-        # Query using GSI7 for company-level access with ALL attributes
+        # Query using GSI6 for company-level access with ALL attributes
         # Note: AnalysisStatus might not exist on older records, so we filter for:
         # - Records where AnalysisStatus = 'PENDING', OR
         # - Records where AnalysisStatus attribute doesn't exist
         response = extraction_table.query(
-            IndexName='GSI7-ClientTypeDate',
+            IndexName='GSI6-ClientType',
             KeyConditionExpression='GSI6PK = :gsi6pk',
             FilterExpression='UserId = :user_id AND (attribute_not_exists(AnalysisStatus) OR AnalysisStatus = :status)',
             ExpressionAttributeValues={
