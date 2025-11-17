@@ -30,7 +30,8 @@ class DecimalEncoder(json.JSONEncoder):
 def query_pending_transactions(company_number: str, user_id: str, limit: int = 1000) -> List[Dict]:
     """
     Query pending transactions for a company/user from ExtractionResultsTable.
-    Uses GSI6-ClientType index which projects ALL attributes including AnalysisStatus.
+    Uses GSI6-ClientTypeDate index (only projects UserId, TransactionAmount, etc. - NOT AnalysisStatus).
+    Filters by userId in query, then fetches full items and filters by AnalysisStatus in code.
     """
     
     extraction_table = dynamodb.Table(EXTRACTION_RESULTS_TABLE)
@@ -38,26 +39,32 @@ def query_pending_transactions(company_number: str, user_id: str, limit: int = 1
     print(f"Querying pending transactions for company {company_number}, user {user_id}")
     
     try:
-        # Query using GSI6 for company-level access with ALL attributes
-        # Note: AnalysisStatus might not exist on older records, so we filter for:
-        # - Records where AnalysisStatus = 'PENDING', OR
-        # - Records where AnalysisStatus attribute doesn't exist
+        # Query using GSI6 for company-level access
+        # Can only filter on UserId (which IS projected in GSI6)
+        # Cannot filter on AnalysisStatus (NOT projected in GSI6)
         response = extraction_table.query(
             IndexName='GSI6-ClientTypeDate',
             KeyConditionExpression='GSI6PK = :gsi6pk',
-            FilterExpression='UserId = :user_id AND (attribute_not_exists(AnalysisStatus) OR AnalysisStatus = :status)',
+            FilterExpression='UserId = :user_id',
             ExpressionAttributeValues={
                 ':gsi6pk': f"client#{company_number}#type#BANK_STATEMENT",
-                ':user_id': user_id,
-                ':status': 'PENDING'
+                ':user_id': user_id
             },
             Limit=limit
         )
         
-        items = response.get('Items', [])
-        print(f"Found {len(items)} pending transactions for analysis")
+        all_items = response.get('Items', [])
+        print(f"Found {len(all_items)} total transactions for user")
         
-        return items
+        # Filter for pending transactions in code (since AnalysisStatus isn't in GSI6)
+        # Include transactions where AnalysisStatus doesn't exist OR equals 'PENDING'
+        pending_items = [
+            item for item in all_items 
+            if item.get('AnalysisStatus') in [None, 'PENDING']
+        ]
+        
+        print(f"Found {len(pending_items)} pending transactions for analysis")
+        return pending_items
         
     except Exception as e:
         print(f"Error querying pending transactions: {str(e)}")
