@@ -559,13 +559,8 @@ const DocumentList = () => {
                     if (result.success) {
                       console.log('Analysis started:', result.executionArn);
                       alert(
-                        `✓ Analysis started successfully!\n${result.message}\n\nExecution: ${result.executionName}`,
+                        `✓ Analysis started successfully!\n${result.message}\n\nExecution: ${result.executionName}\n\nRefresh the page in 30 seconds to see categorization results.`,
                       );
-
-                      // Refresh bank statements to show IN_PROGRESS status
-                      setTimeout(() => {
-                        loadBankStatements();
-                      }, 2000);
                     } else {
                       console.error('Analysis failed:', result.message);
                       alert(`✗ Analysis failed: ${result.message}`);
