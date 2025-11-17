@@ -305,6 +305,34 @@ type ExtractionResult @aws_cognito_user_pools @aws_iam {
   # HITL (Human-In-The-Loop) flags
   HITLRequired: Boolean
   HITLReason: String
+  # Transaction Analysis Fields
+  ExpenseCategory: String
+  CategorizationConfidence: String
+  ComplianceScore: Float
+  RiskFlags: [String]
+  CategorizationReasoning: String
+  RecommendedAction: String
+  HMRCConcern: Boolean
+  AnalyzedAt: AWSTimestamp
+  ComplianceRiskScore: Float
+  ComplianceRiskTier: String
+  ComplianceFlags: [String]
+  ComplianceReasons: [String]
+  ThresholdFlag: String
+  CashRiskFlag: String
+  GeographicRiskFlag: String
+  StructuringFlag: String
+  VagueDescriptionFlag: String
+  # HMRC Compliance Fields
+  CounterpartyName: String
+  Direction: String
+  PaymentMethod: String
+  CounterpartyCountry: String
+  # Extraction Confidence Scores
+  DateConfidence: Float
+  AmountConfidence: Float
+  DescriptionConfidence: Float
+  AccountInfoConfidence: Float
 }
 
 type ExtractionResultsConnection @aws_cognito_user_pools @aws_iam {
