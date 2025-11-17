@@ -531,7 +531,7 @@ const DocumentList = () => {
                     return;
                   }
 
-                  if (!user?.username) {
+                  if (!user?.attributes?.sub) {
                     console.error('No authenticated user found');
                     alert('✗ Error: User not authenticated');
                     return;
@@ -544,13 +544,13 @@ const DocumentList = () => {
                   setIsAnalysisRunning(true);
                   try {
                     console.log(
-                      `Starting analysis for company ${activeCompany.companyNumber}, user ${user.username} - ${pendingCount} pending transactions`,
+                      `Starting analysis for company ${activeCompany.companyNumber}, user ${user.attributes.sub} - ${pendingCount} pending transactions`,
                     );
 
                     const response = await API.graphql(
                       graphqlOperation(TRIGGER_TRANSACTION_ANALYSIS, {
                         companyNumber: activeCompany.companyNumber,
-                        userId: user.username,
+                        userId: user.attributes.sub,
                       }),
                     );
 
