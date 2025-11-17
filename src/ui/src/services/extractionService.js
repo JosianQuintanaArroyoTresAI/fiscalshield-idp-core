@@ -49,7 +49,10 @@ export const fetchExtractionResults = async (companyNumber, documentType, limit 
     logger.debug(`Fetched ${result.items.length} extraction results, hasMore: ${!!result.nextToken}`);
     console.log(`[EXTRACTION SERVICE] ✅ Fetched ${result.items.length} items`);
     console.log('[EXTRACTION SERVICE] First 2 items:', result.items.slice(0, 2));
-    console.log('[EXTRACTION SERVICE] Sample item fields:', result.items[0] ? Object.keys(result.items[0]) : 'No items');
+    console.log(
+      '[EXTRACTION SERVICE] Sample item fields:',
+      result.items[0] ? Object.keys(result.items[0]) : 'No items',
+    );
     console.log('[EXTRACTION SERVICE] Sample ExpenseCategory:', result.items[0]?.ExpenseCategory);
     console.log('[EXTRACTION SERVICE] Sample ComplianceScore:', result.items[0]?.ComplianceScore);
     console.log('[EXTRACTION SERVICE] Sample RiskFlags:', result.items[0]?.RiskFlags);
