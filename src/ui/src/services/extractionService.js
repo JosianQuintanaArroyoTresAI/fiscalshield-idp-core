@@ -145,6 +145,13 @@ export const formatBankStatementData = (extractionResult) => {
     processedDate: processedDate,
     processedAt: extractionResult.ProcessedAt,
     s3Uri: extractionResult.S3Uri,
+    // Include analysis fields for compliance view
+    expenseCategory: extractionResult.ExpenseCategory,
+    complianceScore: extractionResult.ComplianceScore,
+    riskFlags: extractionResult.RiskFlags,
+    recommendedAction: extractionResult.RecommendedAction,
+    complianceRiskScore: extractionResult.ComplianceRiskScore,
+    complianceRiskTier: extractionResult.ComplianceRiskTier,
     rawData: extractionResult,
   };
 };
