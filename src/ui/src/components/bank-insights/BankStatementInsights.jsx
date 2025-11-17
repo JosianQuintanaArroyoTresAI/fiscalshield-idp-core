@@ -65,6 +65,11 @@ const BankStatementInsights = () => {
 
       const formattedTransactions = result.items.map(formatBankStatementData);
       console.log('[BANK INSIGHTS] Loaded transactions:', formattedTransactions.length);
+      console.log('[BANK INSIGHTS] First formatted transaction:', formattedTransactions[0]);
+      console.log('[BANK INSIGHTS] First transaction rawData:', formattedTransactions[0]?.rawData);
+      console.log('[BANK INSIGHTS] First transaction expenseCategory:', formattedTransactions[0]?.expenseCategory);
+      console.log('[BANK INSIGHTS] First transaction complianceScore:', formattedTransactions[0]?.complianceScore);
+      console.log('[BANK INSIGHTS] First transaction analysisStatus:', formattedTransactions[0]?.analysisStatus);
       setTransactions(formattedTransactions);
     } catch (err) {
       console.error('[BANK INSIGHTS] Error loading transactions:', err);
@@ -394,7 +399,7 @@ const BankStatementInsights = () => {
                   return <Badge color="grey">Pending</Badge>;
                 }
                 return (
-                  item.rawData?.ExpenseCategory || (
+                  item.expenseCategory || (
                     <Box color="text-status-inactive" variant="small">
                       Uncategorized
                     </Box>
@@ -425,7 +430,7 @@ const BankStatementInsights = () => {
                   return <Badge color="grey">Pending</Badge>;
                 }
 
-                const score = item.rawData?.ComplianceScore;
+                const score = item.complianceScore;
                 if (!score)
                   return (
                     <Box color="text-status-inactive" variant="small">
@@ -458,7 +463,7 @@ const BankStatementInsights = () => {
                   return <Badge color="grey">Pending</Badge>;
                 }
 
-                const flags = item.rawData?.RiskFlags;
+                const flags = item.riskFlags;
                 if (!flags) return <Badge color="green">Clean</Badge>;
                 return renderRiskFlags(flags);
               },
@@ -472,7 +477,7 @@ const BankStatementInsights = () => {
                   return <Badge color="grey">Pending</Badge>;
                 }
 
-                const action = item.rawData?.RecommendedAction;
+                const action = item.recommendedAction;
                 if (!action)
                   return (
                     <Box color="text-status-inactive" variant="small">
