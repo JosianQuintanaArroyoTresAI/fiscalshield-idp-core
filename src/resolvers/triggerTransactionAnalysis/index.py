@@ -32,12 +32,13 @@ def lambda_handler(event, context):
     # Extract arguments from the GraphQL event
     arguments = event.get('arguments', {})
     company_number = arguments.get('companyNumber')
+    user_id = arguments.get('userId')
 
-    if not company_number:
-        logger.error("Missing required parameter: companyNumber")
+    if not company_number or not user_id:
+        logger.error("Missing required parameters: companyNumber and/or userId")
         return {
             'success': False,
-            'message': 'Missing required parameter: companyNumber',
+            'message': 'Missing required parameters: companyNumber and userId',
             'executionArn': None,
             'executionName': None,
         }
@@ -72,12 +73,13 @@ def lambda_handler(event, context):
         execution_name = f"categorization-{company_number}-{timestamp}"
 
         # Start Step Functions execution
-        logger.info(f"Starting execution: {execution_name}")
+        logger.info(f"Starting execution: {execution_name} for user {user_id}")
         response = stepfunctions.start_execution(
             stateMachineArn=state_machine_arn,
             name=execution_name,
             input=json.dumps({
                 'companyNumber': company_number,
+                'userId': user_id,
             }),
         )
 
