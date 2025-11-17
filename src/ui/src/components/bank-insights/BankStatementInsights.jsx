@@ -23,11 +23,7 @@ import {
 import { useCompany } from '../../contexts/company';
 import { COMPANY_SELECT_PATH } from '../../routes/constants';
 import GenAIIDPTopNavigation from '../genai-idp-top-navigation';
-import { 
-  fetchExtractionResults, 
-  formatBankStatementData, 
-  DOCUMENT_TYPES 
-} from '../../services/extractionService';
+import { fetchExtractionResults, formatBankStatementData, DOCUMENT_TYPES } from '../../services/extractionService';
 
 import '@awsui/global-styles/index.css';
 
@@ -60,11 +56,7 @@ const BankStatementInsights = () => {
 
     try {
       console.log('[BANK INSIGHTS] Loading transactions for:', activeCompany.companyNumber);
-      const result = await fetchExtractionResults(
-        activeCompany.companyNumber,
-        DOCUMENT_TYPES.BANK_STATEMENT,
-        100
-      );
+      const result = await fetchExtractionResults(activeCompany.companyNumber, DOCUMENT_TYPES.BANK_STATEMENT, 100);
 
       const formattedTransactions = result.items.map(formatBankStatementData);
       console.log('[BANK INSIGHTS] Loaded transactions:', formattedTransactions.length);
@@ -147,10 +139,10 @@ const BankStatementInsights = () => {
 
   const getRecommendedActionVariant = (action) => {
     const actionMap = {
-      'APPROVE': 'success',
-      'REVIEW_DOCUMENTATION': 'warning',
-      'INVESTIGATE': 'warning',
-      'REJECT': 'error',
+      APPROVE: 'success',
+      REVIEW_DOCUMENTATION: 'warning',
+      INVESTIGATE: 'warning',
+      REJECT: 'error',
     };
     return actionMap[action] || 'info';
   };
@@ -234,25 +226,22 @@ const BankStatementInsights = () => {
     }
 
     // Check if any transactions are pending analysis
-    const pendingCount = transactions.filter(t => t.analysisStatus !== 'ANALYZED').length;
+    const pendingCount = transactions.filter((t) => t.analysisStatus !== 'ANALYZED').length;
     const analyzedCount = transactions.length - pendingCount;
 
     return (
       <SpaceBetween size="l">
         {pendingCount > 0 && (
-          <Alert
-            type="info"
-            header={`${pendingCount} transaction${pendingCount > 1 ? 's' : ''} pending analysis`}
-          >
+          <Alert type="info" header={`${pendingCount} transaction${pendingCount > 1 ? 's' : ''} pending analysis`}>
             {analyzedCount > 0 ? (
               <Box>
-                {analyzedCount} of {transactions.length} transactions have been analyzed. 
-                The remaining {pendingCount} will show compliance scores once analysis completes.
+                {analyzedCount} of {transactions.length} transactions have been analyzed. The remaining {pendingCount}{' '}
+                will show compliance scores once analysis completes.
               </Box>
             ) : (
               <Box>
-                Transactions are extracted but not yet analyzed for compliance. 
-                Run transaction analysis to see categories, compliance scores, and risk flags.
+                Transactions are extracted but not yet analyzed for compliance. Run transaction analysis to see
+                categories, compliance scores, and risk flags.
               </Box>
             )}
           </Alert>
@@ -280,8 +269,12 @@ const BankStatementInsights = () => {
                 if (item.analysisStatus !== 'ANALYZED') {
                   return <Badge color="grey">Pending</Badge>;
                 }
-                return item.rawData?.ExpenseCategory || (
-                  <Box color="text-status-inactive" variant="small">Uncategorized</Box>
+                return (
+                  item.rawData?.ExpenseCategory || (
+                    <Box color="text-status-inactive" variant="small">
+                      Uncategorized
+                    </Box>
+                  )
                 );
               },
               width: 140,
@@ -290,7 +283,7 @@ const BankStatementInsights = () => {
               id: 'amount',
               header: 'Amount',
               cell: (item) => (
-                <Box 
+                <Box
                   color={item.transactionAmount >= 0 ? 'text-status-success' : 'text-status-error'}
                   fontWeight="bold"
                 >
@@ -307,10 +300,15 @@ const BankStatementInsights = () => {
                 if (item.analysisStatus !== 'ANALYZED') {
                   return <Badge color="grey">Pending</Badge>;
                 }
-                
+
                 const score = item.rawData?.ComplianceScore;
-                if (!score) return <Box color="text-status-inactive" variant="small">—</Box>;
-                
+                if (!score)
+                  return (
+                    <Box color="text-status-inactive" variant="small">
+                      —
+                    </Box>
+                  );
+
                 return (
                   <SpaceBetween direction="horizontal" size="xs">
                     <Box fontSize="body-m" fontWeight="bold" color={`text-status-${getComplianceScoreColor(score)}`}>
@@ -335,7 +333,7 @@ const BankStatementInsights = () => {
                 if (item.analysisStatus !== 'ANALYZED') {
                   return <Badge color="grey">Pending</Badge>;
                 }
-                
+
                 const flags = item.rawData?.RiskFlags;
                 if (!flags) return <Badge color="green">Clean</Badge>;
                 return renderRiskFlags(flags);
@@ -349,15 +347,16 @@ const BankStatementInsights = () => {
                 if (item.analysisStatus !== 'ANALYZED') {
                   return <Badge color="grey">Pending</Badge>;
                 }
-                
+
                 const action = item.rawData?.RecommendedAction;
-                if (!action) return <Box color="text-status-inactive" variant="small">—</Box>;
-                
-                return (
-                  <Badge color={getRecommendedActionVariant(action)}>
-                    {action.replace(/_/g, ' ')}
-                  </Badge>
-                );
+                if (!action)
+                  return (
+                    <Box color="text-status-inactive" variant="small">
+                      —
+                    </Box>
+                  );
+
+                return <Badge color={getRecommendedActionVariant(action)}>{action.replace(/_/g, ' ')}</Badge>;
               },
               width: 150,
             },
@@ -389,11 +388,7 @@ const BankStatementInsights = () => {
           header={
             <Header
               counter={`(${transactions.length})`}
-              description={
-                analyzedCount > 0 
-                  ? `${analyzedCount} analyzed, ${pendingCount} pending`
-                  : undefined
-              }
+              description={analyzedCount > 0 ? `${analyzedCount} analyzed, ${pendingCount} pending` : undefined}
               actions={
                 <Button iconName="refresh" onClick={loadTransactions}>
                   Refresh
