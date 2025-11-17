@@ -20,6 +20,7 @@ import { Logger, API, graphqlOperation } from 'aws-amplify';
 import useDocumentsContext from '../../contexts/documents';
 import useSettingsContext from '../../contexts/settings';
 import { useCompany } from '../../contexts/company';
+import useUserAuthState from '../../hooks/use-user-auth-state';
 
 import mapDocumentsAttributes from '../common/map-document-attributes';
 import {
@@ -76,6 +77,7 @@ const DocumentList = () => {
 
   const { activeCompany, isCompanySelected } = useCompany();
   const { settings } = useSettingsContext();
+  const { user } = useUserAuthState();
 
   const {
     documents,
@@ -529,6 +531,12 @@ const DocumentList = () => {
                     return;
                   }
 
+                  if (!user?.username) {
+                    console.error('No authenticated user found');
+                    alert('✗ Error: User not authenticated');
+                    return;
+                  }
+
                   const pendingCount = bankStatements.filter(
                     (item) => (item.analysisStatus || 'PENDING') === 'PENDING',
                   ).length;
@@ -536,12 +544,13 @@ const DocumentList = () => {
                   setIsAnalysisRunning(true);
                   try {
                     console.log(
-                      `Starting analysis for ${activeCompany.companyNumber} - ${pendingCount} pending transactions`,
+                      `Starting analysis for company ${activeCompany.companyNumber}, user ${user.username} - ${pendingCount} pending transactions`,
                     );
 
                     const response = await API.graphql(
                       graphqlOperation(TRIGGER_TRANSACTION_ANALYSIS, {
                         companyNumber: activeCompany.companyNumber,
+                        userId: user.username,
                       }),
                     );
 
