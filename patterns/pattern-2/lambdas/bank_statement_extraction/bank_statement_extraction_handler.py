@@ -425,11 +425,13 @@ EXTRACTION RULES:
 5. Clean up descriptions by removing extra whitespace
 6. Skip obvious non-transaction text (headers, terms, page numbers)
 7. MUST include account_number, sort_code, statement_period in EVERY transaction
-8. Extract compliance fields when visible:
+8. Extract compliance fields:
    - <counterparty_name>: Who was paid/who paid (merchant, company, person)
    - <direction>: INBOUND or OUTBOUND
    - <payment_method>: BACS, CHAPS, FASTER_PAYMENT, CARD, ATM, DD, SO, CASH, TRANSFER
-   - <counterparty_country>: Country of counterparty (if visible in description/IBAN)
+   - <counterparty_country>: Extract if visible in description (e.g., "USA", "GBR", "LONDON GBR")
+     * For UK domestic payments (Faster Payments, Direct Debit, UK companies): use "UK"
+     * If country not visible and cannot be inferred: use "UNKNOWN"
 
 FIELD-LEVEL CONFIDENCE SCORES (0.0 to 1.0):
 For each transaction, provide confidence scores:
@@ -683,7 +685,7 @@ def parse_transactions_from_xml(
             'counterparty_name': row_data.get('counterparty_name', ''),
             'direction': row_data.get('direction', 'OUTBOUND' if amount < 0 else 'INBOUND'),
             'payment_method': row_data.get('payment_method', ''),
-            'counterparty_country': row_data.get('counterparty_country', ''),
+            'counterparty_country': row_data.get('counterparty_country', 'UNKNOWN'),
             
             'source_page': source_page,
             'chunk_index': chunk_index,
