@@ -134,9 +134,6 @@ const BankStatementInsights = () => {
     </Container>
   );
 
-  );
-  };
-
   const toggleExpanded = (itemId) => {
     const newExpanded = new Set(expandedItems);
     if (newExpanded.has(itemId)) {
@@ -179,9 +176,7 @@ const BankStatementInsights = () => {
             </div>
             <div>
               <Box variant="awsui-key-label">Direction</Box>
-              <Badge color={rawData.Direction === 'INBOUND' ? 'green' : 'blue'}>
-                {rawData.Direction || 'N/A'}
-              </Badge>
+              <Badge color={rawData.Direction === 'INBOUND' ? 'green' : 'blue'}>{rawData.Direction || 'N/A'}</Badge>
             </div>
           </ColumnLayout>
 

@@ -142,9 +142,7 @@ const TransactionDetailDrawer = ({ transaction, visible, onDismiss }) => {
                 </div>
                 <div>
                   <Box variant="awsui-key-label">Risk Tier</Box>
-                  <Badge color={getTierColor(rawData.ComplianceRiskTier)}>
-                    {rawData.ComplianceRiskTier || 'N/A'}
-                  </Badge>
+                  <Badge color={getTierColor(rawData.ComplianceRiskTier)}>{rawData.ComplianceRiskTier || 'N/A'}</Badge>
                 </div>
                 <div>
                   <Box variant="awsui-key-label">Risk Score</Box>
@@ -261,10 +259,7 @@ const TransactionDetailDrawer = ({ transaction, visible, onDismiss }) => {
                 <Box variant="awsui-key-label">Composite Confidence</Box>
                 <SpaceBetween direction="horizontal" size="xs">
                   <Box fontSize="heading-m">{transaction.confidence}</Box>
-                  <ProgressBar
-                    value={rawData.CompositeConfidence ? rawData.CompositeConfidence * 100 : 0}
-                    hideLabel
-                  />
+                  <ProgressBar value={rawData.CompositeConfidence ? rawData.CompositeConfidence * 100 : 0} hideLabel />
                 </SpaceBetween>
               </div>
               <div>
@@ -334,11 +329,7 @@ const TransactionDetailDrawer = ({ transaction, visible, onDismiss }) => {
             <ColumnLayout columns={2} variant="text-grid">
               <div>
                 <Box variant="awsui-key-label">Analyzed At</Box>
-                <Box>
-                  {rawData.AnalyzedAt
-                    ? new Date(rawData.AnalyzedAt * 1000).toLocaleString('en-GB')
-                    : 'N/A'}
-                </Box>
+                <Box>{rawData.AnalyzedAt ? new Date(rawData.AnalyzedAt * 1000).toLocaleString('en-GB') : 'N/A'}</Box>
               </div>
               <div>
                 <Box variant="awsui-key-label">Model Used</Box>
