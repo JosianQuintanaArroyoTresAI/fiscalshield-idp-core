@@ -611,7 +611,7 @@ REQUIRED XML FORMAT:
   <transaction id="[EXACT_TRANSACTION_ID]">
     <category>Category name from list above</category>
     <confidence>HIGH|MEDIUM|LOW</confidence>
-    <legitimacy_score>4</legitimacy_score>
+    <compliance_score>4</compliance_score>
     <risk_flags>ATM_ROUND_NORMAL|WEEKEND_HOSPITALITY|VAGUE_DESCRIPTION|STRUCTURING|PERSONAL_EXPENSE|DIRECTOR_LOAN|HIGH_VALUE|etc</risk_flags>
     <reasoning>Detailed explanation of your assessment including why you chose specific flags</reasoning>
     <hmrc_concern>YES|NO - Would this likely concern a tax inspector?</hmrc_concern>
@@ -670,7 +670,7 @@ def parse_categorization_response(response_text, transaction_batch):
             # Extract all fields from Claude's analysis
             category_match = re.search(r'<category>(.*?)</category>', transaction_content, re.DOTALL)
             confidence_match = re.search(r'<confidence>(.*?)</confidence>', transaction_content, re.DOTALL)
-            score_match = re.search(r'<legitimacy_score>(\d+)</legitimacy_score>', transaction_content, re.DOTALL)
+            score_match = re.search(r'<compliance_score>(\d+)</compliance_score>', transaction_content, re.DOTALL)
             flags_match = re.search(r'<risk_flags>(.*?)</risk_flags>', transaction_content, re.DOTALL)
             reasoning_match = re.search(r'<reasoning>(.*?)</reasoning>', transaction_content, re.DOTALL)
             hmrc_match = re.search(r'<hmrc_concern>(.*?)</hmrc_concern>', transaction_content, re.DOTALL)
@@ -689,7 +689,7 @@ def parse_categorization_response(response_text, transaction_batch):
             results[transaction_id] = {
                 'category': category_match.group(1).strip() if category_match else 'Uncategorized',
                 'confidence': confidence_match.group(1).strip() if confidence_match else 'LOW',
-                'legitimacy_score': int(score_match.group(1)) if score_match else 3,
+                'compliance_score': int(score_match.group(1)) if score_match else 3,
                 'risk_flags': risk_flags,
                 'reasoning': reasoning_match.group(1).strip() if reasoning_match else 'No reasoning provided',
                 'hmrc_concern': hmrc_match.group(1).strip() == 'YES' if hmrc_match else False,
@@ -781,7 +781,7 @@ def update_transaction_analysis(pk: str, sk: str, analysis_result: Dict, complia
         update_expression = """
             SET ExpenseCategory = :category,
                 CategorizationConfidence = :confidence,
-                LegitimacyScore = :score,
+                ComplianceScore = :score,
                 RiskFlags = :flags,
                 CategorizationReasoning = :reasoning,
                 RecommendedAction = :action,
@@ -803,7 +803,7 @@ def update_transaction_analysis(pk: str, sk: str, analysis_result: Dict, complia
         expression_values = {
             ':category': analysis_result['category'],
             ':confidence': analysis_result['confidence'],
-            ':score': Decimal(str(analysis_result['legitimacy_score'])),
+            ':score': Decimal(str(analysis_result['compliance_score'])),
             ':flags': analysis_result['risk_flags'],
             ':reasoning': analysis_result['reasoning'],
             ':action': analysis_result['recommended_action'],
@@ -833,7 +833,7 @@ def update_transaction_analysis(pk: str, sk: str, analysis_result: Dict, complia
         
         log_with_timestamp(
             f"Updated transaction: {analysis_result['category']} "
-            f"(legitimacy: {analysis_result['legitimacy_score']}, compliance: {compliance_result['score']}/{compliance_result['tier']}, "
+            f"(compliance: {analysis_result['compliance_score']}, risk: {compliance_result['score']}/{compliance_result['tier']}, "
             f"action: {analysis_result['recommended_action']})"
         )
         
@@ -926,7 +926,7 @@ def process_transaction_batch(message_body: Dict) -> Dict:
                     compliance_summary = f"{compliance_risk['score']}/{compliance_risk['tier']}"
                     log_with_timestamp(
                         f"✅ {transaction_id}: {analysis['category']} "
-                        f"(legitimacy: {analysis['legitimacy_score']}, compliance: {compliance_summary}, "
+                        f"(compliance: {analysis['compliance_score']}, risk: {compliance_summary}, "
                         f"flags: {flags_summary})"
                     )
                 else:

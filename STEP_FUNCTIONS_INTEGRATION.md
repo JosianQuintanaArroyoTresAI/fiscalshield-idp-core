@@ -283,7 +283,7 @@ aws logs tail /aws/stepfunctions/fiscalshield-analysis-dev-TransactionCategoriza
 After execution completes, check transactions have:
 - `AnalysisStatus='ANALYZED'`
 - `Category` field populated
-- `LegitimacyScore` (1-5)
+- `ComplianceScore` (1-5)
 - `RiskFlags` array
 - `CategoryRationale`
 - `UpdatedAt` timestamp
