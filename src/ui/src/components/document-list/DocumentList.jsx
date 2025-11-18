@@ -703,10 +703,10 @@ const DocumentList = () => {
             id: 'transactionDescription',
             header: 'Description',
             cell: (item) => (
-              <span title={item.transactionDescription}>
-                {item.transactionDescription.length > 60
+              <span title={item.transactionDescription || ''}>
+                {item.transactionDescription && item.transactionDescription.length > 60
                   ? item.transactionDescription.substring(0, 60) + '...'
-                  : item.transactionDescription}
+                  : item.transactionDescription || ''}
               </span>
             ),
             width: 300,
@@ -716,7 +716,7 @@ const DocumentList = () => {
             id: 'expenseCategory',
             header: 'Category',
             cell: (item) => {
-              if (item.analysisStatus !== 'ANALYZED') {
+              if (!item.analysisStatus || item.analysisStatus !== 'ANALYZED') {
                 return <Badge color="grey">Pending</Badge>;
               }
 
@@ -737,12 +737,12 @@ const DocumentList = () => {
             cell: (item) => (
               <span
                 style={{
-                  color: item.transactionAmount >= 0 ? '#037f0c' : '#d13212',
+                  color: (item.transactionAmount || 0) >= 0 ? '#037f0c' : '#d13212',
                   fontWeight: 'bold',
                 }}
               >
-                {item.transactionAmount >= 0 ? '+' : ''}
-                {item.formattedAmount}
+                {(item.transactionAmount || 0) >= 0 ? '+' : ''}
+                {item.formattedAmount || ''}
               </span>
             ),
             width: 120,
@@ -775,7 +775,7 @@ const DocumentList = () => {
             id: 'complianceScore',
             header: 'Compliance',
             cell: (item) => {
-              if (item.analysisStatus !== 'ANALYZED') {
+              if (!item.analysisStatus || item.analysisStatus !== 'ANALYZED') {
                 return <Badge color="grey">Pending</Badge>;
               }
 
@@ -809,7 +809,7 @@ const DocumentList = () => {
             id: 'riskFlags',
             header: 'Risk Flags',
             cell: (item) => {
-              if (item.analysisStatus !== 'ANALYZED') {
+              if (!item.analysisStatus || item.analysisStatus !== 'ANALYZED') {
                 return <Badge color="grey">Pending</Badge>;
               }
 
@@ -822,7 +822,7 @@ const DocumentList = () => {
             id: 'recommendedAction',
             header: 'Recommended Action',
             cell: (item) => {
-              if (item.analysisStatus !== 'ANALYZED') {
+              if (!item.analysisStatus || item.analysisStatus !== 'ANALYZED') {
                 return <Badge color="grey">Pending</Badge>;
               }
 
@@ -848,9 +848,9 @@ const DocumentList = () => {
             header: 'Confidence',
             cell: (item) => (
               <Badge
-                color={parseInt(item.confidence) >= 90 ? 'green' : parseInt(item.confidence) >= 75 ? 'blue' : 'grey'}
+                color={item.confidence && parseInt(item.confidence) >= 90 ? 'green' : item.confidence && parseInt(item.confidence) >= 75 ? 'blue' : 'grey'}
               >
-                {item.confidence}
+                {item.confidence || 'N/A'}
               </Badge>
             ),
             width: 90,
