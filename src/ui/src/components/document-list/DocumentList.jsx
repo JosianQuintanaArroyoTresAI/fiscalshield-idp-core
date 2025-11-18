@@ -8,6 +8,7 @@ import {
   Tabs,
   Badge,
   Container,
+  Alert,
   Box,
   SpaceBetween,
   Header,
@@ -106,6 +107,15 @@ const DocumentList = () => {
     selection: {
       keepSelection: false,
       trackBy: KEY_COLUMN_ID,
+    },
+  });
+
+  const { items: bankStatementItems, collectionProps: bankStatementCollectionProps } = useCollection(bankStatements, {
+    sorting: {
+      defaultState: {
+        sortingColumn: { sortingField: 'transactionDate' },
+        isDescending: true,
+      },
     },
   });
 
@@ -475,13 +485,36 @@ const DocumentList = () => {
   const renderBankStatementsTable = () => (
     <>
       <Table
+        {...bankStatementCollectionProps}
         columnDefinitions={[
+          {
+            id: 'viewDetails',
+            header: 'Details',
+            cell: (item) => (
+              <Button
+                variant="link"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setSelectedTransaction(item);
+                }}
+              >
+                See details
+              </Button>
+            ),
+            width: 130,
+            sortingDisabled: true,
+          },
           {
             id: 'transactionDate',
             header: 'Date',
             cell: (item) => item.transactionDate,
             width: 100,
             sortingField: 'transactionDate',
+            sortingComparator: (a, b) => {
+              const dateA = new Date(a.rawData?.TransactionDate || 0).getTime();
+              const dateB = new Date(b.rawData?.TransactionDate || 0).getTime();
+              return dateA - dateB;
+            },
           },
           {
             id: 'reference',
@@ -520,6 +553,7 @@ const DocumentList = () => {
               );
             },
             width: 140,
+            sortingField: 'expenseCategory',
           },
           {
             id: 'transactionAmount',
@@ -537,6 +571,7 @@ const DocumentList = () => {
             ),
             width: 120,
             sortingField: 'transactionAmount',
+            sortingComparator: (a, b) => (a.transactionAmount || 0) - (b.transactionAmount || 0),
           },
           {
             id: 'accountBalance',
@@ -544,6 +579,7 @@ const DocumentList = () => {
             cell: (item) => item.accountBalance,
             width: 120,
             sortingField: 'accountBalance',
+            sortingComparator: (a, b) => (a.rawData?.AccountBalance || 0) - (b.rawData?.AccountBalance || 0),
           },
           {
             id: 'bankName',
@@ -590,6 +626,8 @@ const DocumentList = () => {
               );
             },
             width: 140,
+            sortingField: 'complianceScore',
+            sortingComparator: (a, b) => (a.complianceScore || 0) - (b.complianceScore || 0),
           },
           {
             id: 'riskFlags',
@@ -602,6 +640,7 @@ const DocumentList = () => {
               return renderRiskFlags(item.riskFlags);
             },
             width: 200,
+            sortingDisabled: true,
           },
           {
             id: 'recommendedAction',
@@ -626,139 +665,144 @@ const DocumentList = () => {
               );
             },
             width: 180,
+            sortingField: 'recommendedAction',
           },
-          {
-            id: 'confidence',
-            header: 'Confidence',
-            cell: (item) => (
-              <Badge
-                color={parseInt(item.confidence) >= 90 ? 'green' : parseInt(item.confidence) >= 75 ? 'blue' : 'grey'}
-              >
-                {item.confidence}
-              </Badge>
-            ),
-            width: 90,
-            sortingField: 'confidence',
-          },
-          {
-            id: 'analysisStatus',
-            header: 'Analysis',
-            cell: (item) => {
-              const status = item.analysisStatus || 'PENDING';
-              const colorMap = {
-                PENDING: 'grey',
-                IN_PROGRESS: 'blue',
-                ANALYZED: 'green',
-                FAILED: 'red',
-              };
-              return <Badge color={colorMap[status] || 'grey'}>{status}</Badge>;
+            {
+              id: 'confidence',
+              header: 'Confidence',
+              cell: (item) => (
+                <Badge
+                  color={parseInt(item.confidence) >= 90 ? 'green' : parseInt(item.confidence) >= 75 ? 'blue' : 'grey'}
+                >
+                  {item.confidence}
+                </Badge>
+              ),
+              width: 90,
+              sortingField: 'confidence',
+              sortingComparator: (a, b) =>
+                (Number.parseInt(a.confidence, 10) || 0) - (Number.parseInt(b.confidence, 10) || 0),
             },
-            width: 100,
-            sortingField: 'analysisStatus',
-          },
+            {
+              id: 'analysisStatus',
+              header: 'Analysis',
+              cell: (item) => {
+                const status = item.analysisStatus || 'PENDING';
+                const colorMap = {
+                  PENDING: 'grey',
+                  IN_PROGRESS: 'blue',
+                  ANALYZED: 'green',
+                  FAILED: 'red',
+                };
+                return <Badge color={colorMap[status] || 'grey'}>{status}</Badge>;
+              },
+              width: 100,
+              sortingField: 'analysisStatus',
+            },
         ]}
-        items={bankStatements}
+        items={bankStatementItems}
         loading={isLoadingBankStatements}
         loadingText="Loading bank statements"
-        sortingDisabled={false}
         onRowClick={({ detail }) => setSelectedTransaction(detail.item)}
         header={
           <Header
-            counter={`(${bankStatements.length})`}
-            description={
-              isCompanySelected
-                ? `Bank statement transactions for ${activeCompany?.companyName || 'selected company'}`
-                : 'Select a company to view bank statement transactions'
-            }
-            actions={
-              <SpaceBetween direction="horizontal" size="xs">
-                <Button
-                  onClick={async () => {
-                    if (!activeCompany?.companyNumber) {
-                      console.error('No active company selected');
-                      return;
-                    }
-
-                    if (!user?.attributes?.sub) {
-                      console.error('No authenticated user found');
-                      alert('✗ Error: User not authenticated');
-                      return;
-                    }
-
-                    const pendingCount = bankStatements.filter(
-                      (item) => (item.analysisStatus || 'PENDING') === 'PENDING',
-                    ).length;
-
-                    setIsAnalysisRunning(true);
-                    try {
-                      console.log(
-                        `Starting analysis for company ${activeCompany.companyNumber}, user ${user.attributes.sub} - ${pendingCount} pending transactions`,
-                      );
-
-                      const response = await API.graphql(
-                        graphqlOperation(TRIGGER_TRANSACTION_ANALYSIS, {
-                          companyNumber: activeCompany.companyNumber,
-                          userId: user.attributes.sub,
-                        }),
-                      );
-
-                      const result = response.data.triggerTransactionAnalysis;
-
-                      if (result.success) {
-                        console.log('Analysis started:', result.executionArn);
-                        alert(
-                          `✓ Analysis started successfully!\n${result.message}\n\nExecution: ${result.executionName}\n\nRefresh the page in 30 seconds to see categorization results.`,
-                        );
-                      } else {
-                        console.error('Analysis failed:', result.message);
-                        alert(`✗ Analysis failed: ${result.message}`);
-                      }
-                    } catch (error) {
-                      console.error('Error triggering analysis:', error);
-                      alert(`✗ Error starting analysis: ${error.message || 'Unknown error'}`);
-                    } finally {
-                      setIsAnalysisRunning(false);
-                    }
-                  }}
-                  loading={isAnalysisRunning}
-                  disabled={
-                    isAnalysisRunning ||
-                    bankStatements.length === 0 ||
-                    !bankStatements.some((item) => (item.analysisStatus || 'PENDING') === 'PENDING')
+          counter={`(${bankStatements.length})`}
+          description={
+            isCompanySelected
+              ? `Bank statement transactions for ${activeCompany?.companyName || 'selected company'}`
+              : 'Select a company to view bank statement transactions'
+          }
+          actions={
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button
+                onClick={async () => {
+                  if (!activeCompany?.companyNumber) {
+                    console.error('No active company selected');
+                    return;
                   }
-                  variant="primary"
-                >
-                  Analyse Transactions
-                  {bankStatements.filter((item) => (item.analysisStatus || 'PENDING') === 'PENDING').length > 0 &&
-                    ` (${bankStatements.filter((item) => (item.analysisStatus || 'PENDING') === 'PENDING').length})`}
-                </Button>
-                <Button
-                  onClick={handleDownloadBankStatements}
-                  disabled={bankStatements.length === 0}
-                  iconName="download"
-                >
-                  Download CSV
-                </Button>
-              </SpaceBetween>
-            }
+
+                  if (!user?.attributes?.sub) {
+                    console.error('No authenticated user found');
+                    alert('✗ Error: User not authenticated');
+                    return;
+                  }
+
+                  const pendingCount = bankStatements.filter(
+                    (item) => (item.analysisStatus || 'PENDING') === 'PENDING',
+                  ).length;
+
+                  setIsAnalysisRunning(true);
+                  try {
+                    console.log(
+                      `Starting analysis for company ${activeCompany.companyNumber}, user ${user.attributes.sub} - ${pendingCount} pending transactions`,
+                    );
+
+                    const response = await API.graphql(
+                      graphqlOperation(TRIGGER_TRANSACTION_ANALYSIS, {
+                        companyNumber: activeCompany.companyNumber,
+                        userId: user.attributes.sub,
+                      }),
+                    );
+
+                    const result = response.data.triggerTransactionAnalysis;
+
+                    if (result.success) {
+                      console.log('Analysis started:', result.executionArn);
+                      alert(
+                        `✓ Analysis started successfully!\n${result.message}\n\nExecution: ${result.executionName}\n\nRefresh the page in 30 seconds to see categorization results.`,
+                      );
+                    } else {
+                      console.error('Analysis failed:', result.message);
+                      alert(`✗ Analysis failed: ${result.message}`);
+                    }
+                  } catch (error) {
+                    console.error('Error triggering analysis:', error);
+                    alert(`✗ Error starting analysis: ${error.message || 'Unknown error'}`);
+                  } finally {
+                    setIsAnalysisRunning(false);
+                  }
+                }}
+                loading={isAnalysisRunning}
+                disabled={
+                  isAnalysisRunning ||
+                  bankStatements.length === 0 ||
+                  !bankStatements.some((item) => (item.analysisStatus || 'PENDING') === 'PENDING')
+                }
+                variant="primary"
+              >
+                Analyse Transactions
+                {bankStatements.filter((item) => (item.analysisStatus || 'PENDING') === 'PENDING').length > 0 &&
+                  ` (${bankStatements.filter((item) => (item.analysisStatus || 'PENDING') === 'PENDING').length})`}
+              </Button>
+              <Button onClick={handleDownloadBankStatements} disabled={bankStatements.length === 0} iconName="download">
+                Download CSV
+              </Button>
+            </SpaceBetween>
+          }
           >
             Bank Statement Transactions
           </Header>
         }
         empty={
           <Box margin={{ vertical: 'xs' }} textAlign="center" color="inherit">
-            <SpaceBetween size="m">
-              <Box variant="h3">{isCompanySelected ? 'No transactions found' : 'No company selected'}</Box>
-              <Box variant="p" color="text-body-secondary">
-                {isCompanySelected
-                  ? 'No bank statement transactions available for this company yet.'
-                  : 'Please select a company from the dropdown to view bank statement transactions.'}
-              </Box>
-            </SpaceBetween>
+          <SpaceBetween size="m">
+            <Box variant="h3">{isCompanySelected ? 'No transactions found' : 'No company selected'}</Box>
+            <Box variant="p" color="text-body-secondary">
+              {isCompanySelected
+                ? 'No bank statement transactions available for this company yet.'
+                : 'Please select a company from the dropdown to view bank statement transactions.'}
+            </Box>
+          </SpaceBetween>
           </Box>
         }
         pagination={<Pagination currentPageIndex={1} pagesCount={1} disabled={!bankStatementsNextToken} />}
       />
+
+      {selectedTransaction && (
+        <Alert type="info" header="Viewing transaction details">
+          The detailed compliance drawer below shows the full extraction for{' '}
+          <b>{selectedTransaction.reference || selectedTransaction.transactionDescription}</b>.
+        </Alert>
+      )}
 
       <TransactionDetailDrawer
         transaction={selectedTransaction}
