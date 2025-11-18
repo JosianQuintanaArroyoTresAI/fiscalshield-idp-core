@@ -848,7 +848,13 @@ const DocumentList = () => {
             header: 'Confidence',
             cell: (item) => (
               <Badge
-                color={item.confidence && parseInt(item.confidence) >= 90 ? 'green' : item.confidence && parseInt(item.confidence) >= 75 ? 'blue' : 'grey'}
+                color={
+                  item.confidence && parseInt(item.confidence) >= 90
+                    ? 'green'
+                    : item.confidence && parseInt(item.confidence) >= 75
+                    ? 'blue'
+                    : 'grey'
+                }
               >
                 {item.confidence || 'N/A'}
               </Badge>
