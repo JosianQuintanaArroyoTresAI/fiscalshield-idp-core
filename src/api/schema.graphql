@@ -1,3 +1,4 @@
+# GraphQL Schema for FiscalShield IDP Core
 interface DynamoDbBase {
 	PK: ID!
 	SK: ID!
@@ -254,6 +255,7 @@ type ExtractionResult @aws_cognito_user_pools @aws_iam {
   CompanyName: String
   UserId: String!
   ExtractionStatus: String
+  AnalysisStatus: String
   ProcessedAt: AWSTimestamp
   SectionId: String
   ConfidenceScore: Float
@@ -303,6 +305,34 @@ type ExtractionResult @aws_cognito_user_pools @aws_iam {
   # HITL (Human-In-The-Loop) flags
   HITLRequired: Boolean
   HITLReason: String
+  # Transaction Analysis Fields
+  ExpenseCategory: String
+  CategorizationConfidence: String
+  ComplianceScore: Float
+  RiskFlags: [String]
+  CategorizationReasoning: String
+  RecommendedAction: String
+  HMRCConcern: Boolean
+  AnalyzedAt: AWSTimestamp
+  ComplianceRiskScore: Float
+  ComplianceRiskTier: String
+  ComplianceFlags: [String]
+  ComplianceReasons: [String]
+  ThresholdFlag: String
+  CashRiskFlag: String
+  GeographicRiskFlag: String
+  StructuringFlag: String
+  VagueDescriptionFlag: String
+  # HMRC Compliance Fields
+  CounterpartyName: String
+  Direction: String
+  PaymentMethod: String
+  CounterpartyCountry: String
+  # Extraction Confidence Scores
+  DateConfidence: Float
+  AmountConfidence: Float
+  DescriptionConfidence: Float
+  AccountInfoConfidence: Float
 }
 
 type ExtractionResultsConnection @aws_cognito_user_pools @aws_iam {
@@ -351,6 +381,15 @@ type ValidationMetrics @aws_cognito_user_pools {
   summary: ValidationSummary!
 }
 
+type TransactionAnalysisResponse @aws_cognito_user_pools {
+  success: Boolean!
+  message: String!
+  pending_count: Int
+  batches_queued: Int
+  executionArn: String
+  executionName: String
+}
+
 type Mutation  {
   createDocument(input: CreateDocumentInput!): CreateDocumentOutput @aws_iam
   updateDocument(input: UpdateDocumentInput!): Document @aws_iam
@@ -366,6 +405,7 @@ type Mutation  {
   deleteAgentJob(jobId: ID!): Boolean @aws_cognito_user_pools
   registerUserCompany(companyNumber: String!, companyName: String!): Boolean! @aws_cognito_user_pools
   deleteUserCompany(companyNumber: String!): Boolean! @aws_cognito_user_pools
+  triggerTransactionAnalysis(companyNumber: String!, userId: String!): TransactionAnalysisResponse! @aws_cognito_user_pools
 }
 
 type Query @aws_cognito_user_pools @aws_iam {

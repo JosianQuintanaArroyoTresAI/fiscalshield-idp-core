@@ -1,0 +1,143 @@
+{
+  "Comment": "Transaction Categorization Workflow - Batch processing with parallel execution",
+  "StartAt": "TriggerAnalysis",
+  "States": {
+    "TriggerAnalysis": {
+      "Type": "Task",
+      "Resource": "${TriggerAnalysisLambdaArn}",
+      "Comment": "Query pending transactions and prepare batches",
+      "ResultPath": "$.triggerResult",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed",
+            "Lambda.ServiceException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "TriggerFailed"
+        }
+      ],
+      "Next": "CheckBatchesExist"
+    },
+    
+    "CheckBatchesExist": {
+      "Type": "Choice",
+      "Comment": "Check if any batches were prepared",
+      "Choices": [
+        {
+          "Variable": "$.triggerResult.total_batches",
+          "NumericGreaterThan": 0,
+          "Next": "ProcessBatches"
+        }
+      ],
+      "Default": "NoPendingTransactions"
+    },
+    
+    "ProcessBatches": {
+      "Type": "Map",
+      "Comment": "Process batches in parallel with controlled concurrency",
+      "ItemsPath": "$.triggerResult.batches",
+      "MaxConcurrency": 5,
+      "ResultPath": "$.batchResults",
+      "Iterator": {
+        "StartAt": "CategorizeBatch",
+        "States": {
+          "CategorizeBatch": {
+            "Type": "Task",
+            "Resource": "${CategorizationLambdaArn}",
+            "Comment": "Categorize transactions in batch using Claude",
+            "TimeoutSeconds": 300,
+            "Retry": [
+              {
+                "ErrorEquals": [
+                  "ThrottlingException",
+                  "TooManyRequestsException"
+                ],
+                "IntervalSeconds": 5,
+                "MaxAttempts": 5,
+                "BackoffRate": 2.5,
+                "Comment": "Retry on Bedrock/Lambda throttling with exponential backoff"
+              },
+              {
+                "ErrorEquals": [
+                  "States.TaskFailed",
+                  "Lambda.ServiceException"
+                ],
+                "IntervalSeconds": 2,
+                "MaxAttempts": 3,
+                "BackoffRate": 2.0,
+                "Comment": "Retry on general failures"
+              }
+            ],
+            "Catch": [
+              {
+                "ErrorEquals": ["States.ALL"],
+                "ResultPath": "$.batchError",
+                "Next": "BatchFailed"
+              }
+            ],
+            "End": true
+          },
+          
+          "BatchFailed": {
+            "Type": "Pass",
+            "Comment": "Mark batch as failed for error tracking",
+            "Result": {
+              "success": false,
+              "error": "Batch processing failed after retries"
+            },
+            "End": true
+          }
+        }
+      },
+      "Next": "AggregateResults"
+    },
+    
+    "AggregateResults": {
+      "Type": "Pass",
+      "Comment": "Aggregate batch results for final summary",
+      "Parameters": {
+        "companyNumber.$": "$.triggerResult.company_number",
+        "userId.$": "$.triggerResult.user_id",
+        "totalTransactions.$": "$.triggerResult.pending_count",
+        "totalBatches.$": "$.triggerResult.total_batches",
+        "batchResults.$": "$.batchResults",
+        "executionTime.$": "$$.Execution.StartTime"
+      },
+      "Next": "AnalysisComplete"
+    },
+    
+    "NoPendingTransactions": {
+      "Type": "Pass",
+      "Comment": "No pending transactions to process",
+      "Result": {
+        "success": true,
+        "message": "No pending transactions found for analysis",
+        "totalTransactions": 0,
+        "totalBatches": 0
+      },
+      "End": true
+    },
+    
+    "TriggerFailed": {
+      "Type": "Fail",
+      "Comment": "Failed to trigger analysis or query pending transactions",
+      "Cause": "TriggerAnalysis step failed",
+      "Error": "TriggerAnalysisError"
+    },
+    
+    "AnalysisComplete": {
+      "Type": "Succeed",
+      "Comment": "Transaction categorization workflow completed successfully"
+    }
+  }
+}

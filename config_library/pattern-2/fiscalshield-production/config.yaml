@@ -155,7 +155,7 @@ classes:
         evaluation_method: NUMERIC_EXACT
         attributeType: simple
       - name: Transactions
-        description: List of all transactions during the statement period with date, description, and amounts
+        description: List of all transactions during the statement period with date, description, amounts, and compliance metadata
         attributeType: list
         listItemTemplate:
           itemAttributes:
@@ -174,6 +174,46 @@ classes:
             - name: Balance
               description: Running account balance after this transaction
               dataType: number
+            - name: CounterpartyName
+              description: >-
+                Name of the counterparty (merchant, company, or individual).
+                Extract the primary entity name from the transaction description.
+                If not explicitly stated or unclear, return "NOT_AVAILABLE".
+                Examples: "GITHUB, INC." from "GITHUB, INC. SAN FRANCISCO USA",
+                "TESCO" from "TESCO SUPERSTORE 1234".
+                CRITICAL: Do NOT hallucinate or guess - only extract if clearly visible.
+              dataType: string
+            - name: Direction
+              description: >-
+                Transaction direction: "INBOUND" for money received (when MoneyIn has value)
+                or "OUTBOUND" for money sent (when MoneyOut has value).
+                If MoneyIn populated = INBOUND, if MoneyOut populated = OUTBOUND.
+                If unclear, return "UNKNOWN".
+              dataType: string
+            - name: PaymentMethod
+              description: >-
+                Payment method or transaction type. Look for explicit keywords in description:
+                "CARD", "CARD PAYMENT", "ATM", "CASH", "BACS", "CHAPS", "FASTER PAYMENT" (or "FP"),
+                "DIRECT DEBIT" (or "DD"), "STANDING ORDER" (or "SO"), "CHEQUE", "TRANSFER", "ONLINE".
+                Extract the most specific method found.
+                If no payment method keywords found, return "UNKNOWN".
+                CRITICAL: Only extract if explicitly mentioned - do NOT infer payment type.
+              dataType: string
+            - name: CounterpartyCountry
+              description: >-
+                Country of the counterparty if explicitly stated in transaction description.
+                Look for: country names (USA, UK, GERMANY), country codes (US, GB, DE),
+                or city + country patterns ("SAN FRANCISCO USA", "LONDON GB").
+                If clearly stated, extract country code (2-letter ISO: US, GB, DE).
+                If not explicitly mentioned, return "NOT_AVAILABLE".
+                CRITICAL: Do NOT infer country from company names - only extract if location text is present.
+              dataType: string
+            - name: Reference
+              description: >-
+                Transaction reference number, invoice number, or additional reference text.
+                Look for: reference numbers, invoice IDs, transaction IDs, or secondary description text.
+                If no reference information available, return "NOT_AVAILABLE".
+              dataType: string
 
 # Classification Configuration
 classification:
@@ -325,12 +365,17 @@ classification:
 
 # Extraction Configuration
 extraction:
+  model: eu.anthropic.claude-3-7-sonnet-20250219-v1:0
+  fallback_models:
+    - eu.anthropic.claude-3-5-sonnet-20240620-v1:0
+    - eu.amazon.nova-pro-v1:0
   agentic:
     enabled: false
     review_agent: false
   image:
     target_width: ""
     target_height: ""
+  temperature: "0.0"
   top_p: "0.1"
   max_tokens: "10000"
   top_k: "5"
@@ -357,6 +402,13 @@ extraction:
         8. Do not perform calculations or summations unless totals are explicitly given
         9. For checkboxes and selection fields, ONLY include options with clear visual selection marks
         10. Think step by step first and then answer
+        11. CRITICAL ANTI-HALLUCINATION RULES FOR BANK TRANSACTIONS:
+         11.A. CounterpartyName: Only extract merchant/company names that are EXPLICITLY visible in the transaction description. Do NOT invent names.
+         11.B. Direction: Base on whether MoneyIn or MoneyOut is populated. If MoneyIn has value = INBOUND, if MoneyOut has value = OUTBOUND. If truly unclear, use "UNKNOWN".
+         11.C. PaymentMethod: Only extract if keywords like CARD, ATM, BACS, DD, SO, CHAPS, FP are EXPLICITLY present. If not mentioned, return "UNKNOWN" - do NOT infer from context.
+         11.D. CounterpartyCountry: Only extract if country name or code is EXPLICITLY stated (e.g., "USA", "GB", "LONDON UK"). Do NOT guess country from merchant name - use "NOT_AVAILABLE" if not stated.
+         11.E. Reference: Only extract actual reference numbers or IDs visible in the statement. If no reference shown, use "NOT_AVAILABLE".
+         11.F. For ALL optional fields: Better to return "NOT_AVAILABLE" or "UNKNOWN" than to hallucinate data. Accuracy over completeness.
     </extraction-guidelines>
 
     If the attributes section below contains attribute names and descriptions, output only those attributes using the provided descriptions as guidance.

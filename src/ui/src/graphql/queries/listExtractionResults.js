@@ -18,6 +18,7 @@ const listExtractionResults = /* GraphQL */ `
         CompanyName
         UserId
         ExtractionStatus
+        AnalysisStatus
         ProcessedAt
         SectionId
         ConfidenceScore
@@ -60,6 +61,34 @@ const listExtractionResults = /* GraphQL */ `
         QualityTier
         HITLRequired
         HITLReason
+        # Transaction Analysis Fields
+        ExpenseCategory
+        CategorizationConfidence
+        ComplianceScore
+        RiskFlags
+        CategorizationReasoning
+        RecommendedAction
+        HMRCConcern
+        AnalyzedAt
+        ComplianceRiskScore
+        ComplianceRiskTier
+        ComplianceFlags
+        ComplianceReasons
+        ThresholdFlag
+        CashRiskFlag
+        GeographicRiskFlag
+        StructuringFlag
+        VagueDescriptionFlag
+        # HMRC Compliance Fields
+        CounterpartyName
+        Direction
+        PaymentMethod
+        CounterpartyCountry
+        # Extraction Confidence Scores
+        DateConfidence
+        AmountConfidence
+        DescriptionConfidence
+        AccountInfoConfidence
       }
       nextToken
     }

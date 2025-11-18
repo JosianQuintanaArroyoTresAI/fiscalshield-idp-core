@@ -8,18 +8,23 @@ import {
   Tabs,
   Badge,
   Container,
+  Alert,
   Box,
   SpaceBetween,
   Header,
   StatusIndicator,
   Button,
+  ProgressBar,
+  Popover,
+  ColumnLayout,
 } from '@awsui/components-react';
 import { useCollection } from '@awsui/collection-hooks';
-import { Logger } from 'aws-amplify';
+import { Logger, API, graphqlOperation } from 'aws-amplify';
 
 import useDocumentsContext from '../../contexts/documents';
 import useSettingsContext from '../../contexts/settings';
 import { useCompany } from '../../contexts/company';
+import useUserAuthState from '../../hooks/use-user-auth-state';
 
 import mapDocumentsAttributes from '../common/map-document-attributes';
 import {
@@ -34,6 +39,7 @@ import useLocalStorage from '../common/local-storage';
 import { exportToExcel, exportToCSV } from '../common/download-func';
 import DeleteDocumentModal from '../common/DeleteDocumentModal';
 import ReprocessDocumentModal from '../common/ReprocessDocumentModal';
+import { TRIGGER_TRANSACTION_ANALYSIS } from '../../graphql/mutations/triggerTransactionAnalysis';
 
 import {
   DocumentsPreferences,
@@ -46,6 +52,8 @@ import {
 } from './documents-table-config';
 
 import { getFilterCounterText, TableEmptyState, TableNoMatchState } from '../common/table';
+
+import TransactionDetailDrawer from '../bank-insights/TransactionDetailDrawer';
 
 import '@awsui/global-styles/index.css';
 
@@ -62,18 +70,15 @@ const DocumentList = () => {
   const [bankStatements, setBankStatements] = useState([]);
   const [isLoadingInvoices, setIsLoadingInvoices] = useState(false);
   const [isLoadingBankStatements, setIsLoadingBankStatements] = useState(false);
+  const [isAnalysisRunning, setIsAnalysisRunning] = useState(false);
   const [invoicesNextToken, setInvoicesNextToken] = useState(null);
   const [bankStatementsNextToken, setBankStatementsNextToken] = useState(null);
 
-  // Bank statement transactions state
-  const [selectedStatement, setSelectedStatement] = useState(null);
-  const [statementTransactions, setStatementTransactions] = useState([]);
-  const [isLoadingTransactions, setIsLoadingTransactions] = useState(false);
-  const [showTransactionsPanel, setShowTransactionsPanel] = useState(false);
-  const [bankStatementView, setBankStatementView] = useState('summary'); // 'summary' or 'transactions'
+  const [selectedTransaction, setSelectedTransaction] = useState(null);
 
   const { activeCompany, isCompanySelected } = useCompany();
   const { settings } = useSettingsContext();
+  const { user } = useUserAuthState();
 
   const {
     documents,
@@ -106,6 +111,20 @@ const DocumentList = () => {
     },
   });
 
+  const {
+    items: bankStatementItems,
+    collectionProps: bankStatementCollectionProps,
+    paginationProps: bankStatementPaginationProps,
+  } = useCollection(bankStatements, {
+    sorting: {
+      defaultState: {
+        sortingColumn: { sortingField: 'transactionDate' },
+        isDescending: true,
+      },
+    },
+    pagination: { pageSize: 10 },
+  });
+
   useEffect(() => {
     if (!isDocumentsListLoading) {
       logger.debug('setting documents list', documents);
@@ -119,6 +138,10 @@ const DocumentList = () => {
     logger.debug('setting selected items', collectionProps.selectedItems);
     setSelectedItems(collectionProps.selectedItems);
   }, [collectionProps.selectedItems]);
+
+  useEffect(() => {
+    setSelectedTransaction(null);
+  }, [activeTabId, activeCompany?.companyNumber]);
 
   // Load invoices when company is selected and tab is active
   useEffect(() => {
@@ -407,124 +430,387 @@ const DocumentList = () => {
     exportToCSV(csvData, `${companyName}_BankStatements_${timestamp}`);
   };
 
+  const getComplianceScoreColor = (score) => {
+    if (!score) return 'grey';
+    if (score >= 4) return 'green';
+    if (score >= 3) return 'blue';
+    if (score >= 2) return 'grey';
+    return 'red';
+  };
+
+  const getRecommendedActionVariant = (action) => {
+    const actionMap = {
+      APPROVE: 'success',
+      REVIEW_DOCUMENTATION: 'warning',
+      INVESTIGATE: 'warning',
+      REJECT: 'error',
+    };
+
+    return actionMap[action] || 'info';
+  };
+
+  const renderRiskFlags = (flags) => {
+    if (!flags || flags.length === 0 || (flags.length === 1 && flags[0] === 'CLEAN')) {
+      return <Badge color="green">Clean</Badge>;
+    }
+
+    const visibleFlags = flags.slice(0, 2);
+    const hiddenFlags = flags.slice(2);
+
+    return (
+      <SpaceBetween direction="horizontal" size="xs">
+        {visibleFlags.map((flag, idx) => (
+          <Badge key={`${flag}-${idx}`} color="red">
+            {flag.replace(/_/g, ' ')}
+          </Badge>
+        ))}
+        {hiddenFlags.length > 0 && (
+          <Popover
+            dismissButton={false}
+            position="top"
+            size="small"
+            triggerType="custom"
+            content={
+              <SpaceBetween size="xs">
+                {hiddenFlags.map((flag, idx) => (
+                  <Badge key={`${flag}-${idx}`} color="red">
+                    {flag.replace(/_/g, ' ')}
+                  </Badge>
+                ))}
+              </SpaceBetween>
+            }
+          >
+            <Badge color="grey">+{hiddenFlags.length} more</Badge>
+          </Popover>
+        )}
+      </SpaceBetween>
+    );
+  };
+
   // Bank Statements Table Component (Transaction-level view)
   const renderBankStatementsTable = () => (
-    <Table
-      columnDefinitions={[
-        {
-          id: 'transactionDate',
-          header: 'Date',
-          cell: (item) => item.transactionDate,
-          width: 100,
-          sortingField: 'transactionDate',
-        },
-        {
-          id: 'reference',
-          header: 'Reference',
-          cell: (item) => item.reference,
-          width: 200,
-          sortingField: 'reference',
-        },
-        {
-          id: 'transactionDescription',
-          header: 'Description',
-          cell: (item) => (
-            <span title={item.transactionDescription}>
-              {item.transactionDescription.length > 60
-                ? item.transactionDescription.substring(0, 60) + '...'
-                : item.transactionDescription}
-            </span>
-          ),
-          width: 300,
-          sortingField: 'transactionDescription',
-        },
-        {
-          id: 'transactionAmount',
-          header: 'Amount',
-          cell: (item) => (
-            <span
-              style={{
-                color: item.transactionAmount >= 0 ? '#037f0c' : '#d13212',
-                fontWeight: 'bold',
-              }}
-            >
-              {item.transactionAmount >= 0 ? '+' : ''}
-              {item.formattedAmount}
-            </span>
-          ),
-          width: 120,
-          sortingField: 'transactionAmount',
-        },
-        {
-          id: 'accountBalance',
-          header: 'Balance',
-          cell: (item) => item.accountBalance,
-          width: 120,
-          sortingField: 'accountBalance',
-        },
-        {
-          id: 'bankName',
-          header: 'Bank',
-          cell: (item) => item.bankName,
-          width: 110,
-          sortingField: 'bankName',
-        },
-        {
-          id: 'accountNumber',
-          header: 'Account',
-          cell: (item) => item.accountNumber,
-          width: 100,
-          sortingField: 'accountNumber',
-        },
-        {
-          id: 'confidence',
-          header: 'Confidence',
-          cell: (item) => (
-            <Badge
-              color={parseInt(item.confidence) >= 90 ? 'green' : parseInt(item.confidence) >= 75 ? 'blue' : 'grey'}
-            >
-              {item.confidence}
-            </Badge>
-          ),
-          width: 90,
-          sortingField: 'confidence',
-        },
-      ]}
-      items={bankStatements}
-      loading={isLoadingBankStatements}
-      loadingText="Loading bank statements"
-      sortingDisabled={false}
-      header={
-        <Header
-          counter={`(${bankStatements.length})`}
-          description={
-            isCompanySelected
-              ? `Bank statement transactions for ${activeCompany?.companyName || 'selected company'}`
-              : 'Select a company to view bank statement transactions'
-          }
-          actions={
-            <Button onClick={handleDownloadBankStatements} disabled={bankStatements.length === 0} iconName="download">
-              Download CSV
-            </Button>
-          }
-        >
-          Bank Statement Transactions
-        </Header>
-      }
-      empty={
-        <Box margin={{ vertical: 'xs' }} textAlign="center" color="inherit">
-          <SpaceBetween size="m">
-            <Box variant="h3">{isCompanySelected ? 'No transactions found' : 'No company selected'}</Box>
-            <Box variant="p" color="text-body-secondary">
-              {isCompanySelected
-                ? 'No bank statement transactions available for this company yet.'
-                : 'Please select a company from the dropdown to view bank statement transactions.'}
-            </Box>
-          </SpaceBetween>
-        </Box>
-      }
-      pagination={<Pagination currentPageIndex={1} pagesCount={1} disabled={!bankStatementsNextToken} />}
-    />
+    <>
+      <Table
+        {...bankStatementCollectionProps}
+        columnDefinitions={[
+          {
+            id: 'transactionDate',
+            header: 'Date',
+            cell: (item) => item.transactionDate,
+            width: 100,
+            sortingField: 'transactionDate',
+            sortingComparator: (a, b) => {
+              const dateA = new Date(a.rawData?.TransactionDate || 0).getTime();
+              const dateB = new Date(b.rawData?.TransactionDate || 0).getTime();
+              return dateA - dateB;
+            },
+          },
+          {
+            id: 'reference',
+            header: 'Reference',
+            cell: (item) => item.reference,
+            width: 200,
+            sortingField: 'reference',
+          },
+          {
+            id: 'transactionDescription',
+            header: 'Description',
+            cell: (item) => (
+              <span title={item.transactionDescription || ''}>
+                {item.transactionDescription && item.transactionDescription.length > 60
+                  ? item.transactionDescription.substring(0, 60) + '...'
+                  : item.transactionDescription || ''}
+              </span>
+            ),
+            width: 300,
+            sortingField: 'transactionDescription',
+          },
+          {
+            id: 'expenseCategory',
+            header: 'Category',
+            cell: (item) => {
+              if (!item.analysisStatus || item.analysisStatus !== 'ANALYZED') {
+                return <Badge color="grey">Pending</Badge>;
+              }
+
+              return (
+                item.expenseCategory || (
+                  <Box color="text-status-inactive" variant="small">
+                    Uncategorized
+                  </Box>
+                )
+              );
+            },
+            width: 140,
+            sortingField: 'expenseCategory',
+          },
+          {
+            id: 'transactionAmount',
+            header: 'Amount',
+            cell: (item) => (
+              <span
+                style={{
+                  color: (item.transactionAmount || 0) >= 0 ? '#037f0c' : '#d13212',
+                  fontWeight: 'bold',
+                }}
+              >
+                {(item.transactionAmount || 0) >= 0 ? '+' : ''}
+                {item.formattedAmount || ''}
+              </span>
+            ),
+            width: 120,
+            sortingField: 'transactionAmount',
+            sortingComparator: (a, b) => (a.transactionAmount || 0) - (b.transactionAmount || 0),
+          },
+          {
+            id: 'accountBalance',
+            header: 'Balance',
+            cell: (item) => item.accountBalance,
+            width: 120,
+            sortingField: 'accountBalance',
+            sortingComparator: (a, b) => (a.rawData?.AccountBalance || 0) - (b.rawData?.AccountBalance || 0),
+          },
+          {
+            id: 'bankName',
+            header: 'Bank',
+            cell: (item) => item.bankName,
+            width: 110,
+            sortingField: 'bankName',
+          },
+          {
+            id: 'accountNumber',
+            header: 'Account',
+            cell: (item) => item.accountNumber,
+            width: 100,
+            sortingField: 'accountNumber',
+          },
+          {
+            id: 'complianceScore',
+            header: 'Compliance',
+            cell: (item) => {
+              if (!item.analysisStatus || item.analysisStatus !== 'ANALYZED') {
+                return <Badge color="grey">Pending</Badge>;
+              }
+
+              const score = item.complianceScore;
+              if (!score) {
+                return (
+                  <Box color="text-status-inactive" variant="small">
+                    —
+                  </Box>
+                );
+              }
+
+              return (
+                <SpaceBetween direction="horizontal" size="xs">
+                  <Box fontSize="body-m" fontWeight="bold" color={`text-status-${getComplianceScoreColor(score)}`}>
+                    {score}/5
+                  </Box>
+                  <ProgressBar
+                    value={(score / 5) * 100}
+                    variant={getComplianceScoreColor(score) === 'red' ? 'error' : undefined}
+                    hideLabel
+                  />
+                </SpaceBetween>
+              );
+            },
+            width: 140,
+            sortingField: 'complianceScore',
+            sortingComparator: (a, b) => (a.complianceScore || 0) - (b.complianceScore || 0),
+          },
+          {
+            id: 'riskFlags',
+            header: 'Risk Flags',
+            cell: (item) => {
+              if (!item.analysisStatus || item.analysisStatus !== 'ANALYZED') {
+                return <Badge color="grey">Pending</Badge>;
+              }
+
+              return renderRiskFlags(item.riskFlags);
+            },
+            width: 200,
+            sortingDisabled: true,
+          },
+          {
+            id: 'recommendedAction',
+            header: 'Recommended Action',
+            cell: (item) => {
+              if (!item.analysisStatus || item.analysisStatus !== 'ANALYZED') {
+                return <Badge color="grey">Pending</Badge>;
+              }
+
+              if (!item.recommendedAction) {
+                return (
+                  <Box color="text-status-inactive" variant="small">
+                    —
+                  </Box>
+                );
+              }
+
+              return (
+                <Badge color={getRecommendedActionVariant(item.recommendedAction)}>
+                  {item.recommendedAction.replace(/_/g, ' ')}
+                </Badge>
+              );
+            },
+            width: 180,
+            sortingField: 'recommendedAction',
+          },
+          {
+            id: 'confidence',
+            header: 'Confidence',
+            cell: (item) => (
+              <Badge
+                color={
+                  item.confidence && parseInt(item.confidence) >= 90
+                    ? 'green'
+                    : item.confidence && parseInt(item.confidence) >= 75
+                    ? 'blue'
+                    : 'grey'
+                }
+              >
+                {item.confidence || 'N/A'}
+              </Badge>
+            ),
+            width: 90,
+            sortingField: 'confidence',
+            sortingComparator: (a, b) =>
+              (Number.parseInt(a.confidence, 10) || 0) - (Number.parseInt(b.confidence, 10) || 0),
+          },
+          {
+            id: 'analysisStatus',
+            header: 'Analysis',
+            cell: (item) => {
+              const status = item.analysisStatus || 'PENDING';
+              const colorMap = {
+                PENDING: 'grey',
+                IN_PROGRESS: 'blue',
+                ANALYZED: 'green',
+                FAILED: 'red',
+              };
+              return <Badge color={colorMap[status] || 'grey'}>{status}</Badge>;
+            },
+            width: 100,
+            sortingField: 'analysisStatus',
+          },
+        ]}
+        items={bankStatementItems}
+        loading={isLoadingBankStatements}
+        loadingText="Loading bank statements"
+        onRowClick={({ detail }) => setSelectedTransaction(detail.item)}
+        selectedItems={selectedTransaction ? [selectedTransaction] : []}
+        selectionType="single"
+        header={
+          <Header
+            counter={`(${bankStatements.length})`}
+            description={
+              isCompanySelected
+                ? `Bank statement transactions for ${activeCompany?.companyName || 'selected company'}`
+                : 'Select a company to view bank statement transactions'
+            }
+            actions={
+              <SpaceBetween direction="horizontal" size="xs">
+                <Button
+                  onClick={async () => {
+                    if (!activeCompany?.companyNumber) {
+                      console.error('No active company selected');
+                      return;
+                    }
+
+                    if (!user?.attributes?.sub) {
+                      console.error('No authenticated user found');
+                      alert('✗ Error: User not authenticated');
+                      return;
+                    }
+
+                    const pendingCount = bankStatements.filter(
+                      (item) => (item.analysisStatus || 'PENDING') === 'PENDING',
+                    ).length;
+
+                    setIsAnalysisRunning(true);
+                    try {
+                      console.log(
+                        `Starting analysis for company ${activeCompany.companyNumber}, user ${user.attributes.sub} - ${pendingCount} pending transactions`,
+                      );
+
+                      const response = await API.graphql(
+                        graphqlOperation(TRIGGER_TRANSACTION_ANALYSIS, {
+                          companyNumber: activeCompany.companyNumber,
+                          userId: user.attributes.sub,
+                        }),
+                      );
+
+                      const result = response.data.triggerTransactionAnalysis;
+
+                      if (result.success) {
+                        console.log('Analysis started:', result.executionArn);
+                        alert(
+                          `✓ Analysis started successfully!\n${result.message}\n\nExecution: ${result.executionName}\n\nRefresh the page in 30 seconds to see categorization results.`,
+                        );
+                      } else {
+                        console.error('Analysis failed:', result.message);
+                        alert(`✗ Analysis failed: ${result.message}`);
+                      }
+                    } catch (error) {
+                      console.error('Error triggering analysis:', error);
+                      alert(`✗ Error starting analysis: ${error.message || 'Unknown error'}`);
+                    } finally {
+                      setIsAnalysisRunning(false);
+                    }
+                  }}
+                  loading={isAnalysisRunning}
+                  disabled={
+                    isAnalysisRunning ||
+                    bankStatements.length === 0 ||
+                    !bankStatements.some((item) => (item.analysisStatus || 'PENDING') === 'PENDING')
+                  }
+                  variant="primary"
+                >
+                  Analyse Transactions
+                  {bankStatements.filter((item) => (item.analysisStatus || 'PENDING') === 'PENDING').length > 0 &&
+                    ` (${bankStatements.filter((item) => (item.analysisStatus || 'PENDING') === 'PENDING').length})`}
+                </Button>
+                <Button
+                  onClick={handleDownloadBankStatements}
+                  disabled={bankStatements.length === 0}
+                  iconName="download"
+                >
+                  Download CSV
+                </Button>
+              </SpaceBetween>
+            }
+          >
+            Bank Statement Transactions
+          </Header>
+        }
+        empty={
+          <Box margin={{ vertical: 'xs' }} textAlign="center" color="inherit">
+            <SpaceBetween size="m">
+              <Box variant="h3">{isCompanySelected ? 'No transactions found' : 'No company selected'}</Box>
+              <Box variant="p" color="text-body-secondary">
+                {isCompanySelected
+                  ? 'No bank statement transactions available for this company yet.'
+                  : 'Please select a company from the dropdown to view bank statement transactions.'}
+              </Box>
+            </SpaceBetween>
+          </Box>
+        }
+        pagination={<Pagination {...bankStatementPaginationProps} ariaLabels={paginationLabels} />}
+      />
+
+      {selectedTransaction && (
+        <Alert type="info" header="Transaction Selected" dismissible onDismiss={() => setSelectedTransaction(null)}>
+          Viewing details for <b>{selectedTransaction.reference || selectedTransaction.transactionDescription}</b>{' '}
+          below. The selected row is highlighted in blue.
+        </Alert>
+      )}
+
+      <TransactionDetailDrawer
+        transaction={selectedTransaction}
+        visible={!!selectedTransaction}
+        onDismiss={() => setSelectedTransaction(null)}
+      />
+    </>
   );
 
   // Documents Table (existing implementation)

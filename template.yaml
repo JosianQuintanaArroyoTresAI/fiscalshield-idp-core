@@ -2563,6 +2563,17 @@ Resources:
       Name: !Sub "${AWS::StackName}-Settings"
       Value: "{}"
 
+  # SSM Parameter for Analysis Stack API URL (placeholder for cross-stack integration)
+  AnalysisApiUrlParameter:
+    DependsOn:
+      - IsStacknameLengthOK
+    Type: AWS::SSM::Parameter
+    Properties:
+      Type: String
+      Name: !Sub "/${AWS::StackName}/analysis-api-url"
+      Description: "Placeholder for Analysis Stack API URL (will be updated by Analysis stack deployment)"
+      Value: "https://placeholder-analysis-api.execute-api.eu-central-1.amazonaws.com/prod"
+
   UpdateSettingsFunction:
     DependsOn:
       - IsStacknameLengthOK
@@ -4184,6 +4195,53 @@ Resources:
       KmsKeyId: !GetAtt CustomerManagedEncryptionKey.Arn
       RetentionInDays: !Ref LogRetentionDays
 
+  # Lambda function for triggering transaction analysis
+  TriggerTransactionAnalysisFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access as it only invokes Step Functions"
+          - id: W92
+            reason: "Function does not require reserved concurrency as it scales based on demand"
+    # checkov:skip=CKV_AWS_116: "DLQ not required for AppSync resolver function"
+    # checkov:skip=CKV_AWS_117: "Function does not require VPC access"
+    # checkov:skip=CKV_AWS_115: "Function does not require reserved concurrency"
+    # checkov:skip=CKV_AWS_173: "Environment variables do not contain sensitive data"
+    Properties:
+      PermissionsBoundary:
+        !If [
+          HasPermissionsBoundary,
+          !Ref PermissionsBoundaryArn,
+          !Ref AWS::NoValue,
+        ]
+      CodeUri: src/resolvers/triggerTransactionAnalysis/
+      Handler: index.lambda_handler
+      Runtime: python3.12
+      Timeout: 30
+      Environment:
+        Variables:
+          STATE_MACHINE_ARN: arn:aws:states:eu-central-1:864899848062:stateMachine:fiscalshield-analysis-dev-TransactionCategorization
+          LOG_LEVEL: !Ref LogLevel
+      Policies:
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - states:StartExecution
+                - states:ListExecutions
+              Resource:
+                - arn:aws:states:eu-central-1:864899848062:stateMachine:fiscalshield-analysis-dev-TransactionCategorization
+      LoggingConfig:
+        LogGroup: !Ref TriggerTransactionAnalysisLogGroup
+
+  TriggerTransactionAnalysisLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !GetAtt CustomerManagedEncryptionKey.Arn
+      RetentionInDays: !Ref LogRetentionDays
+
   # AppSync resolvers for agent operations
   ListAvailableAgentsResolver:
     Type: AWS::AppSync::Resolver
@@ -4204,6 +4262,26 @@ Resources:
       ServiceRoleArn: !GetAtt AppSyncServiceRole.Arn
       LambdaConfig:
         LambdaFunctionArn: !GetAtt ListAvailableAgentsFunction.Arn
+
+  TriggerTransactionAnalysisResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn: GraphQLSchema
+    Properties:
+      ApiId: !GetAtt GraphQLApi.ApiId
+      TypeName: Mutation
+      FieldName: triggerTransactionAnalysis
+      DataSourceName: !GetAtt TriggerTransactionAnalysisDataSource.Name
+
+  TriggerTransactionAnalysisDataSource:
+    Type: AWS::AppSync::DataSource
+    Properties:
+      ApiId: !GetAtt GraphQLApi.ApiId
+      Name: TriggerTransactionAnalysisDataSource
+      Description: Lambda function for triggering transaction analysis workflow
+      Type: AWS_LAMBDA
+      ServiceRoleArn: !GetAtt AppSyncServiceRole.Arn
+      LambdaConfig:
+        LambdaFunctionArn: !GetAtt TriggerTransactionAnalysisFunction.Arn
 
   SubmitAgentQueryResolver:
     Type: AWS::AppSync::Resolver
@@ -5584,6 +5662,7 @@ Resources:
                   - !GetAtt ListUserCompaniesFunction.Arn
                   - !GetAtt DeleteUserCompanyFunction.Arn
                   - !GetAtt ListExtractionResultsFunction.Arn
+                  - !GetAtt TriggerTransactionAnalysisFunction.Arn
 
   # Lambda function for Create Document resolver
   CreateDocumentResolverFunction:
@@ -7829,7 +7908,7 @@ Resources:
         ]
       Role: !GetAtt StartUICodeBuildExecutionRole.Arn
       Runtime: python3.12
-      Timeout: 60
+      Timeout: 900
       MemorySize: 128
       Handler: index.handler
       CodeUri: src/lambda/start_codebuild

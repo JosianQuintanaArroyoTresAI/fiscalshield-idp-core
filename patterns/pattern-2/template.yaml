@@ -1818,10 +1818,10 @@ Resources:
           CONFIGURATION_TABLE: !Ref ConfigurationTable
           TRACKING_TABLE: !Ref TrackingTable
           WORKING_BUCKET: !Ref WorkingBucket
-          BEDROCK_MODEL_ID: "anthropic.claude-3-haiku-20240307-v1:0"
-          BEDROCK_INFERENCE_PROFILE_ARN: "arn:aws:bedrock:eu-central-1:864899848062:inference-profile/eu.anthropic.claude-3-haiku-20240307-v1:0"
-          FALLBACK_BEDROCK_MODEL_ID: "anthropic.claude-3-7-sonnet-20250219-v1:0,anthropic.claude-3-5-sonnet-20240620-v1:0"
-          FALLBACK_BEDROCK_INFERENCE_PROFILE_ARN: "arn:aws:bedrock:eu-central-1:864899848062:inference-profile/eu.anthropic.claude-3-7-sonnet-20250219-v1:0,arn:aws:bedrock:eu-central-1:864899848062:inference-profile/eu.anthropic.claude-3-5-sonnet-20240620-v1:0"
+          BEDROCK_MODEL_ID: "eu.anthropic.claude-3-7-sonnet-20250219-v1:0"
+          BEDROCK_INFERENCE_PROFILE_ARN: "arn:aws:bedrock:eu-central-1:864899848062:inference-profile/eu.anthropic.claude-3-7-sonnet-20250219-v1:0"
+          FALLBACK_BEDROCK_MODEL_ID: "eu.anthropic.claude-3-5-sonnet-20240620-v1:0,eu.amazon.nova-pro-v1:0"
+          FALLBACK_BEDROCK_INFERENCE_PROFILE_ARN: "arn:aws:bedrock:eu-central-1:864899848062:inference-profile/eu.anthropic.claude-3-5-sonnet-20240620-v1:0,arn:aws:bedrock:eu-central-1:864899848062:inference-profile/eu.amazon.nova-pro-v1:0"
           BEDROCK_MAX_RETRIES: "6"
           BEDROCK_BACKOFF_BASE_SECONDS: "2.0"
           BEDROCK_BACKOFF_MAX_SECONDS: "45.0"

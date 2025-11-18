@@ -55,6 +55,11 @@ Parameters:
     AllowedValues: [1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1827, 3653]
     Default: 7
 
+  ExtractionResultsTableName:
+    Type: String
+    Description: Name of the DynamoDB ExtractionResults table from IDP Core stack
+    Default: ''
+
 Conditions:
   IsProduction: !Equals [!Ref Environment, 'prod']
   EnableTracing: !Equals [!Ref EnableXRayTracing, 'true']
@@ -162,6 +167,37 @@ Resources:
           Value: Public company analysis data
 
   # ========================================================================
+  # SQS QUEUES - TRANSACTION CATEGORIZATION
+  # ========================================================================
+
+  TransactionCategorizationQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub 'fiscalshield-analysis-${Environment}-TransactionCategorization'
+      VisibilityTimeout: 300  # 5 minutes for Lambda processing
+      MessageRetentionPeriod: 1209600  # 14 days
+      ReceiveMessageWaitTimeSeconds: 20  # Long polling
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt TransactionCategorizationDLQ.Arn
+        maxReceiveCount: 3
+      Tags:
+        - Key: Name
+          Value: !Sub 'fiscalshield-analysis-${Environment}-TransactionCategorization'
+        - Key: Purpose
+          Value: Queue transaction batches for categorization and risk scoring
+
+  TransactionCategorizationDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub 'fiscalshield-analysis-${Environment}-TransactionCategorization-DLQ'
+      MessageRetentionPeriod: 1209600  # 14 days
+      Tags:
+        - Key: Name
+          Value: !Sub 'fiscalshield-analysis-${Environment}-TransactionCategorization-DLQ'
+        - Key: Purpose
+          Value: Dead letter queue for failed categorization batches
+
+  # ========================================================================
   # IAM ROLE - LAMBDA EXECUTION
   # ========================================================================
 
@@ -198,6 +234,24 @@ Resources:
                 Resource:
                   - !GetAtt CompanyIntelligenceTable.Arn
                   - !Sub '${CompanyIntelligenceTable.Arn}/index/*'
+              - Sid: AccessExtractionResultsTable
+                Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                Resource:
+                  - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${ExtractionResultsTableName}'
+                  - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${ExtractionResultsTableName}/index/*'
+              - Sid: DecryptExtractionResultsTableKMS
+                Effect: Allow
+                Action:
+                  - kms:Decrypt
+                  - kms:DescribeKey
+                Resource:
+                  - 'arn:aws:kms:eu-central-1:864899848062:key/a960f907-4d93-49c2-b05f-acc470fcf9cb'
               - Sid: ReadDataCollectionTables
                 Effect: Allow
                 Action:
@@ -401,6 +455,115 @@ Resources:
             Method: GET
 
   # ========================================================================
+  # LAMBDA FUNCTIONS - TRANSACTION CATEGORIZATION
+  # ========================================================================
+
+  TriggerAnalysisFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'fiscalshield-analysis-${Environment}-TriggerAnalysis'
+      Description: Query pending transactions and prepare batches for Step Functions
+      CodeUri: lambdas/trigger_analysis/
+      Handler: handler.lambda_handler
+      Role: !GetAtt AnalysisLambdaRole.Arn
+      Timeout: 60
+      MemorySize: 512
+      Environment:
+        Variables:
+          EXTRACTION_RESULTS_TABLE: !Ref ExtractionResultsTableName
+          BATCH_SIZE: '15'
+      Tags:
+        Purpose: Trigger transaction categorization workflow
+
+  CategorizationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'fiscalshield-analysis-${Environment}-Categorization'
+      Description: Categorize bank transactions using Claude via Bedrock
+      CodeUri: lambdas/categorization/
+      Handler: handler.lambda_handler
+      Role: !GetAtt AnalysisLambdaRole.Arn
+      Timeout: 300  # 5 minutes for Bedrock processing
+      MemorySize: 1024
+      Environment:
+        Variables:
+          EXTRACTION_RESULTS_TABLE: !Ref ExtractionResultsTableName
+          BEDROCK_MODEL_ID: 'eu.anthropic.claude-3-5-sonnet-20240620-v1:0'
+      Tags:
+        Purpose: Transaction categorization and risk scoring
+
+  # ========================================================================
+  # STEP FUNCTIONS STATE MACHINE
+  # ========================================================================
+
+  TransactionCategorizationStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Name: !Sub 'fiscalshield-analysis-${Environment}-TransactionCategorization'
+      DefinitionUri: statemachines/transaction-categorization.asl.json
+      DefinitionSubstitutions:
+        TriggerAnalysisLambdaArn: !GetAtt TriggerAnalysisFunction.Arn
+        CategorizationLambdaArn: !GetAtt CategorizationFunction.Arn
+      Role: !GetAtt StepFunctionsExecutionRole.Arn
+      Tracing:
+        Enabled: !If [EnableTracing, true, false]
+      Logging:
+        Level: ALL
+        IncludeExecutionData: true
+        Destinations:
+          - CloudWatchLogsLogGroup:
+              LogGroupArn: !GetAtt StateMachineLogGroup.Arn
+      Tags:
+        Environment: !Ref Environment
+        Purpose: Transaction categorization workflow orchestration
+
+  StateMachineLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/stepfunctions/fiscalshield-analysis-${Environment}-TransactionCategorization'
+      RetentionInDays: !If [IsProduction, 90, 7]
+
+  StepFunctionsExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'fiscalshield-analysis-${Environment}-StepFunctionsRole'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: states.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/CloudWatchLogsFullAccess
+      Policies:
+        - PolicyName: InvokeLambdaFunctions
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'lambda:InvokeFunction'
+                Resource:
+                  - !GetAtt TriggerAnalysisFunction.Arn
+                  - !GetAtt CategorizationFunction.Arn
+        - PolicyName: CloudWatchLogs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'logs:CreateLogDelivery'
+                  - 'logs:GetLogDelivery'
+                  - 'logs:UpdateLogDelivery'
+                  - 'logs:DeleteLogDelivery'
+                  - 'logs:ListLogDeliveries'
+                  - 'logs:PutResourcePolicy'
+                  - 'logs:DescribeResourcePolicies'
+                  - 'logs:DescribeLogGroups'
+                Resource: '*'
+
+  # ========================================================================
   # API GATEWAY
   # ========================================================================
 
@@ -532,6 +695,36 @@ Outputs:
     Value: !GetAtt GenerateReportFunction.Arn
     Export:
       Name: !Sub '${AWS::StackName}-GenerateReportFunction'
+
+  TriggerAnalysisFunctionArn:
+    Description: ARN of Trigger Analysis Lambda function for transaction categorization
+    Value: !GetAtt TriggerAnalysisFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-TriggerAnalysisFunction'
+
+  CategorizationFunctionArn:
+    Description: ARN of Categorization Lambda function
+    Value: !GetAtt CategorizationFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-CategorizationFunction'
+
+  TransactionCategorizationStateMachineArn:
+    Description: ARN of Transaction Categorization Step Functions State Machine
+    Value: !Ref TransactionCategorizationStateMachine
+    Export:
+      Name: !Sub '${AWS::StackName}-StateMachineArn'
+
+  TransactionCategorizationStateMachineName:
+    Description: Name of Transaction Categorization Step Functions State Machine
+    Value: !GetAtt TransactionCategorizationStateMachine.Name
+    Export:
+      Name: !Sub '${AWS::StackName}-StateMachineName'
+
+  CategorizationQueueUrl:
+    Description: URL of Transaction Categorization SQS Queue (for DLQ only)
+    Value: !Ref TransactionCategorizationQueue
+    Export:
+      Name: !Sub '${AWS::StackName}-CategorizationQueue'
 
   AllApiEndpoints:
     Description: All available API endpoints

@@ -116,7 +116,7 @@ LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')
 EXTRACTION_RESULTS_TABLE = os.environ.get('EXTRACTION_RESULTS_TABLE')
 CONFIGURATION_TABLE = os.environ.get('CONFIGURATION_TABLE')
 TRACKING_TABLE = os.environ.get('TRACKING_TABLE')
-BEDROCK_MODEL_ID = os.environ.get('BEDROCK_MODEL_ID', 'anthropic.claude-3-7-sonnet-20250219-v1:0')
+BEDROCK_MODEL_ID = os.environ.get('BEDROCK_MODEL_ID', 'eu.anthropic.claude-3-7-sonnet-20250219-v1:0')
 AWS_REGION = os.environ.get('AWS_REGION', 'eu-central-1')
 BEDROCK_INFERENCE_PROFILE_ARN = os.environ.get('BEDROCK_INFERENCE_PROFILE_ARN', '').strip()
 FALLBACK_BEDROCK_MODEL_ID = os.environ.get('FALLBACK_BEDROCK_MODEL_ID', '').strip()
@@ -425,6 +425,13 @@ EXTRACTION RULES:
 5. Clean up descriptions by removing extra whitespace
 6. Skip obvious non-transaction text (headers, terms, page numbers)
 7. MUST include account_number, sort_code, statement_period in EVERY transaction
+8. Extract compliance fields:
+   - <counterparty_name>: Who was paid/who paid (merchant, company, person)
+   - <direction>: INBOUND or OUTBOUND
+   - <payment_method>: BACS, CHAPS, FASTER_PAYMENT, CARD, ATM, DD, SO, CASH, TRANSFER
+   - <counterparty_country>: Extract if visible in description (e.g., "USA", "GBR", "LONDON GBR")
+     * For UK domestic payments (Faster Payments, Direct Debit, UK companies): use "UK"
+     * If country not visible and cannot be inferred: use "UNKNOWN"
 
 FIELD-LEVEL CONFIDENCE SCORES (0.0 to 1.0):
 For each transaction, provide confidence scores:
@@ -460,6 +467,10 @@ Return in XML format:
   <balance>150.50</balance>
   <transaction_type>CREDIT</transaction_type>
   <reference>862834451961-CHB</reference>
+  <counterparty_name>CHB</counterparty_name>
+  <direction>INBOUND</direction>
+  <payment_method>BACS</payment_method>
+  <counterparty_country>UK</counterparty_country>
   <source_page>2</source_page>
   <date_confidence>0.95</date_confidence>
   <amount_confidence>0.98</amount_confidence>
@@ -476,6 +487,10 @@ Return in XML format:
   <balance>129.70</balance>
   <transaction_type>DD</transaction_type>
   <reference>PAYPAL</reference>
+  <counterparty_name>PAYPAL</counterparty_name>
+  <direction>OUTBOUND</direction>
+  <payment_method>DD</payment_method>
+  <counterparty_country>USA</counterparty_country>
   <source_page>2</source_page>
   <date_confidence>0.95</date_confidence>
   <amount_confidence>0.98</amount_confidence>
@@ -665,6 +680,13 @@ def parse_transactions_from_xml(
             'balance': balance,
             'transaction_type': row_data.get('transaction_type', 'DEBIT' if amount < 0 else 'CREDIT'),
             'reference': row_data.get('reference', ''),
+            
+            # New HMRC compliance fields
+            'counterparty_name': row_data.get('counterparty_name', ''),
+            'direction': row_data.get('direction', 'OUTBOUND' if amount < 0 else 'INBOUND'),
+            'payment_method': row_data.get('payment_method', ''),
+            'counterparty_country': row_data.get('counterparty_country', 'UNKNOWN'),
+            
             'source_page': source_page,
             'chunk_index': chunk_index,
             
@@ -739,6 +761,7 @@ def write_transactions_to_dynamodb(
                 'GSI3PK': f"account#{txn_data['account_number']}#type#BANK_STATEMENT",
                 'DocumentId': document_id,
                 'ExtractionStatus': 'COMPLETED',
+                'AnalysisStatus': 'PENDING',
                 'GSI6PK': f"client#{client_id}#type#BANK_STATEMENT",
                 
                 # Core identifiers
@@ -762,6 +785,13 @@ def write_transactions_to_dynamodb(
                 'AccountBalance': txn_data['balance'] if txn_data['balance'] is not None else Decimal('0'),
                 'TransactionType': txn_data['transaction_type'],
                 'Reference': txn_data['reference'],
+                
+                # HMRC compliance fields
+                'CounterpartyName': txn_data['counterparty_name'],
+                'Direction': txn_data['direction'],
+                'PaymentMethod': txn_data['payment_method'],
+                'CounterpartyCountry': txn_data['counterparty_country'],
+                
                 'SourcePage': txn_data['source_page'],
                 
                 # Chunk metadata
@@ -1130,11 +1160,13 @@ def lambda_handler(event, context):
         log_with_timestamp(f"🔍 Extracted metadata - ID: {document_id}, User: {user_id}, Client: {client_id}, Company: {company_name} ({company_number})")
         
         # CRITICAL SECURITY: Validate required fields to prevent document leaks between users/companies
-        # Both user_id and client_id MUST be present to ensure proper document isolation
+        # Both user_id and client_id (company_number) MUST be present to ensure proper document isolation
         if not all([document_id, section_id, user_id, client_id]):
             raise ValueError(
-                f"Missing required fields in event: document_id={document_id}, "
-                f"section_id={section_id}, user_id={user_id}, client_id={client_id}"
+                f"SECURITY ERROR: Missing required fields for document isolation. "
+                f"document_id={document_id}, section_id={section_id}, "
+                f"user_id={user_id}, client_id={client_id}, company_number={company_number}. "
+                f"All bank statements MUST be associated with a company to prevent data leakage."
             )
         
         log_with_timestamp(
