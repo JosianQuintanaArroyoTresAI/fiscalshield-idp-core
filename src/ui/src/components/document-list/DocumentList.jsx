@@ -799,14 +799,9 @@ const DocumentList = () => {
       />
 
       {selectedTransaction && (
-        <Alert
-          type="info"
-          header="Transaction Selected"
-          dismissible
-          onDismiss={() => setSelectedTransaction(null)}
-        >
-          Viewing details for <b>{selectedTransaction.reference || selectedTransaction.transactionDescription}</b> below.
-          The selected row is highlighted in blue.
+        <Alert type="info" header="Transaction Selected" dismissible onDismiss={() => setSelectedTransaction(null)}>
+          Viewing details for <b>{selectedTransaction.reference || selectedTransaction.transactionDescription}</b>{' '}
+          below. The selected row is highlighted in blue.
         </Alert>
       )}
 
