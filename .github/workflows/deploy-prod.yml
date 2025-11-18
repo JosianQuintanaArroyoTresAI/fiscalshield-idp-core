@@ -69,6 +69,28 @@ jobs:
       run: |
         pip install boto3 rich typer PyYAML botocore setuptools ruff black
     
+    - name: Security audit UI dependencies (STRICT)
+      run: |
+        echo "🔍 Running STRICT security audit for production deployment..."
+        cd src/ui
+        
+        # Production requires NO moderate or higher vulnerabilities
+        if npm audit --audit-level=moderate --production; then
+          echo "✅ No moderate or higher vulnerabilities found - safe for production"
+        else
+          echo "❌ PRODUCTION DEPLOYMENT BLOCKED: Security vulnerabilities detected!"
+          echo "📋 Vulnerability details:"
+          npm audit --audit-level=moderate --production
+          echo ""
+          echo "🚨 Production deployments require all moderate+ vulnerabilities to be fixed"
+          echo "💡 To fix:"
+          echo "   1. Run 'cd src/ui && npm audit fix' locally"
+          echo "   2. Test the changes"
+          echo "   3. Commit and push the updated package-lock.json"
+          echo "   4. Re-run this deployment"
+          exit 1
+        fi
+    
     - name: Run tests before deployment
       run: |
         pip install pytest pytest-cov moto pyarrow
