@@ -667,37 +667,37 @@ const DocumentList = () => {
             width: 180,
             sortingField: 'recommendedAction',
           },
-            {
-              id: 'confidence',
-              header: 'Confidence',
-              cell: (item) => (
-                <Badge
-                  color={parseInt(item.confidence) >= 90 ? 'green' : parseInt(item.confidence) >= 75 ? 'blue' : 'grey'}
-                >
-                  {item.confidence}
-                </Badge>
-              ),
-              width: 90,
-              sortingField: 'confidence',
-              sortingComparator: (a, b) =>
-                (Number.parseInt(a.confidence, 10) || 0) - (Number.parseInt(b.confidence, 10) || 0),
+          {
+            id: 'confidence',
+            header: 'Confidence',
+            cell: (item) => (
+              <Badge
+                color={parseInt(item.confidence) >= 90 ? 'green' : parseInt(item.confidence) >= 75 ? 'blue' : 'grey'}
+              >
+                {item.confidence}
+              </Badge>
+            ),
+            width: 90,
+            sortingField: 'confidence',
+            sortingComparator: (a, b) =>
+              (Number.parseInt(a.confidence, 10) || 0) - (Number.parseInt(b.confidence, 10) || 0),
+          },
+          {
+            id: 'analysisStatus',
+            header: 'Analysis',
+            cell: (item) => {
+              const status = item.analysisStatus || 'PENDING';
+              const colorMap = {
+                PENDING: 'grey',
+                IN_PROGRESS: 'blue',
+                ANALYZED: 'green',
+                FAILED: 'red',
+              };
+              return <Badge color={colorMap[status] || 'grey'}>{status}</Badge>;
             },
-            {
-              id: 'analysisStatus',
-              header: 'Analysis',
-              cell: (item) => {
-                const status = item.analysisStatus || 'PENDING';
-                const colorMap = {
-                  PENDING: 'grey',
-                  IN_PROGRESS: 'blue',
-                  ANALYZED: 'green',
-                  FAILED: 'red',
-                };
-                return <Badge color={colorMap[status] || 'grey'}>{status}</Badge>;
-              },
-              width: 100,
-              sortingField: 'analysisStatus',
-            },
+            width: 100,
+            sortingField: 'analysisStatus',
+          },
         ]}
         items={bankStatementItems}
         loading={isLoadingBankStatements}
@@ -705,93 +705,97 @@ const DocumentList = () => {
         onRowClick={({ detail }) => setSelectedTransaction(detail.item)}
         header={
           <Header
-          counter={`(${bankStatements.length})`}
-          description={
-            isCompanySelected
-              ? `Bank statement transactions for ${activeCompany?.companyName || 'selected company'}`
-              : 'Select a company to view bank statement transactions'
-          }
-          actions={
-            <SpaceBetween direction="horizontal" size="xs">
-              <Button
-                onClick={async () => {
-                  if (!activeCompany?.companyNumber) {
-                    console.error('No active company selected');
-                    return;
-                  }
-
-                  if (!user?.attributes?.sub) {
-                    console.error('No authenticated user found');
-                    alert('✗ Error: User not authenticated');
-                    return;
-                  }
-
-                  const pendingCount = bankStatements.filter(
-                    (item) => (item.analysisStatus || 'PENDING') === 'PENDING',
-                  ).length;
-
-                  setIsAnalysisRunning(true);
-                  try {
-                    console.log(
-                      `Starting analysis for company ${activeCompany.companyNumber}, user ${user.attributes.sub} - ${pendingCount} pending transactions`,
-                    );
-
-                    const response = await API.graphql(
-                      graphqlOperation(TRIGGER_TRANSACTION_ANALYSIS, {
-                        companyNumber: activeCompany.companyNumber,
-                        userId: user.attributes.sub,
-                      }),
-                    );
-
-                    const result = response.data.triggerTransactionAnalysis;
-
-                    if (result.success) {
-                      console.log('Analysis started:', result.executionArn);
-                      alert(
-                        `✓ Analysis started successfully!\n${result.message}\n\nExecution: ${result.executionName}\n\nRefresh the page in 30 seconds to see categorization results.`,
-                      );
-                    } else {
-                      console.error('Analysis failed:', result.message);
-                      alert(`✗ Analysis failed: ${result.message}`);
+            counter={`(${bankStatements.length})`}
+            description={
+              isCompanySelected
+                ? `Bank statement transactions for ${activeCompany?.companyName || 'selected company'}`
+                : 'Select a company to view bank statement transactions'
+            }
+            actions={
+              <SpaceBetween direction="horizontal" size="xs">
+                <Button
+                  onClick={async () => {
+                    if (!activeCompany?.companyNumber) {
+                      console.error('No active company selected');
+                      return;
                     }
-                  } catch (error) {
-                    console.error('Error triggering analysis:', error);
-                    alert(`✗ Error starting analysis: ${error.message || 'Unknown error'}`);
-                  } finally {
-                    setIsAnalysisRunning(false);
+
+                    if (!user?.attributes?.sub) {
+                      console.error('No authenticated user found');
+                      alert('✗ Error: User not authenticated');
+                      return;
+                    }
+
+                    const pendingCount = bankStatements.filter(
+                      (item) => (item.analysisStatus || 'PENDING') === 'PENDING',
+                    ).length;
+
+                    setIsAnalysisRunning(true);
+                    try {
+                      console.log(
+                        `Starting analysis for company ${activeCompany.companyNumber}, user ${user.attributes.sub} - ${pendingCount} pending transactions`,
+                      );
+
+                      const response = await API.graphql(
+                        graphqlOperation(TRIGGER_TRANSACTION_ANALYSIS, {
+                          companyNumber: activeCompany.companyNumber,
+                          userId: user.attributes.sub,
+                        }),
+                      );
+
+                      const result = response.data.triggerTransactionAnalysis;
+
+                      if (result.success) {
+                        console.log('Analysis started:', result.executionArn);
+                        alert(
+                          `✓ Analysis started successfully!\n${result.message}\n\nExecution: ${result.executionName}\n\nRefresh the page in 30 seconds to see categorization results.`,
+                        );
+                      } else {
+                        console.error('Analysis failed:', result.message);
+                        alert(`✗ Analysis failed: ${result.message}`);
+                      }
+                    } catch (error) {
+                      console.error('Error triggering analysis:', error);
+                      alert(`✗ Error starting analysis: ${error.message || 'Unknown error'}`);
+                    } finally {
+                      setIsAnalysisRunning(false);
+                    }
+                  }}
+                  loading={isAnalysisRunning}
+                  disabled={
+                    isAnalysisRunning ||
+                    bankStatements.length === 0 ||
+                    !bankStatements.some((item) => (item.analysisStatus || 'PENDING') === 'PENDING')
                   }
-                }}
-                loading={isAnalysisRunning}
-                disabled={
-                  isAnalysisRunning ||
-                  bankStatements.length === 0 ||
-                  !bankStatements.some((item) => (item.analysisStatus || 'PENDING') === 'PENDING')
-                }
-                variant="primary"
-              >
-                Analyse Transactions
-                {bankStatements.filter((item) => (item.analysisStatus || 'PENDING') === 'PENDING').length > 0 &&
-                  ` (${bankStatements.filter((item) => (item.analysisStatus || 'PENDING') === 'PENDING').length})`}
-              </Button>
-              <Button onClick={handleDownloadBankStatements} disabled={bankStatements.length === 0} iconName="download">
-                Download CSV
-              </Button>
-            </SpaceBetween>
-          }
+                  variant="primary"
+                >
+                  Analyse Transactions
+                  {bankStatements.filter((item) => (item.analysisStatus || 'PENDING') === 'PENDING').length > 0 &&
+                    ` (${bankStatements.filter((item) => (item.analysisStatus || 'PENDING') === 'PENDING').length})`}
+                </Button>
+                <Button
+                  onClick={handleDownloadBankStatements}
+                  disabled={bankStatements.length === 0}
+                  iconName="download"
+                >
+                  Download CSV
+                </Button>
+              </SpaceBetween>
+            }
           >
             Bank Statement Transactions
           </Header>
         }
         empty={
           <Box margin={{ vertical: 'xs' }} textAlign="center" color="inherit">
-          <SpaceBetween size="m">
-            <Box variant="h3">{isCompanySelected ? 'No transactions found' : 'No company selected'}</Box>
-            <Box variant="p" color="text-body-secondary">
-              {isCompanySelected
-                ? 'No bank statement transactions available for this company yet.'
-                : 'Please select a company from the dropdown to view bank statement transactions.'}
-            </Box>
-          </SpaceBetween>
+            <SpaceBetween size="m">
+              <Box variant="h3">{isCompanySelected ? 'No transactions found' : 'No company selected'}</Box>
+              <Box variant="p" color="text-body-secondary">
+                {isCompanySelected
+                  ? 'No bank statement transactions available for this company yet.'
+                  : 'Please select a company from the dropdown to view bank statement transactions.'}
+              </Box>
+            </SpaceBetween>
           </Box>
         }
         pagination={<Pagination currentPageIndex={1} pagesCount={1} disabled={!bankStatementsNextToken} />}

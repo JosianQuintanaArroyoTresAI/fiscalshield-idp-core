@@ -395,9 +395,7 @@ const TransactionDetailDrawer = ({ transaction, visible, onDismiss }) => {
             {isSourceVisible && (
               <Box textAlign="center" padding={{ top: 's' }}>
                 {isSourceLoading && <Spinner />}
-                {!isSourceLoading && sourceError && (
-                  <StatusIndicator type="error">{sourceError}</StatusIndicator>
-                )}
+                {!isSourceLoading && sourceError && <StatusIndicator type="error">{sourceError}</StatusIndicator>}
                 {!isSourceLoading && !sourceError && sourceDocumentUrl && sourceDocumentType === 'image' && (
                   <img
                     src={sourceDocumentUrl}
@@ -427,15 +425,12 @@ const TransactionDetailDrawer = ({ transaction, visible, onDismiss }) => {
                     </p>
                   </object>
                 )}
-                {!isSourceLoading && !sourceError && sourceDocumentUrl &&
+                {!isSourceLoading &&
+                  !sourceError &&
+                  sourceDocumentUrl &&
                   sourceDocumentType !== 'image' &&
                   sourceDocumentType !== 'pdf' && (
-                    <Button
-                      iconName="external"
-                      href={sourceDocumentUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
+                    <Button iconName="external" href={sourceDocumentUrl} target="_blank" rel="noreferrer">
                       Download source document
                     </Button>
                   )}
