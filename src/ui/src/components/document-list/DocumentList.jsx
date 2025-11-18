@@ -456,7 +456,7 @@ const DocumentList = () => {
     return actionMap[action] || 'info';
   };
 
-    const renderRiskFlags = (flags) => {
+  const renderRiskFlags = (flags) => {
     if (!flags || flags.length === 0 || (flags.length === 1 && flags[0] === 'CLEAN')) {
       return <Badge color="green">Clean</Badge>;
     }
