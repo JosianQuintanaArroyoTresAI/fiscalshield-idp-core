@@ -15,11 +15,16 @@ import {
   StatusIndicator,
   Spinner,
 } from '@awsui/components-react';
+import { Logger } from 'aws-amplify';
 import useAppContext from '../../contexts/app';
+import useSettingsContext from '../../contexts/settings';
 import generateS3PresignedUrl from '../common/generate-s3-presigned-url';
+
+const logger = new Logger('TransactionDetailDrawer');
 
 const TransactionDetailDrawer = ({ transaction, visible, onDismiss }) => {
   const { currentCredentials } = useAppContext();
+  const { settings } = useSettingsContext();
   const [isSourceVisible, setIsSourceVisible] = useState(false);
   const [sourceDocumentUrl, setSourceDocumentUrl] = useState(null);
   const [isSourceLoading, setIsSourceLoading] = useState(false);
@@ -36,7 +41,25 @@ const TransactionDetailDrawer = ({ transaction, visible, onDismiss }) => {
 
   const rawData = transaction.rawData || {};
   const isAnalyzed = transaction.analysisStatus === 'ANALYZED';
-  const sourceDocumentTarget = transaction.s3Uri || rawData.S3Uri;
+  
+  // Construct proper S3 URI from the transaction data
+  let sourceDocumentTarget = transaction.s3Uri || rawData.S3Uri;
+  
+  // If s3Uri has the NEEDS_BUCKET prefix, construct the full S3 URI
+  if (sourceDocumentTarget && sourceDocumentTarget.startsWith('NEEDS_BUCKET:')) {
+    const s3Path = sourceDocumentTarget.replace('NEEDS_BUCKET:', '');
+    if (settings.InputBucket && s3Path) {
+      sourceDocumentTarget = `s3://${settings.InputBucket}/${s3Path}`;
+      logger.debug(`Constructed S3 URI from PK: ${sourceDocumentTarget}`);
+    } else {
+      logger.warn('Missing InputBucket setting or s3Path for document preview');
+      sourceDocumentTarget = null;
+    }
+  } else if (transaction.s3Path && settings.InputBucket) {
+    // Fallback: use s3Path if available
+    sourceDocumentTarget = `s3://${settings.InputBucket}/${transaction.s3Path}`;
+    logger.debug(`Constructed S3 URI from s3Path: ${sourceDocumentTarget}`);
+  }
 
   const getSourceDocumentType = () => {
     if (!sourceDocumentTarget) return 'unknown';
