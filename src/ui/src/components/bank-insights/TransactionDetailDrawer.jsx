@@ -1,6 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Drawer,
   SpaceBetween,
@@ -13,13 +13,41 @@ import {
   ExpandableSection,
   Button,
   StatusIndicator,
+  Spinner,
 } from '@awsui/components-react';
+import useAppContext from '../../contexts/app';
+import generateS3PresignedUrl from '../common/generate-s3-presigned-url';
 
 const TransactionDetailDrawer = ({ transaction, visible, onDismiss }) => {
+  const { currentCredentials } = useAppContext();
+  const [isSourceVisible, setIsSourceVisible] = useState(false);
+  const [sourceDocumentUrl, setSourceDocumentUrl] = useState(null);
+  const [isSourceLoading, setIsSourceLoading] = useState(false);
+  const [sourceError, setSourceError] = useState(null);
+
+  useEffect(() => {
+    setIsSourceVisible(false);
+    setSourceDocumentUrl(null);
+    setSourceError(null);
+    setIsSourceLoading(false);
+  }, [transaction?.id]);
+
   if (!transaction) return null;
 
   const rawData = transaction.rawData || {};
   const isAnalyzed = transaction.analysisStatus === 'ANALYZED';
+  const sourceDocumentTarget = transaction.s3Uri || rawData.S3Uri;
+
+  const getSourceDocumentType = () => {
+    if (!sourceDocumentTarget) return 'unknown';
+    const sanitized = sourceDocumentTarget.split('?')[0];
+    const extension = sanitized.split('.').pop()?.toLowerCase();
+    if (!extension) return 'unknown';
+    if (extension === 'pdf') return 'pdf';
+    if (['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'].includes(extension)) return 'image';
+    return 'file';
+  };
+  const sourceDocumentType = getSourceDocumentType();
 
   const getComplianceScoreColor = (score) => {
     if (!score) return 'grey';
@@ -47,6 +75,44 @@ const TransactionDetailDrawer = ({ transaction, visible, onDismiss }) => {
       CRITICAL: 'red',
     };
     return tierMap[tier] || 'grey';
+  };
+
+  const handleToggleSourceDocument = async () => {
+    if (isSourceVisible) {
+      setIsSourceVisible(false);
+      return;
+    }
+
+    if (!sourceDocumentTarget) {
+      setSourceError('No source document available for this transaction.');
+      setIsSourceVisible(true);
+      return;
+    }
+
+    if (sourceDocumentUrl) {
+      setIsSourceVisible(true);
+      return;
+    }
+
+    try {
+      setIsSourceLoading(true);
+      setSourceError(null);
+
+      if (!currentCredentials) {
+        throw new Error('Missing AWS credentials for document preview.');
+      }
+
+      const url = await generateS3PresignedUrl(sourceDocumentTarget, currentCredentials, {
+        forceInline: true,
+      });
+      setSourceDocumentUrl(url);
+      setIsSourceVisible(true);
+    } catch (error) {
+      setSourceError(error.message || 'Failed to load source document.');
+      setIsSourceVisible(true);
+    } finally {
+      setIsSourceLoading(false);
+    }
   };
 
   return (
@@ -314,11 +380,74 @@ const TransactionDetailDrawer = ({ transaction, visible, onDismiss }) => {
             </div>
           </ColumnLayout>
 
+          <SpaceBetween size="s" direction="vertical">
+            <Button
+              iconName={isSourceVisible ? 'close' : 'search'}
+              onClick={handleToggleSourceDocument}
+              disabled={!sourceDocumentTarget && !sourceDocumentUrl}
+              loading={isSourceLoading}
+            >
+              {isSourceVisible ? 'Hide Source Document' : 'Show Source Document'}
+            </Button>
+            {!sourceDocumentTarget && !sourceDocumentUrl && (
+              <StatusIndicator type="info">No source document stored for this transaction.</StatusIndicator>
+            )}
+            {isSourceVisible && (
+              <Box textAlign="center" padding={{ top: 's' }}>
+                {isSourceLoading && <Spinner />}
+                {!isSourceLoading && sourceError && (
+                  <StatusIndicator type="error">{sourceError}</StatusIndicator>
+                )}
+                {!isSourceLoading && !sourceError && sourceDocumentUrl && sourceDocumentType === 'image' && (
+                  <img
+                    src={sourceDocumentUrl}
+                    alt="Bank statement source"
+                    style={{
+                      maxWidth: '100%',
+                      maxHeight: '600px',
+                      borderRadius: '8px',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                    }}
+                  />
+                )}
+                {!isSourceLoading && !sourceError && sourceDocumentUrl && sourceDocumentType === 'pdf' && (
+                  <object
+                    data={sourceDocumentUrl}
+                    type="application/pdf"
+                    width="100%"
+                    height="600px"
+                    style={{ border: 'none', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                  >
+                    <p>
+                      This browser cannot display the PDF inline.{' '}
+                      <a href={sourceDocumentUrl} target="_blank" rel="noreferrer">
+                        Download the file
+                      </a>{' '}
+                      instead.
+                    </p>
+                  </object>
+                )}
+                {!isSourceLoading && !sourceError && sourceDocumentUrl &&
+                  sourceDocumentType !== 'image' &&
+                  sourceDocumentType !== 'pdf' && (
+                    <Button
+                      iconName="external"
+                      href={sourceDocumentUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Download source document
+                    </Button>
+                  )}
+                {!isSourceLoading && !sourceError && !sourceDocumentUrl && (
+                  <StatusIndicator type="info">No preview available.</StatusIndicator>
+                )}
+              </Box>
+            )}
+          </SpaceBetween>
           {rawData.SourcePage && (
-            <Box padding={{ top: 'm' }}>
-              <Button iconName="external" variant="primary">
-                View Source Document (Page {rawData.SourcePage})
-              </Button>
+            <Box padding={{ top: 's' }} textAlign="center">
+              <Box variant="small">Page {rawData.SourcePage}</Box>
             </Box>
           )}
         </ExpandableSection>
