@@ -282,6 +282,17 @@ Parameters:
     Description: >
       If you provided a Bedrock Guardrail Id above, provide the corresponding Guardrail version here (e.g. DRAFT|1|2|...).
 
+  # Analysis Stack Integration
+  TransactionCategorizationStateMachineArn:
+    Type: String
+    Default: ""
+    Description: >-
+      ARN of the Transaction Categorization Step Function from the Analysis Stack.
+      Leave blank to disable transaction analysis integration.
+      Format: arn:aws:states:REGION:ACCOUNT:stateMachine:fiscalshield-analysis-ENV-TransactionCategorization
+    AllowedPattern: "^(|arn:aws[a-z-]*:states:[a-z0-9-]+:[0-9]{12}:stateMachine:.+)$"
+    ConstraintDescription: Must be empty or a valid Step Functions state machine ARN
+
   # General Configuration
   MaxConcurrentWorkflows:
     Type: Number
@@ -426,6 +437,8 @@ Conditions:
       !Not [!Equals [!Ref BedrockGuardrailId, ""]],
       !Not [!Equals [!Ref BedrockGuardrailVersion, ""]],
     ]
+
+  HasTransactionAnalysisIntegration: !Not [!Equals [!Ref TransactionCategorizationStateMachineArn, ""]]
 
   # HITL and Private Workforce conditions
   IsHITLEnabled: !Equals [!Ref EnableHITL, "true"]
@@ -4222,17 +4235,20 @@ Resources:
       Timeout: 30
       Environment:
         Variables:
-          STATE_MACHINE_ARN: arn:aws:states:eu-central-1:864899848062:stateMachine:fiscalshield-analysis-dev-TransactionCategorization
+          STATE_MACHINE_ARN: !Ref TransactionCategorizationStateMachineArn
           LOG_LEVEL: !Ref LogLevel
       Policies:
         - Version: "2012-10-17"
           Statement:
-            - Effect: Allow
-              Action:
-                - states:StartExecution
-                - states:ListExecutions
-              Resource:
-                - arn:aws:states:eu-central-1:864899848062:stateMachine:fiscalshield-analysis-dev-TransactionCategorization
+            - !If
+              - HasTransactionAnalysisIntegration
+              - Effect: Allow
+                Action:
+                  - states:StartExecution
+                  - states:ListExecutions
+                Resource:
+                  - !Ref TransactionCategorizationStateMachineArn
+              - !Ref AWS::NoValue
       LoggingConfig:
         LogGroup: !Ref TriggerTransactionAnalysisLogGroup
 
