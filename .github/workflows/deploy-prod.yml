@@ -130,6 +130,22 @@ jobs:
     - name: Deploy to production stack
       run: |
         TEMPLATE_URL="https://s3.eu-central-1.amazonaws.com/fiscalshield-prod-eu-central-1/idp/idp-main.yaml"
+        
+        # Get Transaction Categorization State Machine ARN from Analysis Stack
+        ANALYSIS_STATE_MACHINE_ARN=$(aws cloudformation describe-stacks \
+          --stack-name fiscalshield-analysis-prod \
+          --region eu-central-1 \
+          --query 'Stacks[0].Outputs[?OutputKey==`TransactionCategorizationStateMachineArn`].OutputValue' \
+          --output text 2>/dev/null || echo "")
+        
+        if [ -z "$ANALYSIS_STATE_MACHINE_ARN" ]; then
+          echo "⚠️ Analysis stack not found or State Machine ARN not available"
+          echo "   Transaction analysis feature will be disabled"
+          ANALYSIS_STATE_MACHINE_ARN=""
+        else
+          echo "✅ Found Analysis State Machine ARN: $ANALYSIS_STATE_MACHINE_ARN"
+        fi
+        
         if [ "${{ steps.check_stack.outputs.stack_exists }}" == "true" ]; then
           echo "🔄 Updating existing stack..."
           aws cloudformation update-stack \
@@ -141,6 +157,7 @@ jobs:
                          ParameterKey=IDPPattern,UsePreviousValue=true \
                          ParameterKey=Pattern2Configuration,UsePreviousValue=true \
                          ParameterKey=DocumentKnowledgeBase,UsePreviousValue=true \
+                         ParameterKey=TransactionCategorizationStateMachineArn,ParameterValue="$ANALYSIS_STATE_MACHINE_ARN" \
                          ParameterKey=AllowedSignUpEmailDomain,ParameterValue="gmail.com\,outlook.com\,yahoo.com\,hotmail.com\,icloud.com\,protonmail.com\,duck.com"
         else
           echo "🆕 Creating new stack..."
