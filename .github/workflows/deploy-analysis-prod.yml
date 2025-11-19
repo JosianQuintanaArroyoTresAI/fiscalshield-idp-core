@@ -150,12 +150,29 @@ jobs:
       - name: 📋 Create changeset
         working-directory: stacks/analysis
         run: |
+          # Get ExtractionResultsTable name from main IDP stack
+          EXTRACTION_TABLE=$(aws cloudformation describe-stacks \
+            --stack-name fiscalshield-idp-prod \
+            --region ${{ env.AWS_REGION }} \
+            --query 'Stacks[0].Outputs[?OutputKey==`DynamoDBExtractionResultsTableName`].OutputValue' \
+            --output text)
+          
+          if [ -z "$EXTRACTION_TABLE" ]; then
+            echo "❌ ERROR: Could not find ExtractionResultsTable from main IDP stack"
+            echo "   Make sure fiscalshield-idp-prod stack is deployed first"
+            exit 1
+          fi
+          
+          echo "✅ Found ExtractionResultsTable: $EXTRACTION_TABLE"
+          
           sam deploy \
             --stack-name ${{ env.STACK_NAME }} \
             --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
             --resolve-s3 \
             --no-execute-changeset \
-            --parameter-overrides Environment=prod \
+            --parameter-overrides \
+              Environment=prod \
+              ExtractionResultsTableName=$EXTRACTION_TABLE \
             --region ${{ env.AWS_REGION }}
           
           echo "Changeset created. Review changes before executing."
@@ -163,13 +180,30 @@ jobs:
       - name: 🚀 Deploy to Production
         working-directory: stacks/analysis
         run: |
+          # Get ExtractionResultsTable name from main IDP stack
+          EXTRACTION_TABLE=$(aws cloudformation describe-stacks \
+            --stack-name fiscalshield-idp-prod \
+            --region ${{ env.AWS_REGION }} \
+            --query 'Stacks[0].Outputs[?OutputKey==`DynamoDBExtractionResultsTableName`].OutputValue' \
+            --output text)
+          
+          if [ -z "$EXTRACTION_TABLE" ]; then
+            echo "❌ ERROR: Could not find ExtractionResultsTable from main IDP stack"
+            echo "   Make sure fiscalshield-idp-prod stack is deployed first"
+            exit 1
+          fi
+          
+          echo "✅ Found ExtractionResultsTable: $EXTRACTION_TABLE"
+          
           sam deploy \
             --stack-name ${{ env.STACK_NAME }} \
             --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
             --resolve-s3 \
             --no-confirm-changeset \
             --no-fail-on-empty-changeset \
-            --parameter-overrides Environment=prod \
+            --parameter-overrides \
+              Environment=prod \
+              ExtractionResultsTableName=$EXTRACTION_TABLE \
             --region ${{ env.AWS_REGION }}
 
       - name: 📊 Get stack outputs
