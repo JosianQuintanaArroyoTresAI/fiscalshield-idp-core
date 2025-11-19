@@ -29,6 +29,16 @@ def lambda_handler(event, context):
     logger.info("triggerTransactionAnalysis resolver invoked")
     logger.info(f"Event: {json.dumps(event)}")
 
+    # Check if transaction analysis is enabled
+    if not STATE_MACHINE_ARN or STATE_MACHINE_ARN == "":
+        logger.warning("Transaction analysis is not configured (STATE_MACHINE_ARN is empty)")
+        return {
+            'success': False,
+            'message': 'Transaction analysis feature is not currently enabled. Please contact your administrator to enable this feature.',
+            'executionArn': None,
+            'executionName': None,
+        }
+
     # Extract arguments from the GraphQL event
     arguments = event.get('arguments', {})
     company_number = arguments.get('companyNumber')
@@ -44,13 +54,12 @@ def lambda_handler(event, context):
         }
 
     try:
-        state_machine_arn = os.environ['STATE_MACHINE_ARN']
-        logger.info(f"State Machine ARN: {state_machine_arn}")
+        logger.info(f"State Machine ARN: {STATE_MACHINE_ARN}")
 
         # Check for running executions for this company
         logger.info(f"Checking for running executions for company {company_number}")
         running_executions = stepfunctions.list_executions(
-            stateMachineArn=state_machine_arn,
+            stateMachineArn=STATE_MACHINE_ARN,
             statusFilter='RUNNING',
             maxResults=10,
         )
@@ -75,7 +84,7 @@ def lambda_handler(event, context):
         # Start Step Functions execution
         logger.info(f"Starting execution: {execution_name} for user {user_id}")
         response = stepfunctions.start_execution(
-            stateMachineArn=state_machine_arn,
+            stateMachineArn=STATE_MACHINE_ARN,
             name=execution_name,
             input=json.dumps({
                 'companyNumber': company_number,
