@@ -43,10 +43,10 @@ const TransactionDetailDrawer = ({ transaction, visible, onDismiss }) => {
 
   const rawData = transaction.rawData || {};
   const isAnalyzed = transaction.analysisStatus === 'ANALYZED';
-  
+
   // Construct proper S3 URI from the transaction data
   let sourceDocumentTarget = transaction.s3Uri || rawData.S3Uri;
-  
+
   // If s3Uri has the NEEDS_BUCKET prefix, construct the full S3 URI
   if (sourceDocumentTarget && sourceDocumentTarget.startsWith('NEEDS_BUCKET:')) {
     const s3Path = sourceDocumentTarget.replace('NEEDS_BUCKET:', '');
@@ -421,118 +421,117 @@ const TransactionDetailDrawer = ({ transaction, visible, onDismiss }) => {
               <Box textAlign="center" padding={{ top: 's' }}>
                 {isSourceLoading && <Spinner />}
                 {!isSourceLoading && sourceError && <StatusIndicator type="error">{sourceError}</StatusIndicator>}
-                {!isSourceLoading && !sourceError && sourceDocumentUrl && (sourceDocumentType === 'image' || sourceDocumentType === 'pdf') && (
-                  <Box>
-                    {/* Thumbnail/Preview */}
-                    {!isFullScreen && (
-                      <Box
-                        onClick={() => setIsFullScreen(true)}
-                        style={{
-                          cursor: 'pointer',
-                          position: 'relative',
-                          display: 'inline-block',
-                        }}
-                      >
-                        {sourceDocumentType === 'image' ? (
-                          <img
-                            src={sourceDocumentUrl}
-                            alt="Bank statement thumbnail"
-                            style={{
-                              maxWidth: '300px',
-                              maxHeight: '200px',
-                              borderRadius: '8px',
-                              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                              transition: 'transform 0.2s',
-                            }}
-                            onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
-                            onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                          />
-                        ) : (
-                          <object
-                            data={sourceDocumentUrl}
-                            type="application/pdf"
-                            width="300px"
-                            height="200px"
-                            style={{ 
-                              border: 'none', 
-                              borderRadius: '8px', 
-                              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                              pointerEvents: 'none'
-                            }}
-                          >
-                            <Box padding="m" textAlign="center" color="text-body-secondary">
-                              PDF Preview
-                            </Box>
-                          </object>
-                        )}
+                {!isSourceLoading &&
+                  !sourceError &&
+                  sourceDocumentUrl &&
+                  (sourceDocumentType === 'image' || sourceDocumentType === 'pdf') && (
+                    <Box>
+                      {/* Thumbnail/Preview */}
+                      {!isFullScreen && (
                         <Box
-                          position="absolute"
-                          bottom="8px"
-                          right="8px"
-                          padding="xs"
+                          onClick={() => setIsFullScreen(true)}
                           style={{
-                            background: 'rgba(0,0,0,0.7)',
-                            color: 'white',
-                            borderRadius: '4px',
-                            fontSize: '12px',
-                            padding: '4px 8px',
+                            cursor: 'pointer',
+                            position: 'relative',
+                            display: 'inline-block',
                           }}
                         >
-                          🔍 Click to expand
-                        </Box>
-                      </Box>
-                    )}
-                    
-                    {/* Full Screen View */}
-                    {isFullScreen && (
-                      <Box>
-                        <SpaceBetween size="s">
-                          <Button
-                            iconName="close"
-                            onClick={() => setIsFullScreen(false)}
-                            variant="primary"
-                          >
-                            Close Full View
-                          </Button>
                           {sourceDocumentType === 'image' ? (
                             <img
                               src={sourceDocumentUrl}
-                              alt="Bank statement source"
+                              alt="Bank statement thumbnail"
                               style={{
-                                maxWidth: '100%',
-                                maxHeight: '800px',
+                                maxWidth: '300px',
+                                maxHeight: '200px',
                                 borderRadius: '8px',
-                                boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+                                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                                transition: 'transform 0.2s',
                               }}
+                              onMouseOver={(e) => (e.currentTarget.style.transform = 'scale(1.02)')}
+                              onMouseOut={(e) => (e.currentTarget.style.transform = 'scale(1)')}
                             />
                           ) : (
                             <object
                               data={sourceDocumentUrl}
                               type="application/pdf"
-                              width="100%"
-                              height="800px"
-                              style={{ border: 'none', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }}
+                              width="300px"
+                              height="200px"
+                              style={{
+                                border: 'none',
+                                borderRadius: '8px',
+                                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                                pointerEvents: 'none',
+                              }}
                             >
-                              <p>
-                                This browser cannot display the PDF inline.{' '}
-                                <a href={sourceDocumentUrl} target="_blank" rel="noreferrer">
-                                  Download the file
-                                </a>{' '}
-                                instead.
-                              </p>
+                              <Box padding="m" textAlign="center" color="text-body-secondary">
+                                PDF Preview
+                              </Box>
                             </object>
                           )}
-                        </SpaceBetween>
-                      </Box>
-                    )}
-                    
-                    <Box padding={{ top: 's' }} textAlign="center">
-                      <Box variant="small" color="text-body-secondary">
-                        {isFullScreen ? 'Full size view' : 'Click thumbnail to view full size'}
+                          <Box
+                            position="absolute"
+                            bottom="8px"
+                            right="8px"
+                            padding="xs"
+                            style={{
+                              background: 'rgba(0,0,0,0.7)',
+                              color: 'white',
+                              borderRadius: '4px',
+                              fontSize: '12px',
+                              padding: '4px 8px',
+                            }}
+                          >
+                            🔍 Click to expand
+                          </Box>
+                        </Box>
+                      )}
+
+                      {/* Full Screen View */}
+                      {isFullScreen && (
+                        <Box>
+                          <SpaceBetween size="s">
+                            <Button iconName="close" onClick={() => setIsFullScreen(false)} variant="primary">
+                              Close Full View
+                            </Button>
+                            {sourceDocumentType === 'image' ? (
+                              <img
+                                src={sourceDocumentUrl}
+                                alt="Bank statement source"
+                                style={{
+                                  maxWidth: '100%',
+                                  maxHeight: '800px',
+                                  borderRadius: '8px',
+                                  boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+                                }}
+                              />
+                            ) : (
+                              <object
+                                data={sourceDocumentUrl}
+                                type="application/pdf"
+                                width="100%"
+                                height="800px"
+                                style={{ border: 'none', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }}
+                              >
+                                <p>
+                                  This browser cannot display the PDF inline.{' '}
+                                  <a href={sourceDocumentUrl} target="_blank" rel="noreferrer">
+                                    Download the file
+                                  </a>{' '}
+                                  instead.
+                                </p>
+                              </object>
+                            )}
+                          </SpaceBetween>
+                        </Box>
+                      )}
+
+                      <Box padding={{ top: 's' }} textAlign="center">
+                        <Box variant="small" color="text-body-secondary">
+                          {isFullScreen ? 'Full size view' : 'Click thumbnail to view full size'}
+                        </Box>
                       </Box>
                     </Box>
-                  </Box>
-                )}
+                  )}
                 {!isSourceLoading &&
                   !sourceError &&
                   sourceDocumentUrl &&

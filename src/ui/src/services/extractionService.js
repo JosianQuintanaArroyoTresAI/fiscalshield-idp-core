@@ -81,16 +81,16 @@ export const fetchExtractionResults = async (companyNumber, documentType, limit 
  */
 export const extractS3PathFromPK = (pk) => {
   if (!pk || typeof pk !== 'string') return null;
-  
+
   // PK format: user#23b4b872-20a1-709e-ffef-d20a604f60b5#doc#users/23b4b872-20a1-709e-ffef-d20a604f60b5/B_Statement_7.pdf
   const docPrefix = '#doc#';
   const docIndex = pk.indexOf(docPrefix);
-  
+
   if (docIndex === -1) return null;
-  
+
   // Extract everything after '#doc#'
   const s3Path = pk.substring(docIndex + docPrefix.length);
-  
+
   return s3Path || null;
 };
 
