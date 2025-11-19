@@ -4238,17 +4238,17 @@ Resources:
           STATE_MACHINE_ARN: !Ref TransactionCategorizationStateMachineArn
           LOG_LEVEL: !Ref LogLevel
       Policies:
-        - Version: "2012-10-17"
-          Statement:
-            - !If
-              - HasTransactionAnalysisIntegration
-              - Effect: Allow
-                Action:
-                  - states:StartExecution
-                  - states:ListExecutions
-                Resource:
-                  - !Ref TransactionCategorizationStateMachineArn
-              - !Ref AWS::NoValue
+        !If
+          - HasTransactionAnalysisIntegration
+          - - Version: "2012-10-17"
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - states:StartExecution
+                    - states:ListExecutions
+                  Resource:
+                    - !Ref TransactionCategorizationStateMachineArn
+          - !Ref AWS::NoValue
       LoggingConfig:
         LogGroup: !Ref TriggerTransactionAnalysisLogGroup
 
