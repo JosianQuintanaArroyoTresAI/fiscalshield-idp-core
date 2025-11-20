@@ -251,7 +251,7 @@ Resources:
                   - kms:Decrypt
                   - kms:DescribeKey
                 Resource:
-                  - 'arn:aws:kms:eu-central-1:864899848062:key/a960f907-4d93-49c2-b05f-acc470fcf9cb'
+                  - 'arn:aws:kms:eu-central-1:864899848062:key/a68aa02e-b3ba-4540-81b0-bf670c3de37a'
               - Sid: ReadDataCollectionTables
                 Effect: Allow
                 Action:
