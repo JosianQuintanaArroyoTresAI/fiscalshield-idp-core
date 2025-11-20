@@ -1,13 +1,14 @@
 name: Deploy Analysis Stack - Dev
 
 on:
-  push:
-    branches:
-      - dev
-    paths:
-      - 'stacks/analysis/**'
-      - 'src/analysis/**'
-      - '.github/workflows/deploy-analysis-dev.yml'
+  # Temporarily disabled for IDP stack deployment
+  # push:
+  #   branches:
+  #     - dev
+  #   paths:
+  #     - 'stacks/analysis/**'
+  #     - 'src/analysis/**'
+  #     - '.github/workflows/deploy-analysis-dev.yml'
   workflow_dispatch:
 
 env:
