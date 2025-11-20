@@ -8088,6 +8088,9 @@ Outputs:
   DynamoDBExtractionResultsStreamArn:
     Description: DynamoDB Extraction Results table stream ARN (for downstream processing)
     Value: !GetAtt ExtractionResultsTable.StreamArn
+  KMSEncryptionKeyArn:
+    Description: KMS key ARN used for DynamoDB table encryption (for cross-stack access)
+    Value: !GetAtt CustomerManagedEncryptionKey.Arn
   DynamoDBConfigurationTableConsoleURL:
     Description: DynamoDB table console URL
     Value: !Sub https://${AWS::Region}.console.aws.amazon.com/dynamodbv2/home?region=${AWS::Region}#item-explorer?maximize=true&operation=QUERY&table=${ConfigurationTable}

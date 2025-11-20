@@ -33,7 +33,7 @@ warm_containers = "EAGER"
 [dev]
 [dev.deploy.parameters]
 stack_name = "fiscalshield-analysis-dev"
-parameter_overrides = "Environment=\"dev\" ExtractionResultsTableName=\"fiscalshield-idp-dev-ExtractionResultsTable-ODNDYL7KUECH\""
+parameter_overrides = "Environment=\"dev\" ExtractionResultsTableName=\"fiscalshield-idp-dev-ExtractionResultsTable-ODNDYL7KUECH\" ExtractionResultsKMSKeyArn=\"arn:aws:kms:eu-central-1:864899848062:key/a960f907-4d93-49c2-b05f-acc470fcf9cb\""
 confirm_changeset = false
 resolve_s3 = true
 region = "eu-central-1"

@@ -163,7 +163,21 @@ jobs:
             exit 1
           fi
           
+          # Get KMS key ARN from main IDP stack
+          KMS_KEY_ARN=$(aws cloudformation describe-stacks \
+            --stack-name fiscalshield-idp-prod \
+            --region ${{ env.AWS_REGION }} \
+            --query 'Stacks[0].Outputs[?OutputKey==`KMSEncryptionKeyArn`].OutputValue' \
+            --output text)
+          
+          if [ -z "$KMS_KEY_ARN" ]; then
+            echo "❌ ERROR: Could not find KMS key ARN from main IDP stack"
+            echo "   Make sure fiscalshield-idp-prod stack has KMSEncryptionKeyArn output"
+            exit 1
+          fi
+          
           echo "✅ Found ExtractionResultsTable: $EXTRACTION_TABLE"
+          echo "✅ Found KMS Key ARN: $KMS_KEY_ARN"
           
           sam deploy \
             --stack-name ${{ env.STACK_NAME }} \
@@ -173,6 +187,7 @@ jobs:
             --parameter-overrides \
               Environment=prod \
               ExtractionResultsTableName=$EXTRACTION_TABLE \
+              ExtractionResultsKMSKeyArn=$KMS_KEY_ARN \
             --region ${{ env.AWS_REGION }}
           
           echo "Changeset created. Review changes before executing."
@@ -193,7 +208,21 @@ jobs:
             exit 1
           fi
           
+          # Get KMS key ARN from main IDP stack
+          KMS_KEY_ARN=$(aws cloudformation describe-stacks \
+            --stack-name fiscalshield-idp-prod \
+            --region ${{ env.AWS_REGION }} \
+            --query 'Stacks[0].Outputs[?OutputKey==`KMSEncryptionKeyArn`].OutputValue' \
+            --output text)
+          
+          if [ -z "$KMS_KEY_ARN" ]; then
+            echo "❌ ERROR: Could not find KMS key ARN from main IDP stack"
+            echo "   Make sure fiscalshield-idp-prod stack has KMSEncryptionKeyArn output"
+            exit 1
+          fi
+          
           echo "✅ Found ExtractionResultsTable: $EXTRACTION_TABLE"
+          echo "✅ Found KMS Key ARN: $KMS_KEY_ARN"
           
           sam deploy \
             --stack-name ${{ env.STACK_NAME }} \
@@ -204,6 +233,7 @@ jobs:
             --parameter-overrides \
               Environment=prod \
               ExtractionResultsTableName=$EXTRACTION_TABLE \
+              ExtractionResultsKMSKeyArn=$KMS_KEY_ARN \
             --region ${{ env.AWS_REGION }}
 
       - name: 📊 Get stack outputs

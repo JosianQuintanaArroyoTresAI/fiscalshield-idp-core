@@ -60,6 +60,11 @@ Parameters:
     Description: Name of the DynamoDB ExtractionResults table from IDP Core stack
     Default: ''
 
+  ExtractionResultsKMSKeyArn:
+    Type: String
+    Description: KMS key ARN used to encrypt the ExtractionResults table from IDP Core stack
+    Default: ''
+
 Conditions:
   IsProduction: !Equals [!Ref Environment, 'prod']
   EnableTracing: !Equals [!Ref EnableXRayTracing, 'true']
@@ -251,7 +256,7 @@ Resources:
                   - kms:Decrypt
                   - kms:DescribeKey
                 Resource:
-                  - 'arn:aws:kms:eu-central-1:864899848062:key/a68aa02e-b3ba-4540-81b0-bf670c3de37a'
+                  - !Ref ExtractionResultsKMSKeyArn
               - Sid: ReadDataCollectionTables
                 Effect: Allow
                 Action:
