@@ -52,7 +52,7 @@ jobs:
       - name: 📦 Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install aws-sam-cli boto3 pytest pytest-cov pytest-mock
+          pip install aws-sam-cli boto3 pytest pytest-cov pytest-mock moto
 
       - name: 🔐 Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -150,12 +150,44 @@ jobs:
       - name: 📋 Create changeset
         working-directory: stacks/analysis
         run: |
+          # Get ExtractionResultsTable name from main IDP stack
+          EXTRACTION_TABLE=$(aws cloudformation describe-stacks \
+            --stack-name fiscalshield-idp-prod \
+            --region ${{ env.AWS_REGION }} \
+            --query 'Stacks[0].Outputs[?OutputKey==`DynamoDBExtractionResultsTableName`].OutputValue' \
+            --output text)
+          
+          if [ -z "$EXTRACTION_TABLE" ]; then
+            echo "❌ ERROR: Could not find ExtractionResultsTable from main IDP stack"
+            echo "   Make sure fiscalshield-idp-prod stack is deployed first"
+            exit 1
+          fi
+          
+          # Get KMS key ARN from main IDP stack
+          KMS_KEY_ARN=$(aws cloudformation describe-stacks \
+            --stack-name fiscalshield-idp-prod \
+            --region ${{ env.AWS_REGION }} \
+            --query 'Stacks[0].Outputs[?OutputKey==`KMSEncryptionKeyArn`].OutputValue' \
+            --output text)
+          
+          if [ -z "$KMS_KEY_ARN" ]; then
+            echo "❌ ERROR: Could not find KMS key ARN from main IDP stack"
+            echo "   Make sure fiscalshield-idp-prod stack has KMSEncryptionKeyArn output"
+            exit 1
+          fi
+          
+          echo "✅ Found ExtractionResultsTable: $EXTRACTION_TABLE"
+          echo "✅ Found KMS Key ARN: $KMS_KEY_ARN"
+          
           sam deploy \
             --stack-name ${{ env.STACK_NAME }} \
             --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
             --resolve-s3 \
             --no-execute-changeset \
-            --parameter-overrides Environment=prod \
+            --parameter-overrides \
+              Environment=prod \
+              ExtractionResultsTableName=$EXTRACTION_TABLE \
+              ExtractionResultsKMSKeyArn=$KMS_KEY_ARN \
             --region ${{ env.AWS_REGION }}
           
           echo "Changeset created. Review changes before executing."
@@ -163,13 +195,45 @@ jobs:
       - name: 🚀 Deploy to Production
         working-directory: stacks/analysis
         run: |
+          # Get ExtractionResultsTable name from main IDP stack
+          EXTRACTION_TABLE=$(aws cloudformation describe-stacks \
+            --stack-name fiscalshield-idp-prod \
+            --region ${{ env.AWS_REGION }} \
+            --query 'Stacks[0].Outputs[?OutputKey==`DynamoDBExtractionResultsTableName`].OutputValue' \
+            --output text)
+          
+          if [ -z "$EXTRACTION_TABLE" ]; then
+            echo "❌ ERROR: Could not find ExtractionResultsTable from main IDP stack"
+            echo "   Make sure fiscalshield-idp-prod stack is deployed first"
+            exit 1
+          fi
+          
+          # Get KMS key ARN from main IDP stack
+          KMS_KEY_ARN=$(aws cloudformation describe-stacks \
+            --stack-name fiscalshield-idp-prod \
+            --region ${{ env.AWS_REGION }} \
+            --query 'Stacks[0].Outputs[?OutputKey==`KMSEncryptionKeyArn`].OutputValue' \
+            --output text)
+          
+          if [ -z "$KMS_KEY_ARN" ]; then
+            echo "❌ ERROR: Could not find KMS key ARN from main IDP stack"
+            echo "   Make sure fiscalshield-idp-prod stack has KMSEncryptionKeyArn output"
+            exit 1
+          fi
+          
+          echo "✅ Found ExtractionResultsTable: $EXTRACTION_TABLE"
+          echo "✅ Found KMS Key ARN: $KMS_KEY_ARN"
+          
           sam deploy \
             --stack-name ${{ env.STACK_NAME }} \
             --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
             --resolve-s3 \
             --no-confirm-changeset \
             --no-fail-on-empty-changeset \
-            --parameter-overrides Environment=prod \
+            --parameter-overrides \
+              Environment=prod \
+              ExtractionResultsTableName=$EXTRACTION_TABLE \
+              ExtractionResultsKMSKeyArn=$KMS_KEY_ARN \
             --region ${{ env.AWS_REGION }}
 
       - name: 📊 Get stack outputs

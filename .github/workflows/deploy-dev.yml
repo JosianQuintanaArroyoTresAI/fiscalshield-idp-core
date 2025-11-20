@@ -73,6 +73,44 @@ jobs:
       run: |
         pip install boto3 rich typer PyYAML botocore setuptools ruff black
     
+    - name: Security audit and auto-fix UI dependencies
+      run: |
+        echo "🔍 Running security audit on UI dependencies..."
+        cd src/ui
+        
+        # Try to auto-fix vulnerabilities
+        echo "🔧 Attempting to auto-fix vulnerabilities..."
+        if npm audit fix --audit-level=moderate; then
+          echo "✅ Vulnerabilities fixed successfully"
+        else
+          echo "⚠️ Some vulnerabilities could not be auto-fixed"
+          npm audit --audit-level=moderate --production || true
+        fi
+        
+        # Check if package-lock.json was modified
+        if git diff --quiet package-lock.json; then
+          echo "✅ No changes needed to package-lock.json"
+        else
+          echo "📝 package-lock.json was updated with security fixes"
+        fi
+      continue-on-error: false
+    
+    - name: Commit security fixes if any
+      run: |
+        cd src/ui
+        if ! git diff --quiet package-lock.json; then
+          echo "💾 Committing security fixes..."
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "fix: auto-fix npm security vulnerabilities [skip ci]"
+          git push
+          echo "✅ Security fixes committed and pushed"
+        else
+          echo "✅ No security fixes needed"
+        fi
+      continue-on-error: false
+    
     - name: Force clean UI build (clear all caches)
       run: |
         echo "🧹 Clearing UI build caches to ensure fresh build..."

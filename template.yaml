@@ -282,6 +282,17 @@ Parameters:
     Description: >
       If you provided a Bedrock Guardrail Id above, provide the corresponding Guardrail version here (e.g. DRAFT|1|2|...).
 
+  # Analysis Stack Integration
+  TransactionCategorizationStateMachineArn:
+    Type: String
+    Default: ""
+    Description: >-
+      ARN of the Transaction Categorization Step Function from the Analysis Stack.
+      Leave blank to disable transaction analysis integration.
+      Format: arn:aws:states:REGION:ACCOUNT:stateMachine:fiscalshield-analysis-ENV-TransactionCategorization
+    AllowedPattern: "^(|arn:aws[a-z-]*:states:[a-z0-9-]+:[0-9]{12}:stateMachine:.+)$"
+    ConstraintDescription: Must be empty or a valid Step Functions state machine ARN
+
   # General Configuration
   MaxConcurrentWorkflows:
     Type: Number
@@ -426,6 +437,8 @@ Conditions:
       !Not [!Equals [!Ref BedrockGuardrailId, ""]],
       !Not [!Equals [!Ref BedrockGuardrailVersion, ""]],
     ]
+
+  HasTransactionAnalysisIntegration: !Not [!Equals [!Ref TransactionCategorizationStateMachineArn, ""]]
 
   # HITL and Private Workforce conditions
   IsHITLEnabled: !Equals [!Ref EnableHITL, "true"]
@@ -4222,17 +4235,22 @@ Resources:
       Timeout: 30
       Environment:
         Variables:
-          STATE_MACHINE_ARN: arn:aws:states:eu-central-1:864899848062:stateMachine:fiscalshield-analysis-dev-TransactionCategorization
+          STATE_MACHINE_ARN: !Ref TransactionCategorizationStateMachineArn
           LOG_LEVEL: !Ref LogLevel
       Policies:
         - Version: "2012-10-17"
           Statement:
-            - Effect: Allow
-              Action:
-                - states:StartExecution
-                - states:ListExecutions
-              Resource:
-                - arn:aws:states:eu-central-1:864899848062:stateMachine:fiscalshield-analysis-dev-TransactionCategorization
+            - Fn::If:
+              - HasTransactionAnalysisIntegration
+              - Effect: Allow
+                Action:
+                  - states:StartExecution
+                  - states:ListExecutions
+                Resource:
+                  - !Ref TransactionCategorizationStateMachineArn
+              - Effect: Deny
+                Action: "states:*"
+                Resource: "*"
       LoggingConfig:
         LogGroup: !Ref TriggerTransactionAnalysisLogGroup
 
@@ -7757,8 +7775,6 @@ Resources:
                 - npm cache clean --force
                 - npm install --package-lock-only
                 - npm ci
-                - echo Checking for and fixing security vulnerabilities
-                - npm audit fix || echo "Some vulnerabilities could not be automatically fixed"
             build:
               commands:
                 - echo Build started on `date`
@@ -8072,6 +8088,9 @@ Outputs:
   DynamoDBExtractionResultsStreamArn:
     Description: DynamoDB Extraction Results table stream ARN (for downstream processing)
     Value: !GetAtt ExtractionResultsTable.StreamArn
+  KMSEncryptionKeyArn:
+    Description: KMS key ARN used for DynamoDB table encryption (for cross-stack access)
+    Value: !GetAtt CustomerManagedEncryptionKey.Arn
   DynamoDBConfigurationTableConsoleURL:
     Description: DynamoDB table console URL
     Value: !Sub https://${AWS::Region}.console.aws.amazon.com/dynamodbv2/home?region=${AWS::Region}#item-explorer?maximize=true&operation=QUERY&table=${ConfigurationTable}

@@ -15,28 +15,53 @@ import {
   StatusIndicator,
   Spinner,
 } from '@awsui/components-react';
+import { Logger } from 'aws-amplify';
 import useAppContext from '../../contexts/app';
+import useSettingsContext from '../../contexts/settings';
 import generateS3PresignedUrl from '../common/generate-s3-presigned-url';
+
+const logger = new Logger('TransactionDetailDrawer');
 
 const TransactionDetailDrawer = ({ transaction, visible, onDismiss }) => {
   const { currentCredentials } = useAppContext();
+  const { settings } = useSettingsContext();
   const [isSourceVisible, setIsSourceVisible] = useState(false);
   const [sourceDocumentUrl, setSourceDocumentUrl] = useState(null);
   const [isSourceLoading, setIsSourceLoading] = useState(false);
   const [sourceError, setSourceError] = useState(null);
+  const [isFullScreen, setIsFullScreen] = useState(false);
 
   useEffect(() => {
     setIsSourceVisible(false);
     setSourceDocumentUrl(null);
     setSourceError(null);
     setIsSourceLoading(false);
+    setIsFullScreen(false);
   }, [transaction?.id]);
 
   if (!transaction) return null;
 
   const rawData = transaction.rawData || {};
   const isAnalyzed = transaction.analysisStatus === 'ANALYZED';
-  const sourceDocumentTarget = transaction.s3Uri || rawData.S3Uri;
+
+  // Construct proper S3 URI from the transaction data
+  let sourceDocumentTarget = transaction.s3Uri || rawData.S3Uri;
+
+  // If s3Uri has the NEEDS_BUCKET prefix, construct the full S3 URI
+  if (sourceDocumentTarget && sourceDocumentTarget.startsWith('NEEDS_BUCKET:')) {
+    const s3Path = sourceDocumentTarget.replace('NEEDS_BUCKET:', '');
+    if (settings.InputBucket && s3Path) {
+      sourceDocumentTarget = `s3://${settings.InputBucket}/${s3Path}`;
+      logger.debug(`Constructed S3 URI from PK: ${sourceDocumentTarget}`);
+    } else {
+      logger.warn('Missing InputBucket setting or s3Path for document preview');
+      sourceDocumentTarget = null;
+    }
+  } else if (transaction.s3Path && settings.InputBucket) {
+    // Fallback: use s3Path if available
+    sourceDocumentTarget = `s3://${settings.InputBucket}/${transaction.s3Path}`;
+    logger.debug(`Constructed S3 URI from s3Path: ${sourceDocumentTarget}`);
+  }
 
   const getSourceDocumentType = () => {
     if (!sourceDocumentTarget) return 'unknown';
@@ -396,35 +421,117 @@ const TransactionDetailDrawer = ({ transaction, visible, onDismiss }) => {
               <Box textAlign="center" padding={{ top: 's' }}>
                 {isSourceLoading && <Spinner />}
                 {!isSourceLoading && sourceError && <StatusIndicator type="error">{sourceError}</StatusIndicator>}
-                {!isSourceLoading && !sourceError && sourceDocumentUrl && sourceDocumentType === 'image' && (
-                  <img
-                    src={sourceDocumentUrl}
-                    alt="Bank statement source"
-                    style={{
-                      maxWidth: '100%',
-                      maxHeight: '600px',
-                      borderRadius: '8px',
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                    }}
-                  />
-                )}
-                {!isSourceLoading && !sourceError && sourceDocumentUrl && sourceDocumentType === 'pdf' && (
-                  <object
-                    data={sourceDocumentUrl}
-                    type="application/pdf"
-                    width="100%"
-                    height="600px"
-                    style={{ border: 'none', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                  >
-                    <p>
-                      This browser cannot display the PDF inline.{' '}
-                      <a href={sourceDocumentUrl} target="_blank" rel="noreferrer">
-                        Download the file
-                      </a>{' '}
-                      instead.
-                    </p>
-                  </object>
-                )}
+                {!isSourceLoading &&
+                  !sourceError &&
+                  sourceDocumentUrl &&
+                  (sourceDocumentType === 'image' || sourceDocumentType === 'pdf') && (
+                    <Box>
+                      {/* Thumbnail/Preview */}
+                      {!isFullScreen && (
+                        <Box
+                          onClick={() => setIsFullScreen(true)}
+                          style={{
+                            cursor: 'pointer',
+                            position: 'relative',
+                            display: 'inline-block',
+                          }}
+                        >
+                          {sourceDocumentType === 'image' ? (
+                            <img
+                              src={sourceDocumentUrl}
+                              alt="Bank statement thumbnail"
+                              style={{
+                                maxWidth: '300px',
+                                maxHeight: '200px',
+                                borderRadius: '8px',
+                                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                                transition: 'transform 0.2s',
+                              }}
+                              onMouseOver={(e) => (e.currentTarget.style.transform = 'scale(1.02)')}
+                              onMouseOut={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+                            />
+                          ) : (
+                            <object
+                              data={sourceDocumentUrl}
+                              type="application/pdf"
+                              width="300px"
+                              height="200px"
+                              style={{
+                                border: 'none',
+                                borderRadius: '8px',
+                                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                                pointerEvents: 'none',
+                              }}
+                            >
+                              <Box padding="m" textAlign="center" color="text-body-secondary">
+                                PDF Preview
+                              </Box>
+                            </object>
+                          )}
+                          <Box
+                            position="absolute"
+                            bottom="8px"
+                            right="8px"
+                            padding="xs"
+                            style={{
+                              background: 'rgba(0,0,0,0.7)',
+                              color: 'white',
+                              borderRadius: '4px',
+                              fontSize: '12px',
+                              padding: '4px 8px',
+                            }}
+                          >
+                            🔍 Click to expand
+                          </Box>
+                        </Box>
+                      )}
+
+                      {/* Full Screen View */}
+                      {isFullScreen && (
+                        <Box>
+                          <SpaceBetween size="s">
+                            <Button iconName="close" onClick={() => setIsFullScreen(false)} variant="primary">
+                              Close Full View
+                            </Button>
+                            {sourceDocumentType === 'image' ? (
+                              <img
+                                src={sourceDocumentUrl}
+                                alt="Bank statement source"
+                                style={{
+                                  maxWidth: '100%',
+                                  maxHeight: '800px',
+                                  borderRadius: '8px',
+                                  boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+                                }}
+                              />
+                            ) : (
+                              <object
+                                data={sourceDocumentUrl}
+                                type="application/pdf"
+                                width="100%"
+                                height="800px"
+                                style={{ border: 'none', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }}
+                              >
+                                <p>
+                                  This browser cannot display the PDF inline.{' '}
+                                  <a href={sourceDocumentUrl} target="_blank" rel="noreferrer">
+                                    Download the file
+                                  </a>{' '}
+                                  instead.
+                                </p>
+                              </object>
+                            )}
+                          </SpaceBetween>
+                        </Box>
+                      )}
+
+                      <Box padding={{ top: 's' }} textAlign="center">
+                        <Box variant="small" color="text-body-secondary">
+                          {isFullScreen ? 'Full size view' : 'Click thumbnail to view full size'}
+                        </Box>
+                      </Box>
+                    </Box>
+                  )}
                 {!isSourceLoading &&
                   !sourceError &&
                   sourceDocumentUrl &&

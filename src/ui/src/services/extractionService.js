@@ -74,12 +74,54 @@ export const fetchExtractionResults = async (companyNumber, documentType, limit 
 };
 
 /**
+ * Extract S3 document path from DynamoDB PK
+ * PK format: user#<userId>#doc#<s3-path>
+ * @param {string} pk - Primary key from DynamoDB
+ * @returns {string|null} S3 path or null if not found
+ */
+export const extractS3PathFromPK = (pk) => {
+  if (!pk || typeof pk !== 'string') return null;
+
+  // PK format: user#23b4b872-20a1-709e-ffef-d20a604f60b5#doc#users/23b4b872-20a1-709e-ffef-d20a604f60b5/B_Statement_7.pdf
+  const docPrefix = '#doc#';
+  const docIndex = pk.indexOf(docPrefix);
+
+  if (docIndex === -1) return null;
+
+  // Extract everything after '#doc#'
+  const s3Path = pk.substring(docIndex + docPrefix.length);
+
+  return s3Path || null;
+};
+
+/**
+ * Construct S3 URI from document path
+ * @param {string} s3Path - S3 object path
+ * @param {string} bucketName - S3 bucket name
+ * @returns {string|null} Full S3 URI (s3://bucket/path) or null
+ */
+export const constructS3Uri = (s3Path, bucketName) => {
+  if (!s3Path || !bucketName) return null;
+  return `s3://${bucketName}/${s3Path}`;
+};
+
+/**
  * Format invoice data for display
  * @param {Object} extractionResult - Raw extraction result from DynamoDB
  * @returns {Object} Formatted invoice data
  */
 export const formatInvoiceData = (extractionResult) => {
   const compositeConf = extractionResult.CompositeConfidence || extractionResult.ConfidenceScore;
+
+  // Extract S3 URI from PK if not already present
+  let s3Uri = extractionResult.S3Uri;
+  let s3Path = null;
+  if (!s3Uri && extractionResult.PK) {
+    s3Path = extractS3PathFromPK(extractionResult.PK);
+    // Note: We'll need the bucket name from settings context, so we'll construct it in the component
+    // For now, store the path in a special field
+    s3Uri = s3Path ? `NEEDS_BUCKET:${s3Path}` : null;
+  }
 
   return {
     id: extractionResult.DocumentId,
@@ -96,7 +138,8 @@ export const formatInvoiceData = (extractionResult) => {
     hitlReason: extractionResult.HITLReason || '',
     supplierAddress: extractionResult.SupplierAddress || 'N/A',
     processedAt: extractionResult.ProcessedAt,
-    s3Uri: extractionResult.S3Uri,
+    s3Uri: s3Uri,
+    s3Path: s3Path,
     // Field-level confidence scores
     confidenceScores: {
       composite: compositeConf,
@@ -133,6 +176,15 @@ export const formatBankStatementData = (extractionResult) => {
   const transactionType = extractionResult.TransactionType || 'UNKNOWN';
   const amount = extractionResult.TransactionAmount || 0;
 
+  // Extract S3 URI from PK if not already present
+  let s3Uri = extractionResult.S3Uri;
+  let s3Path = null;
+  if (!s3Uri && extractionResult.PK) {
+    s3Path = extractS3PathFromPK(extractionResult.PK);
+    // Store the path - we'll construct full URI in component with bucket name
+    s3Uri = s3Path ? `NEEDS_BUCKET:${s3Path}` : null;
+  }
+
   return {
     id: extractionResult.TransactionId || extractionResult.DocumentId,
     bankName: extractionResult.BankName || 'Unknown Bank',
@@ -153,7 +205,8 @@ export const formatBankStatementData = (extractionResult) => {
     sourcePage: extractionResult.SourcePage || 'N/A',
     processedDate: processedDate,
     processedAt: extractionResult.ProcessedAt,
-    s3Uri: extractionResult.S3Uri,
+    s3Uri: s3Uri,
+    s3Path: s3Path,
     // Include analysis fields for compliance view
     expenseCategory: extractionResult.ExpenseCategory,
     complianceScore: extractionResult.ComplianceScore,
