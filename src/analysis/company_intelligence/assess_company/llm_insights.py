@@ -140,7 +140,7 @@ Focus on patterns, context, and practical implications rather than just restatin
 - Status: {company_profile.get('company_status', 'Unknown')}
 - Type: {company_profile.get('type', 'Unknown')}
 - Incorporated: {company_profile.get('date_of_creation', 'Unknown')}
-- Industry: {company_profile.get('sic_codes', [])}
+- Industry (SIC Codes): {self._format_sic_codes(company_profile.get('sic_codes_enriched', []))}
 
 **GOVERNANCE DATA:**
 - Active Officers: {active_officers}
@@ -183,6 +183,20 @@ Based on this data, provide your analysis in the specified JSON format. Focus on
 4. Specific next steps for the compliance team"""
         
         return prompt
+    
+    def _format_sic_codes(self, sic_codes_enriched: list) -> str:
+        """Format enriched SIC codes for prompt"""
+        if not sic_codes_enriched:
+            return "No SIC codes available"
+        
+        # Format as "CODE: Description"
+        formatted = []
+        for sic in sic_codes_enriched:
+            code = sic.get('code', 'Unknown')
+            description = sic.get('description', 'No description')
+            formatted.append(f"{code}: {description}")
+        
+        return ", ".join(formatted)
     
     def _get_recent_appointments(self, officers_data: Dict) -> str:
         """Summarize recent officer appointments"""
