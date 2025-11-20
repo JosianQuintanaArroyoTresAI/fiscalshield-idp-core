@@ -58,12 +58,10 @@ Parameters:
   ExtractionResultsTableName:
     Type: String
     Description: Name of the DynamoDB ExtractionResults table from IDP Core stack
-    Default: ''
 
   ExtractionResultsKMSKeyArn:
     Type: String
     Description: KMS key ARN used to encrypt the ExtractionResults table from IDP Core stack
-    Default: ''
 
 Conditions:
   IsProduction: !Equals [!Ref Environment, 'prod']
