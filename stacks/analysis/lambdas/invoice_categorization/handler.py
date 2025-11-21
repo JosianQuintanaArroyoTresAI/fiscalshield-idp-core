@@ -14,7 +14,7 @@ from datetime import datetime
 
 # AWS clients
 dynamodb = boto3.resource('dynamodb')
-bedrock_runtime = boto3.client('bedrock-runtime', region_name=os.environ.get('AWS_REGION', 'eu-west-1'))
+bedrock_runtime = boto3.client('bedrock-runtime', region_name='eu-west-1')
 
 # Environment variables
 EXTRACTION_RESULTS_TABLE = os.environ.get('EXTRACTION_RESULTS_TABLE')

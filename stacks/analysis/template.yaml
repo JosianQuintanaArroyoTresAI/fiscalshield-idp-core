@@ -537,7 +537,6 @@ Resources:
           EXTRACTION_RESULTS_TABLE: !Ref ExtractionResultsTableName
           HMRC_GUIDANCE_TABLE: !Sub 'fiscalshield-dc-${Environment}-HMRCGuidance'
           MODEL_ID: 'eu.anthropic.claude-3-5-sonnet-20241022-v2:0'
-          AWS_REGION: 'eu-west-1'
           ENVIRONMENT: !Ref Environment
       Tags:
         Purpose: Invoice tax compliance analysis using wholly and exclusively test
