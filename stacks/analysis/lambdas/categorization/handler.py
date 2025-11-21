@@ -357,6 +357,8 @@ sqs = boto3.client('sqs')
 EXTRACTION_RESULTS_TABLE = os.environ.get('EXTRACTION_RESULTS_TABLE')
 CATEGORIZATION_QUEUE_URL = os.environ.get('CATEGORIZATION_QUEUE_URL')
 BEDROCK_MODEL_ID = os.environ.get('BEDROCK_MODEL_ID', 'eu.anthropic.claude-3-5-sonnet-20240620-v1:0')
+ENVIRONMENT = os.environ.get('ENVIRONMENT', 'dev')
+COMPANY_EVENTS_TABLE = os.environ.get('COMPANY_EVENTS_TABLE', f'fiscalshield-dc-{ENVIRONMENT}-CompanyEvents')
 
 # Categories for bank transactions
 TRANSACTION_EXPENSE_CATEGORIES = """
@@ -510,7 +512,66 @@ def get_payment_method(transaction: Dict) -> str:
     
     return 'UNKNOWN'
 
-def create_batch_categorization_prompt(transaction_batch, categories: str):
+def get_company_industry_context(company_number: str) -> str:
+    """
+    Fetch company SIC codes from CompanyEvents table to provide industry context.
+    
+    Args:
+        company_number: Company number to look up
+        
+    Returns:
+        Formatted industry context string for inclusion in Claude prompt
+    """
+    try:
+        company_table = dynamodb.Table(COMPANY_EVENTS_TABLE)
+        
+        # Query for company data
+        response = company_table.get_item(
+            Key={'company_number': company_number}
+        )
+        
+        if 'Item' not in response:
+            log_with_timestamp(f"No company data found for {company_number}")
+            return ""
+        
+        # Extract SIC codes from stored company data
+        company_data = response['Item'].get('data', {})
+        sic_enriched = company_data.get('sic_codes_enriched', [])
+        
+        if not sic_enriched:
+            log_with_timestamp(f"No SIC codes available for company {company_number}")
+            return ""
+        
+        # Build industry context for prompt
+        industry_descriptions = []
+        for sic in sic_enriched:
+            code = sic.get('code', '')
+            description = sic.get('description', '')
+            if code and description:
+                industry_descriptions.append(f"{code}: {description}")
+        
+        if industry_descriptions:
+            context = f"""
+COMPANY INDUSTRY CONTEXT:
+The company being analyzed operates in the following industry sectors (UK SIC codes):
+{chr(10).join(['- ' + desc for desc in industry_descriptions])}
+
+Consider this industry context when categorizing expenses. For example:
+- Retail companies (SIC 47xxx) commonly have supplier payments, inventory purchases, and POS system costs
+- IT/Software companies (SIC 62xxx) commonly have cloud services, software licenses, and contractor payments
+- Construction companies (SIC 41xxx-43xxx) commonly have materials, subcontractor payments, and equipment rental
+- Professional services (SIC 69xxx-75xxx) commonly have office costs, professional indemnity insurance, and client entertainment
+"""
+            log_with_timestamp(f"Added industry context for company {company_number}: {', '.join([s.get('code', '') for s in sic_enriched])}")
+            return context
+        
+        return ""
+        
+    except Exception as e:
+        log_with_timestamp(f"Could not fetch company industry context: {str(e)}")
+        return ""
+
+def create_batch_categorization_prompt(transaction_batch, categories: str, company_number: str = None):
     """Create sophisticated prompt for Claude to categorize bank transactions"""
     
     # Convert transactions to formatted text with context
@@ -537,7 +598,13 @@ Reference: {transaction.get('Reference') or 'N/A'}
     
     transactions_text = "\n".join(transaction_list)
     
-    prompt = f"""You are an experienced forensic accountant reviewing bank transactions for potential tax and compliance issues. 
+    # Get industry context from SIC codes if company number provided
+    industry_context = ""
+    if company_number:
+        industry_context = get_company_industry_context(company_number)
+    
+    prompt = f"""You are an experienced forensic accountant reviewing bank transactions for potential tax and compliance issues.
+{industry_context} 
 Analyze these transactions with professional skepticism while avoiding false positives for legitimate business expenses.
 
 AVAILABLE EXPENSE CATEGORIES:
@@ -701,13 +768,19 @@ def parse_categorization_response(response_text, transaction_batch):
     
     return results
 
-def categorize_transaction_batch(transaction_batch):
-    """Categorize a batch of transactions using Claude"""
+def categorize_transaction_batch(transaction_batch, company_number: str = None):
+    """
+    Categorize a batch of bank transactions using Claude with industry context from SIC codes
+    
+    Args:
+        transaction_batch: List of transaction dictionaries
+        company_number: Optional company number to fetch SIC codes for industry context
+    """
     
     log_with_timestamp(f"Starting batch categorization for {len(transaction_batch)} transactions")
     
-    # Create batch categorization prompt
-    prompt = create_batch_categorization_prompt(transaction_batch, TRANSACTION_EXPENSE_CATEGORIES)
+    # Create batch categorization prompt with industry context
+    prompt = create_batch_categorization_prompt(transaction_batch, TRANSACTION_EXPENSE_CATEGORIES, company_number)
     
     # Call Claude for categorization
     response = invoke_bedrock(prompt)
@@ -865,9 +938,9 @@ def process_transaction_batch(message_body: Dict) -> Dict:
     
     log_with_timestamp(f"Retrieved {len(transaction_batch)} transactions for processing")
     
-    # Step 2: Categorize with Claude
+    # Step 2: Categorize with Claude (with industry context from SIC codes)
     try:
-        analysis_results = categorize_transaction_batch(transaction_batch)
+        analysis_results = categorize_transaction_batch(transaction_batch, company_number)
         log_with_timestamp(f"Completed categorization for {len(analysis_results)} transactions")
     except Exception as e:
         log_with_timestamp(f"Categorization failed: {str(e)}")
