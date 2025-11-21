@@ -163,14 +163,50 @@ jobs:
     - name: Deploy to dev stack
       run: |
         echo "🚀 Deploying CloudFormation stack..."
+        
+        # Fetch Analysis Stack state machine ARNs from SSM (if they exist)
+        TRANSACTION_ARN=$(aws ssm get-parameter \
+          --name /fiscalshield/analysis/dev/transaction-categorization-state-machine-arn \
+          --query 'Parameter.Value' --output text 2>/dev/null || echo "")
+        
+        INVOICE_ARN=$(aws ssm get-parameter \
+          --name /fiscalshield/analysis/dev/invoice-analysis-state-machine-arn \
+          --query 'Parameter.Value' --output text 2>/dev/null || echo "")
+        
+        echo "📋 Analysis Stack Integration:"
+        if [ -n "$TRANSACTION_ARN" ]; then
+          echo "  ✅ Transaction Analysis: ENABLED"
+          echo "     ARN: $TRANSACTION_ARN"
+        else
+          echo "  ⏭️  Transaction Analysis: DISABLED (SSM parameter not found)"
+        fi
+        
+        if [ -n "$INVOICE_ARN" ]; then
+          echo "  ✅ Invoice Analysis: ENABLED"
+          echo "     ARN: $INVOICE_ARN"
+        else
+          echo "  ⏭️  Invoice Analysis: DISABLED (SSM parameter not found)"
+        fi
+        
+        # Build parameter overrides
+        PARAMS="ParameterKey=AdminEmail,UsePreviousValue=true"
+        PARAMS="$PARAMS ParameterKey=IDPPattern,UsePreviousValue=true"
+        PARAMS="$PARAMS ParameterKey=DocumentKnowledgeBase,ParameterValue=DISABLED"
+        
+        if [ -n "$TRANSACTION_ARN" ]; then
+          PARAMS="$PARAMS ParameterKey=TransactionCategorizationStateMachineArn,ParameterValue=$TRANSACTION_ARN"
+        fi
+        
+        if [ -n "$INVOICE_ARN" ]; then
+          PARAMS="$PARAMS ParameterKey=InvoiceAnalysisStateMachineArn,ParameterValue=$INVOICE_ARN"
+        fi
+        
         aws cloudformation update-stack \
           --stack-name fiscalshield-idp-dev \
           --template-url https://s3.eu-central-1.amazonaws.com/fiscalshield-dev-eu-central-1/idp/idp-main.yaml \
           --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
           --region eu-central-1 \
-          --parameters ParameterKey=AdminEmail,UsePreviousValue=true \
-                       ParameterKey=IDPPattern,UsePreviousValue=true \
-                       ParameterKey=DocumentKnowledgeBase,ParameterValue=DISABLED
+          --parameters $PARAMS
         
         if [ $? -ne 0 ]; then
           echo "❌ CloudFormation update-stack command failed!"

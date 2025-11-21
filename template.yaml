@@ -283,23 +283,23 @@ Parameters:
       If you provided a Bedrock Guardrail Id above, provide the corresponding Guardrail version here (e.g. DRAFT|1|2|...).
 
   # Analysis Stack Integration
-  # These parameters auto-resolve from SSM Parameter Store if Analysis Stack is deployed
-  # Otherwise, provide the ARN manually or leave blank to disable integration
+  # Provide the state machine ARNs from Analysis Stack deployment outputs
+  # Or leave empty to disable the integration
   TransactionCategorizationStateMachineArn:
     Type: String
-    Default: '{{resolve:ssm-safe:/fiscalshield/analysis/dev/transaction-categorization-state-machine-arn}}'
+    Default: ""
     Description: >-
       ARN of the Transaction Categorization Step Function from the Analysis Stack.
-      Auto-populated from SSM if Analysis Stack is deployed.
-      Provide ARN manually to override, or empty string to disable.
+      Get this from Analysis Stack outputs or SSM: /fiscalshield/analysis/dev/transaction-categorization-state-machine-arn
+      Leave empty to disable transaction analysis integration.
 
   InvoiceAnalysisStateMachineArn:
     Type: String
-    Default: '{{resolve:ssm-safe:/fiscalshield/analysis/dev/invoice-analysis-state-machine-arn}}'
+    Default: ""
     Description: >-
       ARN of the Invoice Analysis Step Function from the Analysis Stack.
-      Auto-populated from SSM if Analysis Stack is deployed.
-      Provide ARN manually to override, or empty string to disable.
+      Get this from Analysis Stack outputs or SSM: /fiscalshield/analysis/dev/invoice-analysis-state-machine-arn
+      Leave empty to disable invoice analysis integration.
 
   # General Configuration
   MaxConcurrentWorkflows:
