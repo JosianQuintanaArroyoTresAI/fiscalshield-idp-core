@@ -1020,15 +1020,23 @@ const CompanyAnalysis = () => {
 
           {/* Generate Report Button */}
           <Box textAlign="center">
-            <Button
-              variant="primary"
-              onClick={handleGenerateReport}
-              disabled={generatingReport}
-              loading={generatingReport}
-              iconName="download"
-            >
-              {generatingReport ? 'Generating Report...' : 'Generate Full AML Report'}
-            </Button>
+            <SpaceBetween size="s">
+              {!intelligence && !intelligenceLoading && (
+                <Alert type="warning" header="Intelligence Data Required">
+                  Company intelligence data must be gathered before generating an AML report. Please refresh
+                  intelligence to load the required data.
+                </Alert>
+              )}
+              <Button
+                variant="primary"
+                onClick={handleGenerateReport}
+                disabled={generatingReport || !intelligence || intelligenceLoading}
+                loading={generatingReport}
+                iconName="download"
+              >
+                {generatingReport ? 'Generating Report...' : 'Generate Full AML Report'}
+              </Button>
+            </SpaceBetween>
           </Box>
 
           {/* Display the markdown report content inline */}

@@ -128,6 +128,7 @@ export const formatInvoiceData = (extractionResult) => {
     invoiceNumber: extractionResult.InvoiceNumber || 'N/A',
     invoiceType: extractionResult.InvoiceType || 'SUPPLIER_INVOICE',
     vendor: extractionResult.VendorName || 'Unknown Vendor',
+    description: extractionResult.Description || extractionResult.ExtractedData?.description || 'N/A',
     date: formatDate(extractionResult.InvoiceDate),
     dueDate: formatDate(extractionResult.DueDate),
     amount: formatCurrency(extractionResult.TotalAmount, extractionResult.Currency),
@@ -140,6 +141,14 @@ export const formatInvoiceData = (extractionResult) => {
     processedAt: extractionResult.ProcessedAt,
     s3Uri: s3Uri,
     s3Path: s3Path,
+    // Tax deductibility analysis fields
+    analysisStatus: extractionResult.AnalysisStatus || 'PENDING',
+    deductibilityStatus: extractionResult.DeductibilityStatus || null,
+    deductibilityPercentage: extractionResult.DeductibilityPercentage || null,
+    bimSections: extractionResult.BIMSections || null,
+    hmrcConcern: extractionResult.HMRCConcern || false,
+    deductibilityReasoning: extractionResult.DeductibilityReasoning || null,
+    documentationRequired: extractionResult.DocumentationRequired || null,
     // Field-level confidence scores
     confidenceScores: {
       composite: compositeConf,

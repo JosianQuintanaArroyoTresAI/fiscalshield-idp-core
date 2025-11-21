@@ -266,6 +266,7 @@ type ExtractionResult @aws_cognito_user_pools @aws_iam {
   DueDate: String
   VendorName: String
   SupplierAddress: String
+  Description: String
   TotalAmount: Float
   Currency: String
   # Bank Statement-specific fields
@@ -333,6 +334,12 @@ type ExtractionResult @aws_cognito_user_pools @aws_iam {
   AmountConfidence: Float
   DescriptionConfidence: Float
   AccountInfoConfidence: Float
+  # Invoice Tax Deductibility Analysis (populated by Analysis Stack)
+  DeductibilityStatus: String
+  DeductibilityPercentage: Int
+  BIMSections: String
+  DeductibilityReasoning: String
+  DocumentationRequired: String
 }
 
 type ExtractionResultsConnection @aws_cognito_user_pools @aws_iam {
@@ -406,6 +413,7 @@ type Mutation  {
   registerUserCompany(companyNumber: String!, companyName: String!): Boolean! @aws_cognito_user_pools
   deleteUserCompany(companyNumber: String!): Boolean! @aws_cognito_user_pools
   triggerTransactionAnalysis(companyNumber: String!, userId: String!): TransactionAnalysisResponse! @aws_cognito_user_pools
+  triggerInvoiceAnalysis(companyNumber: String!, userId: String!): TransactionAnalysisResponse! @aws_cognito_user_pools
 }
 
 type Query @aws_cognito_user_pools @aws_iam {

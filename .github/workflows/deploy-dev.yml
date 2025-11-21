@@ -11,10 +11,34 @@ on:
       - 'docs/data-collection-*.md'
       - 'docs/Data_Collection_Stack_Implementation_Plan.md'
       - '.github/workflows/deploy-data-collection-*.yml'
+  workflow_dispatch:  # Enable manual triggering from GitHub Actions UI
 
 jobs:
+  # Deploy Analysis Stack first (if changed)
+  deploy-analysis:
+    runs-on: ubuntu-latest
+    if: contains(github.event.head_commit.modified, 'stacks/analysis/') || contains(github.event.head_commit.added, 'stacks/analysis/')
+    steps:
+      - name: Trigger Analysis Stack deployment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'deploy-analysis-dev.yml',
+              ref: 'dev'
+            });
+      
+      - name: Wait for Analysis Stack deployment
+        run: |
+          echo "⏳ Waiting 2 minutes for Analysis Stack to deploy..."
+          sleep 120
+
   deploy-dev:
     runs-on: ubuntu-latest
+    needs: [deploy-analysis]
+    if: always()  # Run even if Analysis Stack wasn't triggered
     environment: dev  # 👈 Add this line to use the 'dev' environment secrets
     
     steps:
@@ -139,14 +163,50 @@ jobs:
     - name: Deploy to dev stack
       run: |
         echo "🚀 Deploying CloudFormation stack..."
+        
+        # Fetch Analysis Stack state machine ARNs from SSM (if they exist)
+        TRANSACTION_ARN=$(aws ssm get-parameter \
+          --name /fiscalshield/analysis/dev/transaction-categorization-state-machine-arn \
+          --query 'Parameter.Value' --output text 2>/dev/null || echo "")
+        
+        INVOICE_ARN=$(aws ssm get-parameter \
+          --name /fiscalshield/analysis/dev/invoice-analysis-state-machine-arn \
+          --query 'Parameter.Value' --output text 2>/dev/null || echo "")
+        
+        echo "📋 Analysis Stack Integration:"
+        if [ -n "$TRANSACTION_ARN" ]; then
+          echo "  ✅ Transaction Analysis: ENABLED"
+          echo "     ARN: $TRANSACTION_ARN"
+        else
+          echo "  ⏭️  Transaction Analysis: DISABLED (SSM parameter not found)"
+        fi
+        
+        if [ -n "$INVOICE_ARN" ]; then
+          echo "  ✅ Invoice Analysis: ENABLED"
+          echo "     ARN: $INVOICE_ARN"
+        else
+          echo "  ⏭️  Invoice Analysis: DISABLED (SSM parameter not found)"
+        fi
+        
+        # Build parameter overrides
+        PARAMS="ParameterKey=AdminEmail,UsePreviousValue=true"
+        PARAMS="$PARAMS ParameterKey=IDPPattern,UsePreviousValue=true"
+        PARAMS="$PARAMS ParameterKey=DocumentKnowledgeBase,ParameterValue=DISABLED"
+        
+        if [ -n "$TRANSACTION_ARN" ]; then
+          PARAMS="$PARAMS ParameterKey=TransactionCategorizationStateMachineArn,ParameterValue=$TRANSACTION_ARN"
+        fi
+        
+        if [ -n "$INVOICE_ARN" ]; then
+          PARAMS="$PARAMS ParameterKey=InvoiceAnalysisStateMachineArn,ParameterValue=$INVOICE_ARN"
+        fi
+        
         aws cloudformation update-stack \
           --stack-name fiscalshield-idp-dev \
           --template-url https://s3.eu-central-1.amazonaws.com/fiscalshield-dev-eu-central-1/idp/idp-main.yaml \
           --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
           --region eu-central-1 \
-          --parameters ParameterKey=AdminEmail,UsePreviousValue=true \
-                       ParameterKey=IDPPattern,UsePreviousValue=true \
-                       ParameterKey=DocumentKnowledgeBase,ParameterValue=DISABLED
+          --parameters $PARAMS
         
         if [ $? -ne 0 ]; then
           echo "❌ CloudFormation update-stack command failed!"
@@ -326,6 +386,53 @@ jobs:
       continue-on-error: true
       env:
         REGION: eu-central-1
+    
+    - name: Invalidate CloudFront cache
+      run: |
+        echo "🌐 Invalidating CloudFront cache to serve latest UI..."
+        
+        STACK_NAME=fiscalshield-idp-dev
+        REGION=eu-central-1
+        
+        # Get CloudFront distribution ID
+        DISTRIBUTION_ID=$(aws cloudformation describe-stacks \
+          --stack-name "$STACK_NAME" \
+          --region "$REGION" \
+          --query 'Stacks[0].Outputs[?OutputKey==`CloudFrontDistributionId`].OutputValue' \
+          --output text 2>/dev/null || echo "")
+        
+        if [ -z "$DISTRIBUTION_ID" ]; then
+          # Try to find by resource
+          DISTRIBUTION_ID=$(aws cloudformation describe-stack-resources \
+            --stack-name "$STACK_NAME" \
+            --region "$REGION" \
+            --query 'StackResources[?ResourceType==`AWS::CloudFront::Distribution`].PhysicalResourceId' \
+            --output text 2>/dev/null || echo "")
+        fi
+        
+        if [ -z "$DISTRIBUTION_ID" ]; then
+          echo "⚠️  Could not find CloudFront distribution - skipping invalidation"
+          echo "    You may need to hard refresh your browser (Ctrl+Shift+R)"
+          exit 0
+        fi
+        
+        echo "✅ Found CloudFront distribution: $DISTRIBUTION_ID"
+        
+        # Create invalidation
+        INVALIDATION_ID=$(aws cloudfront create-invalidation \
+          --distribution-id "$DISTRIBUTION_ID" \
+          --paths "/*" \
+          --query 'Invalidation.Id' \
+          --output text)
+        
+        echo "✅ CloudFront invalidation created: $INVALIDATION_ID"
+        echo "⏳ Cache will be cleared in 1-2 minutes"
+        echo ""
+        echo "📋 After deployment:"
+        echo "  1. Wait 2 minutes for CloudFront invalidation"
+        echo "  2. Hard refresh your browser (Ctrl+Shift+R or Cmd+Shift+R)"
+        echo "  3. Changes should be visible"
+      continue-on-error: true
     
     - name: Run smoke tests
       id: smoke-tests

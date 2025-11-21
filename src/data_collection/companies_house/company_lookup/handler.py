@@ -10,6 +10,14 @@ import urllib.error
 from datetime import datetime
 from botocore.exceptions import ClientError
 
+# Import SIC helper for enriching SIC codes with descriptions
+try:
+    from sic_helper import get_sic_description
+except ImportError:
+    print("Warning: sic_helper module not found, SIC code enrichment disabled")
+    def get_sic_description(code):
+        return "Description not available"
+
 # Import rate limiter
 try:
     from rate_limiter import check_rate_limit, RateLimitExceeded, get_rate_limit_status
@@ -251,10 +259,20 @@ def lookup_company(company_number, api_key):
 
 def format_company_data(company_data):
     """
-    Format company data for frontend display
+    Format company data for frontend display with enriched SIC code descriptions
     Returns simplified dict with essential information
     """
     address = company_data.get("registered_office_address", {})
+    
+    # Enrich SIC codes with official descriptions
+    sic_codes_raw = company_data.get("sic_codes", [])
+    sic_codes_enriched = []
+    
+    for code in sic_codes_raw:
+        sic_codes_enriched.append({
+            "code": code,
+            "description": get_sic_description(code)
+        })
 
     formatted = {
         "company_name": company_data.get("company_name", ""),
@@ -270,7 +288,8 @@ def format_company_data(company_data):
             "postal_code": address.get("postal_code", ""),
             "country": address.get("country", "United Kingdom"),
         },
-        "sic_codes": company_data.get("sic_codes", []),
+        "sic_codes": sic_codes_raw,  # Keep original array for backward compatibility
+        "sic_codes_enriched": sic_codes_enriched,  # New enriched format with descriptions
         "jurisdiction": company_data.get("jurisdiction", "england-wales"),
         "last_updated": datetime.utcnow().isoformat(),
     }

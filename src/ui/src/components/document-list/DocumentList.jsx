@@ -40,6 +40,7 @@ import { exportToExcel, exportToCSV } from '../common/download-func';
 import DeleteDocumentModal from '../common/DeleteDocumentModal';
 import ReprocessDocumentModal from '../common/ReprocessDocumentModal';
 import { TRIGGER_TRANSACTION_ANALYSIS } from '../../graphql/mutations/triggerTransactionAnalysis';
+import { TRIGGER_INVOICE_ANALYSIS } from '../../graphql/mutations/triggerInvoiceAnalysis';
 
 import {
   DocumentsPreferences,
@@ -54,6 +55,7 @@ import {
 import { getFilterCounterText, TableEmptyState, TableNoMatchState } from '../common/table';
 
 import TransactionDetailDrawer from '../bank-insights/TransactionDetailDrawer';
+import InvoiceDetailDrawer from '../invoice-insights/InvoiceDetailDrawer';
 
 import '@awsui/global-styles/index.css';
 
@@ -71,10 +73,12 @@ const DocumentList = () => {
   const [isLoadingInvoices, setIsLoadingInvoices] = useState(false);
   const [isLoadingBankStatements, setIsLoadingBankStatements] = useState(false);
   const [isAnalysisRunning, setIsAnalysisRunning] = useState(false);
+  const [isInvoiceAnalysisRunning, setIsInvoiceAnalysisRunning] = useState(false);
   const [invoicesNextToken, setInvoicesNextToken] = useState(null);
   const [bankStatementsNextToken, setBankStatementsNextToken] = useState(null);
 
   const [selectedTransaction, setSelectedTransaction] = useState(null);
+  const [selectedInvoice, setSelectedInvoice] = useState(null);
 
   const { activeCompany, isCompanySelected } = useCompany();
   const { settings } = useSettingsContext();
@@ -274,6 +278,37 @@ const DocumentList = () => {
     exportToCSV(csvData, `${companyName}_Invoices_${timestamp}`);
   };
 
+  // Helper functions for invoice tax deductibility display
+  const getDeductibilityColor = (status) => {
+    const colorMap = {
+      FULLY_DEDUCTIBLE: 'green',
+      PARTIALLY_DEDUCTIBLE: 'blue',
+      NOT_DEDUCTIBLE: 'red',
+      REQUIRES_REVIEW: 'grey',
+    };
+    return colorMap[status] || 'grey';
+  };
+
+  const getRecommendedActionColor = (action) => {
+    const colorMap = {
+      APPROVE: 'green',
+      APPORTION: 'blue',
+      REQUEST_DOCUMENTATION: 'grey',
+      REJECT: 'red',
+    };
+    return colorMap[action] || 'grey';
+  };
+
+  const calculateTaxSavings = (totalAmount, deductibilityPercentage) => {
+    if (!totalAmount || !deductibilityPercentage) return '£0.00';
+
+    const amount = parseFloat(totalAmount.toString().replace(/[^0-9.-]+/g, ''));
+    const deductibleAmount = (amount * deductibilityPercentage) / 100;
+    const taxSavings = deductibleAmount * 0.19; // Corporation tax at 19%
+
+    return `£${taxSavings.toFixed(2)}`;
+  };
+
   // Invoices Table Component
   const renderInvoicesTable = () => (
     <Table
@@ -302,6 +337,19 @@ const DocumentList = () => {
           cell: (item) => item.vendor,
           width: 180,
           sortingField: 'vendor',
+        },
+        {
+          id: 'description',
+          header: 'Description',
+          cell: (item) => (
+            <span title={item.description || ''}>
+              {item.description && item.description.length > 40
+                ? item.description.substring(0, 40) + '...'
+                : item.description || 'N/A'}
+            </span>
+          ),
+          width: 200,
+          sortingField: 'description',
         },
         {
           id: 'date',
@@ -374,11 +422,63 @@ const DocumentList = () => {
           width: 130,
           sortingField: 'hitlRequired',
         },
+        {
+          id: 'deductibilityStatus',
+          header: 'Tax Status',
+          cell: (item) => {
+            if (!item.analysisStatus || item.analysisStatus === 'PENDING') {
+              return <Badge color="grey">Pending Analysis</Badge>;
+            }
+
+            const status = item.deductibilityStatus;
+            const percentage = item.deductibilityPercentage;
+
+            if (!status) {
+              return (
+                <Box color="text-status-inactive" variant="small">
+                  —
+                </Box>
+              );
+            }
+
+            const colorMap = {
+              FULLY_DEDUCTIBLE: 'green',
+              PARTIALLY_DEDUCTIBLE: 'blue',
+              NOT_DEDUCTIBLE: 'red',
+              REQUIRES_REVIEW: 'grey',
+            };
+
+            const labelMap = {
+              FULLY_DEDUCTIBLE: '100% Deductible',
+              PARTIALLY_DEDUCTIBLE: `${percentage}% Deductible`,
+              NOT_DEDUCTIBLE: 'Not Deductible',
+              REQUIRES_REVIEW: 'Needs Review',
+            };
+
+            return <Badge color={colorMap[status] || 'grey'}>{labelMap[status] || status}</Badge>;
+          },
+          width: 150,
+          sortingField: 'deductibilityStatus',
+        },
+        {
+          id: 'hmrcConcern',
+          header: 'HMRC Risk',
+          cell: (item) => {
+            if (!item.analysisStatus || item.analysisStatus === 'PENDING') {
+              return <Badge color="grey">Pending</Badge>;
+            }
+
+            return item.hmrcConcern ? <Badge color="red">High Risk</Badge> : <Badge color="green">Low Risk</Badge>;
+          },
+          width: 120,
+          sortingField: 'hmrcConcern',
+        },
       ]}
       items={invoices}
       loading={isLoadingInvoices}
       loadingText="Loading invoices"
       sortingDisabled={false}
+      onRowClick={({ detail }) => setSelectedInvoice(detail.item)}
       header={
         <Header
           counter={`(${invoices.length})`}
@@ -388,9 +488,25 @@ const DocumentList = () => {
               : 'Select a company to view invoices'
           }
           actions={
-            <Button onClick={handleDownloadInvoices} disabled={invoices.length === 0} iconName="download">
-              Download CSV
-            </Button>
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button
+                onClick={handleAnalyseInvoices}
+                loading={isInvoiceAnalysisRunning}
+                disabled={
+                  isInvoiceAnalysisRunning ||
+                  invoices.length === 0 ||
+                  !invoices.some((item) => (item.analysisStatus || 'PENDING') === 'PENDING')
+                }
+                variant="primary"
+              >
+                Analyse Invoices
+                {invoices.filter((item) => (item.analysisStatus || 'PENDING') === 'PENDING').length > 0 &&
+                  ` (${invoices.filter((item) => (item.analysisStatus || 'PENDING') === 'PENDING').length})`}
+              </Button>
+              <Button onClick={handleDownloadInvoices} disabled={invoices.length === 0} iconName="download">
+                Download CSV
+              </Button>
+            </SpaceBetween>
           }
         >
           Invoices
@@ -411,6 +527,44 @@ const DocumentList = () => {
       pagination={<Pagination currentPageIndex={1} pagesCount={1} disabled={!invoicesNextToken} />}
     />
   );
+
+  // Trigger invoice analysis
+  const handleAnalyseInvoices = async () => {
+    if (!activeCompany?.companyNumber || !user?.username) {
+      alert('Missing company or user information');
+      return;
+    }
+
+    setIsInvoiceAnalysisRunning(true);
+
+    try {
+      console.log('[INVOICE ANALYSIS] Triggering analysis for company:', activeCompany.companyNumber);
+
+      const response = await API.graphql(
+        graphqlOperation(TRIGGER_INVOICE_ANALYSIS, {
+          companyNumber: activeCompany.companyNumber,
+          userId: user.username,
+        }),
+      );
+
+      const result = response.data.triggerInvoiceAnalysis;
+
+      if (result.success) {
+        console.log('Invoice analysis started:', result.executionArn);
+        alert(
+          `✓ Invoice analysis started successfully!\n${result.message}\n\nExecution: ${result.executionName}\n\nRefresh the page in 60 seconds to see analysis results.`,
+        );
+      } else {
+        console.error('Invoice analysis failed:', result.message);
+        alert(`✗ Invoice analysis failed: ${result.message}`);
+      }
+    } catch (error) {
+      console.error('[INVOICE ANALYSIS] Error:', error);
+      alert(`Error starting invoice analysis: ${error.message || 'Unknown error'}`);
+    } finally {
+      setIsInvoiceAnalysisRunning(false);
+    }
+  };
 
   // Download bank statements to CSV
   const handleDownloadBankStatements = () => {
@@ -876,29 +1030,38 @@ const DocumentList = () => {
 
   /* eslint-disable react/jsx-props-no-spreading */
   return (
-    <Tabs
-      activeTabId={activeTabId}
-      onChange={({ detail }) => setActiveTabId(detail.activeTabId)}
-      tabs={[
-        {
-          id: 'documents',
-          label: 'Documents',
-          content: renderDocumentsTable(),
-        },
-        {
-          id: 'invoices',
-          label: <Badge color={invoices.length > 0 ? 'blue' : 'grey'}>Invoices ({invoices.length})</Badge>,
-          content: renderInvoicesTable(),
-        },
-        {
-          id: 'statements',
-          label: (
-            <Badge color={bankStatements.length > 0 ? 'blue' : 'grey'}>Bank Statements ({bankStatements.length})</Badge>
-          ),
-          content: renderBankStatementsTable(),
-        },
-      ]}
-    />
+    <>
+      <Tabs
+        activeTabId={activeTabId}
+        onChange={({ detail }) => setActiveTabId(detail.activeTabId)}
+        tabs={[
+          {
+            id: 'documents',
+            label: 'Documents',
+            content: renderDocumentsTable(),
+          },
+          {
+            id: 'invoices',
+            label: <Badge color={invoices.length > 0 ? 'blue' : 'grey'}>Invoices ({invoices.length})</Badge>,
+            content: renderInvoicesTable(),
+          },
+          {
+            id: 'statements',
+            label: (
+              <Badge color={bankStatements.length > 0 ? 'blue' : 'grey'}>
+                Bank Statements ({bankStatements.length})
+              </Badge>
+            ),
+            content: renderBankStatementsTable(),
+          },
+        ]}
+      />
+      <InvoiceDetailDrawer
+        invoice={selectedInvoice}
+        visible={!!selectedInvoice}
+        onDismiss={() => setSelectedInvoice(null)}
+      />
+    </>
   );
 };
 
