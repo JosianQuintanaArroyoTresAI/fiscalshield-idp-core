@@ -138,15 +138,19 @@ def fetch_company_context(company_number: str) -> Dict[str, Any]:
     try:
         company_events_table = dynamodb.Table(f'fiscalshield-dc-{os.environ.get("ENVIRONMENT", "dev")}-CompanyEvents')
         
-        response = company_events_table.get_item(
-            Key={'company_number': company_number}
+        # Query by company_number (partition key) to get latest event
+        response = company_events_table.query(
+            KeyConditionExpression='company_number = :cn',
+            ExpressionAttributeValues={':cn': company_number},
+            ScanIndexForward=False,  # Get most recent first
+            Limit=1
         )
         
-        if 'Item' not in response:
+        if not response.get('Items'):
             print(f"[WARNING] No company data found for {company_number}")
             return {}
         
-        company = response['Item']
+        company = response['Items'][0]
         
         context = {
             'company_name': company.get('company_name', 'Unknown'),
