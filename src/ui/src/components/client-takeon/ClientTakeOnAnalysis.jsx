@@ -447,15 +447,22 @@ const ClientTakeOnAnalysis = ({ embedded = false }) => {
 
                 {/* Generate AML Report Button */}
                 <Box textAlign="center" margin={{ top: 'xl' }}>
-                  <Button
-                    variant="primary"
-                    onClick={handleGenerateReport}
-                    disabled={generatingReport}
-                    loading={generatingReport}
-                    iconName="download"
-                  >
-                    {generatingReport ? 'Generating Report...' : 'Generate Full AML Report'}
-                  </Button>
+                  <SpaceBetween size="s">
+                    {!intelligence && !loading && (
+                      <Alert type="warning" header="Intelligence Data Required">
+                        Company intelligence data must be gathered before generating an AML report. Please wait for intelligence to load.
+                      </Alert>
+                    )}
+                    <Button
+                      variant="primary"
+                      onClick={handleGenerateReport}
+                      disabled={generatingReport || !intelligence || loading}
+                      loading={generatingReport}
+                      iconName="download"
+                    >
+                      {generatingReport ? 'Generating Report...' : 'Generate Full AML Report'}
+                    </Button>
+                  </SpaceBetween>
                 </Box>
 
                 {/* Display the markdown report content inline */}

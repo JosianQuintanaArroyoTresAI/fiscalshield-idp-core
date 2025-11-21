@@ -601,8 +601,21 @@ const CompanyIntelligence = () => {
               findings, and regulatory compliance summary for client files.
             </Box>
 
+            {/* Show warning if intelligence data is not available */}
+            {!intelligence && !isLoading && (
+              <Alert type="warning" header="Intelligence Data Required">
+                Company intelligence data must be gathered before generating an AML report. Please refresh the page or
+                click "Refresh Intelligence" to load the required data.
+              </Alert>
+            )}
+
             {!reportData ? (
-              <Button variant="primary" onClick={handleGenerateReport} loading={isGeneratingReport}>
+              <Button 
+                variant="primary" 
+                onClick={handleGenerateReport} 
+                loading={isGeneratingReport}
+                disabled={!intelligence || isLoading || isRefreshing}
+              >
                 Generate AML Report
               </Button>
             ) : (
@@ -614,7 +627,12 @@ const CompanyIntelligence = () => {
                 >
                   Download Report
                 </Button>
-                <Button variant="normal" onClick={handleGenerateReport} loading={isGeneratingReport}>
+                <Button 
+                  variant="normal" 
+                  onClick={handleGenerateReport} 
+                  loading={isGeneratingReport}
+                  disabled={!intelligence || isLoading || isRefreshing}
+                >
                   Regenerate Report
                 </Button>
               </SpaceBetween>
