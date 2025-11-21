@@ -89,6 +89,12 @@ const listExtractionResults = /* GraphQL */ `
         AmountConfidence
         DescriptionConfidence
         AccountInfoConfidence
+        # Invoice Tax Deductibility Analysis
+        DeductibilityStatus
+        DeductibilityPercentage
+        BIMSections
+        DeductibilityReasoning
+        DocumentationRequired
       }
       nextToken
     }

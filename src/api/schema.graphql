@@ -333,6 +333,12 @@ type ExtractionResult @aws_cognito_user_pools @aws_iam {
   AmountConfidence: Float
   DescriptionConfidence: Float
   AccountInfoConfidence: Float
+  # Invoice Tax Deductibility Analysis (populated by Analysis Stack)
+  DeductibilityStatus: String
+  DeductibilityPercentage: Int
+  BIMSections: String
+  DeductibilityReasoning: String
+  DocumentationRequired: String
 }
 
 type ExtractionResultsConnection @aws_cognito_user_pools @aws_iam {

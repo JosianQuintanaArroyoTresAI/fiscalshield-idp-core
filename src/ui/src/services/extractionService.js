@@ -142,11 +142,12 @@ export const formatInvoiceData = (extractionResult) => {
     s3Path: s3Path,
     // Tax deductibility analysis fields
     analysisStatus: extractionResult.AnalysisStatus || 'PENDING',
-    deductibilityStatus: extractionResult.DeductibilityStatus,
-    deductibilityPercentage: extractionResult.DeductibilityPercentage,
-    bimSections: extractionResult.BIMSections,
-    hmrcConcern: extractionResult.HMRCConcern,
-    deductibilityReasoning: extractionResult.DeductibilityReasoning,
+    deductibilityStatus: extractionResult.DeductibilityStatus || null,
+    deductibilityPercentage: extractionResult.DeductibilityPercentage || null,
+    bimSections: extractionResult.BIMSections || null,
+    hmrcConcern: extractionResult.HMRCConcern || false,
+    deductibilityReasoning: extractionResult.DeductibilityReasoning || null,
+    documentationRequired: extractionResult.DocumentationRequired || null,
     // Field-level confidence scores
     confidenceScores: {
       composite: compositeConf,

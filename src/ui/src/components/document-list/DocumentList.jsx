@@ -77,6 +77,7 @@ const DocumentList = () => {
   const [bankStatementsNextToken, setBankStatementsNextToken] = useState(null);
 
   const [selectedTransaction, setSelectedTransaction] = useState(null);
+  const [expandedInvoices, setExpandedInvoices] = useState(new Set());
 
   const { activeCompany, isCompanySelected } = useCompany();
   const { settings } = useSettingsContext();
@@ -276,6 +277,174 @@ const DocumentList = () => {
     exportToCSV(csvData, `${companyName}_Invoices_${timestamp}`);
   };
 
+  // Helper functions for invoice tax deductibility display
+  const getDeductibilityColor = (status) => {
+    const colorMap = {
+      FULLY_DEDUCTIBLE: 'green',
+      PARTIALLY_DEDUCTIBLE: 'blue',
+      NOT_DEDUCTIBLE: 'red',
+      REQUIRES_REVIEW: 'grey',
+    };
+    return colorMap[status] || 'grey';
+  };
+
+  const getRecommendedActionColor = (action) => {
+    const colorMap = {
+      APPROVE: 'green',
+      APPORTION: 'blue',
+      REQUEST_DOCUMENTATION: 'grey',
+      REJECT: 'red',
+    };
+    return colorMap[action] || 'grey';
+  };
+
+  const calculateTaxSavings = (totalAmount, deductibilityPercentage) => {
+    if (!totalAmount || !deductibilityPercentage) return '£0.00';
+
+    const amount = parseFloat(totalAmount.toString().replace(/[^0-9.-]+/g, ''));
+    const deductibleAmount = (amount * deductibilityPercentage) / 100;
+    const taxSavings = deductibleAmount * 0.19; // Corporation tax at 19%
+
+    return `£${taxSavings.toFixed(2)}`;
+  };
+
+  const toggleInvoiceExpanded = (id) => {
+    setExpandedInvoices((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  // Expandable row content for invoices
+  const renderInvoiceExpandedContent = (item) => {
+    const rawData = item.rawData;
+
+    // If not analyzed yet, show pending state
+    if (!item.analysisStatus || item.analysisStatus === 'PENDING') {
+      return (
+        <Box padding="l">
+          <Alert type="info">
+            This invoice has not been analyzed yet. Click &quot;Analyse Invoices&quot; to assess tax deductibility.
+          </Alert>
+        </Box>
+      );
+    }
+
+    return (
+      <Box padding="l" variant="div">
+        <SpaceBetween size="m">
+          {/* Invoice Summary */}
+          <ColumnLayout columns={4} variant="text-grid">
+            <div>
+              <Box variant="awsui-key-label">Invoice Type</Box>
+              <Badge color={item.invoiceType === 'SUPPLIER_INVOICE' ? 'blue' : 'green'}>
+                {item.invoiceType || 'N/A'}
+              </Badge>
+            </div>
+            <div>
+              <Box variant="awsui-key-label">VAT Number</Box>
+              <Box>{rawData.VATNumber || 'N/A'}</Box>
+            </div>
+            <div>
+              <Box variant="awsui-key-label">Deductibility</Box>
+              <Badge color={getDeductibilityColor(rawData.DeductibilityStatus)}>
+                {rawData.DeductibilityPercentage
+                  ? `${rawData.DeductibilityPercentage}%`
+                  : rawData.DeductibilityStatus || 'N/A'}
+              </Badge>
+            </div>
+            <div>
+              <Box variant="awsui-key-label">Tax Savings (19% CT)</Box>
+              <Box fontWeight="bold" color="text-status-success">
+                {calculateTaxSavings(item.totalAmount, rawData.DeductibilityPercentage)}
+              </Box>
+            </div>
+          </ColumnLayout>
+
+          {/* BIM Sections Referenced */}
+          {rawData.BIMSections && (
+            <div>
+              <Box variant="h4" padding={{ bottom: 'xs' }}>
+                HMRC Guidance Applied
+              </Box>
+              <SpaceBetween direction="horizontal" size="xs">
+                {rawData.BIMSections.split(',').map((section, idx) => (
+                  <Badge key={idx} color="blue">
+                    {section.trim()}
+                  </Badge>
+                ))}
+              </SpaceBetween>
+            </div>
+          )}
+
+          {/* Deductibility Reasoning */}
+          {rawData.DeductibilityReasoning && (
+            <div>
+              <Box variant="h4" padding={{ bottom: 'xs' }}>
+                Tax Deductibility Analysis
+              </Box>
+              <Box variant="p" color="text-body-secondary">
+                {rawData.DeductibilityReasoning}
+              </Box>
+            </div>
+          )}
+
+          {/* Documentation Required */}
+          {rawData.DocumentationRequired && (
+            <Alert type="warning" header="Additional Documentation Required">
+              {rawData.DocumentationRequired}
+            </Alert>
+          )}
+
+          {/* HMRC Concerns */}
+          {rawData.HMRCConcern && (
+            <Alert type="error" header="HMRC Compliance Risk">
+              This expense may attract HMRC scrutiny. Ensure proper documentation is maintained.
+            </Alert>
+          )}
+
+          {/* Recommended Action */}
+          {rawData.RecommendedAction && (
+            <div>
+              <Box variant="h4" padding={{ bottom: 'xs' }}>
+                Recommended Action
+              </Box>
+              <Badge color={getRecommendedActionColor(rawData.RecommendedAction)}>
+                {rawData.RecommendedAction}
+              </Badge>
+            </div>
+          )}
+
+          {/* Confidence Scores Breakdown */}
+          <div>
+            <Box variant="h4" padding={{ bottom: 'xs' }}>
+              Field Confidence Scores
+            </Box>
+            <ColumnLayout columns={3} variant="text-grid">
+              <div>
+                <Box variant="awsui-key-label">Supplier Name</Box>
+                <ProgressBar value={(rawData.SupplierNameConfidence || 0) * 100} />
+              </div>
+              <div>
+                <Box variant="awsui-key-label">Total Amount</Box>
+                <ProgressBar value={(rawData.TotalAmountConfidence || 0) * 100} />
+              </div>
+              <div>
+                <Box variant="awsui-key-label">Invoice Number</Box>
+                <ProgressBar value={(rawData.InvoiceNumberConfidence || 0) * 100} />
+              </div>
+            </ColumnLayout>
+          </div>
+        </SpaceBetween>
+      </Box>
+    );
+  };
+
   // Invoices Table Component
   const renderInvoicesTable = () => (
     <Table
@@ -376,11 +545,75 @@ const DocumentList = () => {
           width: 130,
           sortingField: 'hitlRequired',
         },
+        {
+          id: 'deductibilityStatus',
+          header: 'Tax Status',
+          cell: (item) => {
+            if (!item.analysisStatus || item.analysisStatus === 'PENDING') {
+              return <Badge color="grey">Pending Analysis</Badge>;
+            }
+
+            const status = item.deductibilityStatus;
+            const percentage = item.deductibilityPercentage;
+
+            if (!status) {
+              return (
+                <Box color="text-status-inactive" variant="small">
+                  —
+                </Box>
+              );
+            }
+
+            const colorMap = {
+              FULLY_DEDUCTIBLE: 'green',
+              PARTIALLY_DEDUCTIBLE: 'blue',
+              NOT_DEDUCTIBLE: 'red',
+              REQUIRES_REVIEW: 'grey',
+            };
+
+            const labelMap = {
+              FULLY_DEDUCTIBLE: '100% Deductible',
+              PARTIALLY_DEDUCTIBLE: `${percentage}% Deductible`,
+              NOT_DEDUCTIBLE: 'Not Deductible',
+              REQUIRES_REVIEW: 'Needs Review',
+            };
+
+            return <Badge color={colorMap[status] || 'grey'}>{labelMap[status] || status}</Badge>;
+          },
+          width: 150,
+          sortingField: 'deductibilityStatus',
+        },
+        {
+          id: 'hmrcConcern',
+          header: 'HMRC Risk',
+          cell: (item) => {
+            if (!item.analysisStatus || item.analysisStatus === 'PENDING') {
+              return <Badge color="grey">Pending</Badge>;
+            }
+
+            return item.hmrcConcern ? (
+              <Badge color="red">High Risk</Badge>
+            ) : (
+              <Badge color="green">Low Risk</Badge>
+            );
+          },
+          width: 120,
+          sortingField: 'hmrcConcern',
+        },
       ]}
       items={invoices}
       loading={isLoadingInvoices}
       loadingText="Loading invoices"
       sortingDisabled={false}
+      expandableRows={{
+        getItemChildren: (item) => {
+          if (!expandedInvoices.has(item.id)) return [];
+          return [{ content: renderInvoiceExpandedContent(item) }];
+        },
+        isItemExpandable: () => true,
+        expandedItems: Array.from(expandedInvoices).map((id) => invoices.find((inv) => inv.id === id)),
+        onExpandableItemToggle: ({ detail }) => toggleInvoiceExpanded(detail.item.id),
+      }}
       header={
         <Header
           counter={`(${invoices.length})`}
