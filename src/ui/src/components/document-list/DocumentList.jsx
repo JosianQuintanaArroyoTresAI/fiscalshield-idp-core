@@ -40,6 +40,7 @@ import { exportToExcel, exportToCSV } from '../common/download-func';
 import DeleteDocumentModal from '../common/DeleteDocumentModal';
 import ReprocessDocumentModal from '../common/ReprocessDocumentModal';
 import { TRIGGER_TRANSACTION_ANALYSIS } from '../../graphql/mutations/triggerTransactionAnalysis';
+import { TRIGGER_INVOICE_ANALYSIS } from '../../graphql/mutations/triggerInvoiceAnalysis';
 
 import {
   DocumentsPreferences,
@@ -71,6 +72,7 @@ const DocumentList = () => {
   const [isLoadingInvoices, setIsLoadingInvoices] = useState(false);
   const [isLoadingBankStatements, setIsLoadingBankStatements] = useState(false);
   const [isAnalysisRunning, setIsAnalysisRunning] = useState(false);
+  const [isInvoiceAnalysisRunning, setIsInvoiceAnalysisRunning] = useState(false);
   const [invoicesNextToken, setInvoicesNextToken] = useState(null);
   const [bankStatementsNextToken, setBankStatementsNextToken] = useState(null);
 
@@ -388,9 +390,25 @@ const DocumentList = () => {
               : 'Select a company to view invoices'
           }
           actions={
-            <Button onClick={handleDownloadInvoices} disabled={invoices.length === 0} iconName="download">
-              Download CSV
-            </Button>
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button
+                onClick={handleAnalyseInvoices}
+                loading={isInvoiceAnalysisRunning}
+                disabled={
+                  isInvoiceAnalysisRunning ||
+                  invoices.length === 0 ||
+                  !invoices.some((item) => (item.analysisStatus || 'PENDING') === 'PENDING')
+                }
+                variant="primary"
+              >
+                Analyse Invoices
+                {invoices.filter((item) => (item.analysisStatus || 'PENDING') === 'PENDING').length > 0 &&
+                  ` (${invoices.filter((item) => (item.analysisStatus || 'PENDING') === 'PENDING').length})`}
+              </Button>
+              <Button onClick={handleDownloadInvoices} disabled={invoices.length === 0} iconName="download">
+                Download CSV
+              </Button>
+            </SpaceBetween>
           }
         >
           Invoices
@@ -411,6 +429,44 @@ const DocumentList = () => {
       pagination={<Pagination currentPageIndex={1} pagesCount={1} disabled={!invoicesNextToken} />}
     />
   );
+
+  // Trigger invoice analysis
+  const handleAnalyseInvoices = async () => {
+    if (!activeCompany?.companyNumber || !user?.username) {
+      alert('Missing company or user information');
+      return;
+    }
+
+    setIsInvoiceAnalysisRunning(true);
+
+    try {
+      console.log('[INVOICE ANALYSIS] Triggering analysis for company:', activeCompany.companyNumber);
+
+      const response = await API.graphql(
+        graphqlOperation(TRIGGER_INVOICE_ANALYSIS, {
+          companyNumber: activeCompany.companyNumber,
+          userId: user.username,
+        }),
+      );
+
+      const result = response.data.triggerInvoiceAnalysis;
+
+      if (result.success) {
+        console.log('Invoice analysis started:', result.executionArn);
+        alert(
+          `✓ Invoice analysis started successfully!\n${result.message}\n\nExecution: ${result.executionName}\n\nRefresh the page in 60 seconds to see analysis results.`,
+        );
+      } else {
+        console.error('Invoice analysis failed:', result.message);
+        alert(`✗ Invoice analysis failed: ${result.message}`);
+      }
+    } catch (error) {
+      console.error('[INVOICE ANALYSIS] Error:', error);
+      alert(`Error starting invoice analysis: ${error.message || 'Unknown error'}`);
+    } finally {
+      setIsInvoiceAnalysisRunning(false);
+    }
+  };
 
   // Download bank statements to CSV
   const handleDownloadBankStatements = () => {
