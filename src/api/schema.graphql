@@ -266,6 +266,7 @@ type ExtractionResult @aws_cognito_user_pools @aws_iam {
   DueDate: String
   VendorName: String
   SupplierAddress: String
+  Description: String
   TotalAmount: Float
   Currency: String
   # Bank Statement-specific fields

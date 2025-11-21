@@ -28,6 +28,7 @@ const listExtractionResults = /* GraphQL */ `
         DueDate
         VendorName
         SupplierAddress
+        Description
         TotalAmount
         Currency
         BankName

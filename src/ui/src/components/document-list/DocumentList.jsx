@@ -55,6 +55,7 @@ import {
 import { getFilterCounterText, TableEmptyState, TableNoMatchState } from '../common/table';
 
 import TransactionDetailDrawer from '../bank-insights/TransactionDetailDrawer';
+import InvoiceDetailDrawer from '../invoice-insights/InvoiceDetailDrawer';
 
 import '@awsui/global-styles/index.css';
 
@@ -77,7 +78,7 @@ const DocumentList = () => {
   const [bankStatementsNextToken, setBankStatementsNextToken] = useState(null);
 
   const [selectedTransaction, setSelectedTransaction] = useState(null);
-  const [expandedInvoices, setExpandedInvoices] = useState(new Set());
+  const [selectedInvoice, setSelectedInvoice] = useState(null);
 
   const { activeCompany, isCompanySelected } = useCompany();
   const { settings } = useSettingsContext();
@@ -308,141 +309,6 @@ const DocumentList = () => {
     return `£${taxSavings.toFixed(2)}`;
   };
 
-  const toggleInvoiceExpanded = (id) => {
-    setExpandedInvoices((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  };
-
-  // Expandable row content for invoices
-  const renderInvoiceExpandedContent = (item) => {
-    const rawData = item.rawData;
-
-    // If not analyzed yet, show pending state
-    if (!item.analysisStatus || item.analysisStatus === 'PENDING') {
-      return (
-        <Box padding="l">
-          <Alert type="info">
-            This invoice has not been analyzed yet. Click &quot;Analyse Invoices&quot; to assess tax deductibility.
-          </Alert>
-        </Box>
-      );
-    }
-
-    return (
-      <Box padding="l" variant="div">
-        <SpaceBetween size="m">
-          {/* Invoice Summary */}
-          <ColumnLayout columns={4} variant="text-grid">
-            <div>
-              <Box variant="awsui-key-label">Invoice Type</Box>
-              <Badge color={item.invoiceType === 'SUPPLIER_INVOICE' ? 'blue' : 'green'}>
-                {item.invoiceType || 'N/A'}
-              </Badge>
-            </div>
-            <div>
-              <Box variant="awsui-key-label">VAT Number</Box>
-              <Box>{rawData.VATNumber || 'N/A'}</Box>
-            </div>
-            <div>
-              <Box variant="awsui-key-label">Deductibility</Box>
-              <Badge color={getDeductibilityColor(rawData.DeductibilityStatus)}>
-                {rawData.DeductibilityPercentage
-                  ? `${rawData.DeductibilityPercentage}%`
-                  : rawData.DeductibilityStatus || 'N/A'}
-              </Badge>
-            </div>
-            <div>
-              <Box variant="awsui-key-label">Tax Savings (19% CT)</Box>
-              <Box fontWeight="bold" color="text-status-success">
-                {calculateTaxSavings(item.totalAmount, rawData.DeductibilityPercentage)}
-              </Box>
-            </div>
-          </ColumnLayout>
-
-          {/* BIM Sections Referenced */}
-          {rawData.BIMSections && (
-            <div>
-              <Box variant="h4" padding={{ bottom: 'xs' }}>
-                HMRC Guidance Applied
-              </Box>
-              <SpaceBetween direction="horizontal" size="xs">
-                {rawData.BIMSections.split(',').map((section, idx) => (
-                  <Badge key={idx} color="blue">
-                    {section.trim()}
-                  </Badge>
-                ))}
-              </SpaceBetween>
-            </div>
-          )}
-
-          {/* Deductibility Reasoning */}
-          {rawData.DeductibilityReasoning && (
-            <div>
-              <Box variant="h4" padding={{ bottom: 'xs' }}>
-                Tax Deductibility Analysis
-              </Box>
-              <Box variant="p" color="text-body-secondary">
-                {rawData.DeductibilityReasoning}
-              </Box>
-            </div>
-          )}
-
-          {/* Documentation Required */}
-          {rawData.DocumentationRequired && (
-            <Alert type="warning" header="Additional Documentation Required">
-              {rawData.DocumentationRequired}
-            </Alert>
-          )}
-
-          {/* HMRC Concerns */}
-          {rawData.HMRCConcern && (
-            <Alert type="error" header="HMRC Compliance Risk">
-              This expense may attract HMRC scrutiny. Ensure proper documentation is maintained.
-            </Alert>
-          )}
-
-          {/* Recommended Action */}
-          {rawData.RecommendedAction && (
-            <div>
-              <Box variant="h4" padding={{ bottom: 'xs' }}>
-                Recommended Action
-              </Box>
-              <Badge color={getRecommendedActionColor(rawData.RecommendedAction)}>{rawData.RecommendedAction}</Badge>
-            </div>
-          )}
-
-          {/* Confidence Scores Breakdown */}
-          <div>
-            <Box variant="h4" padding={{ bottom: 'xs' }}>
-              Field Confidence Scores
-            </Box>
-            <ColumnLayout columns={3} variant="text-grid">
-              <div>
-                <Box variant="awsui-key-label">Supplier Name</Box>
-                <ProgressBar value={(rawData.SupplierNameConfidence || 0) * 100} />
-              </div>
-              <div>
-                <Box variant="awsui-key-label">Total Amount</Box>
-                <ProgressBar value={(rawData.TotalAmountConfidence || 0) * 100} />
-              </div>
-              <div>
-                <Box variant="awsui-key-label">Invoice Number</Box>
-                <ProgressBar value={(rawData.InvoiceNumberConfidence || 0) * 100} />
-              </div>
-            </ColumnLayout>
-          </div>
-        </SpaceBetween>
-      </Box>
-    );
-  };
-
   // Invoices Table Component
   const renderInvoicesTable = () => (
     <Table
@@ -471,6 +337,19 @@ const DocumentList = () => {
           cell: (item) => item.vendor,
           width: 180,
           sortingField: 'vendor',
+        },
+        {
+          id: 'description',
+          header: 'Description',
+          cell: (item) => (
+            <span title={item.description || ''}>
+              {item.description && item.description.length > 40
+                ? item.description.substring(0, 40) + '...'
+                : item.description || 'N/A'}
+            </span>
+          ),
+          width: 200,
+          sortingField: 'description',
         },
         {
           id: 'date',
@@ -599,15 +478,7 @@ const DocumentList = () => {
       loading={isLoadingInvoices}
       loadingText="Loading invoices"
       sortingDisabled={false}
-      expandableRows={{
-        getItemChildren: (item) => {
-          if (!expandedInvoices.has(item.id)) return [];
-          return [{ content: renderInvoiceExpandedContent(item) }];
-        },
-        isItemExpandable: () => true,
-        expandedItems: Array.from(expandedInvoices).map((id) => invoices.find((inv) => inv.id === id)),
-        onExpandableItemToggle: ({ detail }) => toggleInvoiceExpanded(detail.item.id),
-      }}
+      onRowClick={({ detail }) => setSelectedInvoice(detail.item)}
       header={
         <Header
           counter={`(${invoices.length})`}
@@ -1159,29 +1030,36 @@ const DocumentList = () => {
 
   /* eslint-disable react/jsx-props-no-spreading */
   return (
-    <Tabs
-      activeTabId={activeTabId}
-      onChange={({ detail }) => setActiveTabId(detail.activeTabId)}
-      tabs={[
-        {
-          id: 'documents',
-          label: 'Documents',
-          content: renderDocumentsTable(),
-        },
-        {
-          id: 'invoices',
-          label: <Badge color={invoices.length > 0 ? 'blue' : 'grey'}>Invoices ({invoices.length})</Badge>,
-          content: renderInvoicesTable(),
-        },
-        {
-          id: 'statements',
-          label: (
-            <Badge color={bankStatements.length > 0 ? 'blue' : 'grey'}>Bank Statements ({bankStatements.length})</Badge>
-          ),
-          content: renderBankStatementsTable(),
-        },
-      ]}
-    />
+    <>
+      <Tabs
+        activeTabId={activeTabId}
+        onChange={({ detail }) => setActiveTabId(detail.activeTabId)}
+        tabs={[
+          {
+            id: 'documents',
+            label: 'Documents',
+            content: renderDocumentsTable(),
+          },
+          {
+            id: 'invoices',
+            label: <Badge color={invoices.length > 0 ? 'blue' : 'grey'}>Invoices ({invoices.length})</Badge>,
+            content: renderInvoicesTable(),
+          },
+          {
+            id: 'statements',
+            label: (
+              <Badge color={bankStatements.length > 0 ? 'blue' : 'grey'}>Bank Statements ({bankStatements.length})</Badge>
+            ),
+            content: renderBankStatementsTable(),
+          },
+        ]}
+      />
+      <InvoiceDetailDrawer
+        invoice={selectedInvoice}
+        visible={!!selectedInvoice}
+        onDismiss={() => setSelectedInvoice(null)}
+      />
+    </>
   );
 };
 
