@@ -82,7 +82,7 @@ const InvoiceInsights = () => {
 
     try {
       console.log('[INVOICE ANALYSIS] Triggering analysis for company:', activeCompany.companyNumber);
-      
+
       const response = await API.graphql(
         graphqlOperation(TRIGGER_INVOICE_ANALYSIS, {
           companyNumber: activeCompany.companyNumber,
@@ -141,8 +141,8 @@ const InvoiceInsights = () => {
             </Box>
           ) : (
             <Box>
-              Invoices are extracted but not yet analyzed for tax compliance. Run invoice analysis to assess "wholly
-              and exclusively" deductibility using HMRC BIM guidance.
+              Invoices are extracted but not yet analyzed for tax compliance. Run invoice analysis to assess "wholly and
+              exclusively" deductibility using HMRC BIM guidance.
             </Box>
           )}
         </Alert>
