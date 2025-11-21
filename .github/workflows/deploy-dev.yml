@@ -11,6 +11,7 @@ on:
       - 'docs/data-collection-*.md'
       - 'docs/Data_Collection_Stack_Implementation_Plan.md'
       - '.github/workflows/deploy-data-collection-*.yml'
+  workflow_dispatch:  # Enable manual triggering from GitHub Actions UI
 
 jobs:
   # Deploy Analysis Stack first (if changed)
