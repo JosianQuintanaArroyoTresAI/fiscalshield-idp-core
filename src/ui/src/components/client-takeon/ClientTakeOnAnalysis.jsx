@@ -450,7 +450,8 @@ const ClientTakeOnAnalysis = ({ embedded = false }) => {
                   <SpaceBetween size="s">
                     {!intelligence && !loading && (
                       <Alert type="warning" header="Intelligence Data Required">
-                        Company intelligence data must be gathered before generating an AML report. Please wait for intelligence to load.
+                        Company intelligence data must be gathered before generating an AML report. Please wait for
+                        intelligence to load.
                       </Alert>
                     )}
                     <Button

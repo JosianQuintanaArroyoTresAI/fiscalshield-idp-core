@@ -610,9 +610,9 @@ const CompanyIntelligence = () => {
             )}
 
             {!reportData ? (
-              <Button 
-                variant="primary" 
-                onClick={handleGenerateReport} 
+              <Button
+                variant="primary"
+                onClick={handleGenerateReport}
                 loading={isGeneratingReport}
                 disabled={!intelligence || isLoading || isRefreshing}
               >
@@ -627,9 +627,9 @@ const CompanyIntelligence = () => {
                 >
                   Download Report
                 </Button>
-                <Button 
-                  variant="normal" 
-                  onClick={handleGenerateReport} 
+                <Button
+                  variant="normal"
+                  onClick={handleGenerateReport}
                   loading={isGeneratingReport}
                   disabled={!intelligence || isLoading || isRefreshing}
                 >

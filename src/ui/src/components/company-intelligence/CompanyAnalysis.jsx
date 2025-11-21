@@ -1023,7 +1023,8 @@ const CompanyAnalysis = () => {
             <SpaceBetween size="s">
               {!intelligence && !intelligenceLoading && (
                 <Alert type="warning" header="Intelligence Data Required">
-                  Company intelligence data must be gathered before generating an AML report. Please refresh intelligence to load the required data.
+                  Company intelligence data must be gathered before generating an AML report. Please refresh
+                  intelligence to load the required data.
                 </Alert>
               )}
               <Button
