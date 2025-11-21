@@ -54,10 +54,9 @@ def query_pending_invoices(company_number: str, user_id: str, max_items: int = 1
             query_params = {
                 'IndexName': 'GSI7-ClientTypeDate',
                 'KeyConditionExpression': 'GSI6PK = :gsi6pk',
-                'FilterExpression': 'UserId = :user_id AND (attribute_not_exists(AnalysisStatus) OR AnalysisStatus = :status)',
+                'FilterExpression': '(attribute_not_exists(AnalysisStatus) OR AnalysisStatus = :status)',
                 'ExpressionAttributeValues': {
                     ':gsi6pk': f"client#{company_number}#type#INVOICE",
-                    ':user_id': user_id,
                     ':status': 'PENDING'
                 }
             }
