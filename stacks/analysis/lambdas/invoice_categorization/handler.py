@@ -130,19 +130,82 @@ SPECIAL CASES - REQUIRES REVIEW:
 """
 
 
-def create_invoice_analysis_prompt(invoice_batch: List[Dict], bim_guidance: str) -> str:
+def fetch_company_context(company_number: str) -> Dict[str, Any]:
+    """
+    Fetch company context from Data Collection stack's CompanyEvents table.
+    Returns company name, industry, SIC codes for context-aware analysis.
+    """
+    try:
+        company_events_table = dynamodb.Table(f'fiscalshield-dc-{os.environ.get("ENVIRONMENT", "dev")}-CompanyEvents')
+        
+        response = company_events_table.get_item(
+            Key={'company_number': company_number}
+        )
+        
+        if 'Item' not in response:
+            print(f"[WARNING] No company data found for {company_number}")
+            return {}
+        
+        company = response['Item']
+        
+        context = {
+            'company_name': company.get('company_name', 'Unknown'),
+            'company_type': company.get('company_type', 'Unknown'),
+            'sic_codes': company.get('sic_codes', []),
+            'company_status': company.get('company_status', 'Unknown')
+        }
+        
+        # Get industry from first SIC code if available
+        if context['sic_codes']:
+            # SIC codes are 5-digit codes like "62012" (Business and domestic software development)
+            first_sic = context['sic_codes'][0]
+            context['industry'] = f"SIC {first_sic}"
+        else:
+            context['industry'] = 'Unknown'
+        
+        print(f"[INFO] Company context: {context['company_name']} ({context['industry']})")
+        return context
+        
+    except Exception as e:
+        print(f"[WARNING] Failed to fetch company context: {str(e)}")
+        return {}
+
+
+def create_invoice_analysis_prompt(invoice_batch: List[Dict], bim_guidance: str, company_context: Dict = None) -> str:
     """
     Create prompt for Claude to analyze invoice deductibility.
     Uses BIM guidance to assess "wholly and exclusively" compliance.
     """
     
+    # Add company context to prompt
+    context_section = ""
+    if company_context:
+        sic_codes_str = ", ".join(company_context.get('sic_codes', [])) if company_context.get('sic_codes') else 'Unknown'
+        context_section = f"""
+BUSINESS CONTEXT:
+Company Name: {company_context.get('company_name', 'Unknown')}
+Industry: {company_context.get('industry', 'Unknown')}
+SIC Codes: {sic_codes_str}
+Company Type: {company_context.get('company_type', 'Unknown')}
+
+IMPORTANT: Consider whether expenses are relevant to this specific industry when assessing the "wholly and exclusively" test.
+For example, gym equipment for a fitness business is clearly deductible, but for an accountancy firm it would be personal.
+"""
+    
     # Format invoices for analysis
     invoice_list = []
     for idx, invoice in enumerate(invoice_batch, 1):
+        invoice_type = invoice.get('InvoiceType', 'UNKNOWN')
+        scrutiny_flag = ''
+        
+        # Flag employee expenses for stricter scrutiny
+        if invoice_type == 'EMPLOYEE_EXPENSE':
+            scrutiny_flag = '\n⚠️ EMPLOYEE EXPENSE - Apply stricter scrutiny for potential personal benefit'
+        
         invoice_text = f"""
 Invoice #{idx}
 Invoice ID: {invoice.get('InvoiceId', 'Unknown')}
-Type: {invoice.get('InvoiceType', 'UNKNOWN')}
+Type: {invoice_type}{scrutiny_flag}
 Supplier: {invoice.get('SupplierName') or invoice.get('VendorName') or 'Unknown'}
 Amount: £{invoice.get('TotalAmount', '0')}
 Date: {invoice.get('InvoiceDate') or 'Unknown'}
@@ -155,6 +218,8 @@ Line Items: {invoice.get('LineItems', 'Not available')}
     
     prompt = f"""You are an experienced UK tax accountant analyzing business expenses for HMRC compliance.
 Apply the "wholly and exclusively" test to determine tax deductibility of each invoice.
+
+{context_section}
 
 {bim_guidance}
 
@@ -234,6 +299,10 @@ def invoke_bedrock_for_analysis(prompt: str) -> str:
         response_body = json.loads(response['body'].read())
         result_text = response_body['content'][0]['text']
         
+        # Log full response to CloudWatch for audit trail
+        print("[DEBUG] Claude Response (first 1000 chars):")
+        print(result_text[:1000])
+        
         return result_text
         
     except Exception as e:
@@ -241,10 +310,9 @@ def invoke_bedrock_for_analysis(prompt: str) -> str:
         raise
 
 
-def parse_analysis_from_xml(xml_result: str, invoice_batch: List[Dict]) -> List[Dict]:
+def parse_analysis_with_regex(xml_result: str, invoice_batch: List[Dict]) -> List[Dict]:
     """
-    Parse XML analysis results and match back to invoices.
-    Returns list of invoices with analysis fields added.
+    Fallback regex-based XML parsing.
     """
     import re
     
@@ -288,8 +356,88 @@ def parse_analysis_from_xml(xml_result: str, invoice_batch: List[Dict]) -> List[
         
         analyzed_invoices.append(analyzed_invoice)
     
-    print(f"[INFO] Successfully parsed {len(analyzed_invoices)} invoice analyses")
     return analyzed_invoices
+
+
+def parse_analysis_from_xml(xml_result: str, invoice_batch: List[Dict]) -> List[Dict]:
+    """
+    Parse XML analysis results with proper XML parsing and regex fallback.
+    Returns list of invoices with analysis fields added.
+    """
+    import xml.etree.ElementTree as ET
+    
+    analyzed_invoices = []
+    
+    try:
+        # Try to parse as proper XML first
+        root = ET.fromstring(f"<root>{xml_result}</root>")
+        
+        for invoice_elem in root.findall('.//invoice'):
+            invoice_id = invoice_elem.get('id')
+            
+            # Find corresponding invoice in batch
+            original_invoice = next((inv for inv in invoice_batch if inv.get('InvoiceId') == invoice_id), None)
+            
+            if not original_invoice:
+                print(f"[WARNING] No matching invoice for ID {invoice_id}")
+                continue
+            
+            # Parse fields safely
+            def get_text(elem, tag, default=None):
+                child = elem.find(tag)
+                return child.text.strip() if child is not None and child.text else default
+            
+            analyzed_invoice = original_invoice.copy()
+            analyzed_invoice.update({
+                'DeductibilityStatus': get_text(invoice_elem, 'deductibility_status'),
+                'DeductibilityPercentage': get_text(invoice_elem, 'deductibility_percentage'),
+                'BIMSections': get_text(invoice_elem, 'bim_sections'),
+                'HMRCConcern': get_text(invoice_elem, 'hmrc_concern') == 'YES',
+                'DeductibilityReasoning': get_text(invoice_elem, 'reasoning'),
+                'DocumentationRequired': get_text(invoice_elem, 'documentation_required'),
+                'RecommendedAction': get_text(invoice_elem, 'recommended_action'),
+                'AnalysisStatus': 'ANALYZED',
+                'AnalyzedAt': int(time.time()),
+                'ModelUsed': MODEL_ID
+            })
+            
+            analyzed_invoices.append(analyzed_invoice)
+        
+        print(f"[INFO] Successfully parsed {len(analyzed_invoices)} invoice analyses using XML parser")
+        
+    except ET.ParseError as e:
+        print(f"[WARNING] XML parsing failed: {str(e)}, falling back to regex")
+        analyzed_invoices = parse_analysis_with_regex(xml_result, invoice_batch)
+        print(f"[INFO] Successfully parsed {len(analyzed_invoices)} invoice analyses using regex fallback")
+    
+    return analyzed_invoices
+
+
+def validate_analysis(analyzed_invoice: Dict) -> bool:
+    """
+    Validate that analysis results are complete and sensible.
+    Returns True if valid, False otherwise.
+    """
+    invoice_id = analyzed_invoice.get('InvoiceId', 'Unknown')
+    status = analyzed_invoice.get('DeductibilityStatus')
+    percentage = analyzed_invoice.get('DeductibilityPercentage')
+    
+    # Check required fields
+    if not status or status not in ['FULLY_DEDUCTIBLE', 'PARTIALLY_DEDUCTIBLE', 'NOT_DEDUCTIBLE', 'REQUIRES_REVIEW']:
+        print(f"[ERROR] Invoice {invoice_id}: Invalid deductibility status: {status}")
+        return False
+    
+    # Validate percentage matches status
+    if status == 'FULLY_DEDUCTIBLE' and percentage not in ['100', 100]:
+        print(f"[WARNING] Invoice {invoice_id}: FULLY_DEDUCTIBLE should have 100% - got {percentage}")
+    
+    if status == 'NOT_DEDUCTIBLE' and percentage not in ['0', 0]:
+        print(f"[WARNING] Invoice {invoice_id}: NOT_DEDUCTIBLE should have 0% - got {percentage}")
+    
+    if status == 'REQUIRES_REVIEW' and percentage not in [None, 'null', '']:
+        print(f"[WARNING] Invoice {invoice_id}: REQUIRES_REVIEW should have null percentage - got {percentage}")
+    
+    return True
 
 
 def update_invoices_in_dynamodb(analyzed_invoices: List[Dict]):
@@ -299,6 +447,11 @@ def update_invoices_in_dynamodb(analyzed_invoices: List[Dict]):
     
     for invoice in analyzed_invoices:
         try:
+            # Validate analysis results
+            if not validate_analysis(invoice):
+                print(f"[WARNING] Skipping invalid analysis for invoice {invoice.get('InvoiceId')}")
+                continue
+            
             pk = invoice.get('PK')
             sk = invoice.get('SK')
             
@@ -306,36 +459,56 @@ def update_invoices_in_dynamodb(analyzed_invoices: List[Dict]):
                 print(f"[WARNING] Invoice missing PK/SK: {invoice.get('InvoiceId')}")
                 continue
             
+            # Handle null percentage properly
+            percentage = invoice.get('DeductibilityPercentage')
+            if percentage and percentage not in ['null', '']:
+                try:
+                    percentage = int(percentage)
+                except (ValueError, TypeError):
+                    print(f"[WARNING] Invalid percentage value: {percentage}, setting to None")
+                    percentage = None
+            else:
+                percentage = None
+            
+            # Build dynamic update expression
+            update_expr = 'SET DeductibilityStatus = :status'
+            expr_values = {':status': invoice.get('DeductibilityStatus')}
+            
+            if percentage is not None:
+                update_expr += ', DeductibilityPercentage = :percentage'
+                expr_values[':percentage'] = percentage
+            
+            # Add other fields
+            update_expr += ''', 
+                BIMSections = :sections,
+                HMRCConcern = :concern,
+                DeductibilityReasoning = :reasoning,
+                DocumentationRequired = :docs,
+                RecommendedAction = :action,
+                AnalysisStatus = :analysis_status,
+                AnalyzedAt = :analyzed_at,
+                ModelUsed = :model
+            '''
+            
+            expr_values.update({
+                ':sections': invoice.get('BIMSections'),
+                ':concern': invoice.get('HMRCConcern', False),
+                ':reasoning': invoice.get('DeductibilityReasoning'),
+                ':docs': invoice.get('DocumentationRequired'),
+                ':action': invoice.get('RecommendedAction'),
+                ':analysis_status': 'ANALYZED',
+                ':analyzed_at': invoice.get('AnalyzedAt'),
+                ':model': invoice.get('ModelUsed')
+            })
+            
             # Update with analysis fields
             extraction_table.update_item(
                 Key={'PK': pk, 'SK': sk},
-                UpdateExpression='''SET 
-                    DeductibilityStatus = :status,
-                    DeductibilityPercentage = :percentage,
-                    BIMSections = :sections,
-                    HMRCConcern = :concern,
-                    DeductibilityReasoning = :reasoning,
-                    DocumentationRequired = :docs,
-                    RecommendedAction = :action,
-                    AnalysisStatus = :analysis_status,
-                    AnalyzedAt = :analyzed_at,
-                    ModelUsed = :model
-                ''',
-                ExpressionAttributeValues={
-                    ':status': invoice.get('DeductibilityStatus'),
-                    ':percentage': invoice.get('DeductibilityPercentage'),
-                    ':sections': invoice.get('BIMSections'),
-                    ':concern': invoice.get('HMRCConcern', False),
-                    ':reasoning': invoice.get('DeductibilityReasoning'),
-                    ':docs': invoice.get('DocumentationRequired'),
-                    ':action': invoice.get('RecommendedAction'),
-                    ':analysis_status': 'ANALYZED',
-                    ':analyzed_at': invoice.get('AnalyzedAt'),
-                    ':model': invoice.get('ModelUsed')
-                }
+                UpdateExpression=update_expr,
+                ExpressionAttributeValues=expr_values
             )
             
-            print(f"[INFO] Updated invoice {invoice.get('InvoiceId')} - {invoice.get('DeductibilityStatus')}")
+            print(f"[INFO] Updated invoice {invoice.get('InvoiceId')} - {invoice.get('DeductibilityStatus')} ({percentage}%)")
             
         except Exception as e:
             print(f"[ERROR] Failed to update invoice {invoice.get('InvoiceId')}: {str(e)}")
@@ -363,11 +536,15 @@ def lambda_handler(event, context):
         
         print(f"[INFO] Processing batch of {len(invoice_batch)} invoices")
         
+        # Fetch company context for industry-aware analysis
+        company_number = event.get('company_number')
+        company_context = fetch_company_context(company_number) if company_number else None
+        
         # Fetch BIM guidance from Data Collection stack
         bim_guidance = fetch_bim_guidance()
         
-        # Create analysis prompt
-        prompt = create_invoice_analysis_prompt(invoice_batch, bim_guidance)
+        # Create analysis prompt with company context
+        prompt = create_invoice_analysis_prompt(invoice_batch, bim_guidance, company_context)
         
         # Invoke Claude for analysis
         print("[INFO] Invoking Claude for invoice analysis...")
