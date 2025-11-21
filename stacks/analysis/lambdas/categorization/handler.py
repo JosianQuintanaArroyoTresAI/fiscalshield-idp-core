@@ -695,34 +695,52 @@ Remember:
 
     return prompt
 
-def invoke_bedrock(prompt):
-    """Invoke Claude via Bedrock for text processing"""
+def invoke_bedrock(prompt, max_retries=3):
+    """Invoke Claude via Bedrock for text processing with retry logic"""
     
-    try:
-        body = json.dumps({
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": 4000,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ]
-        })
-        
-        response = bedrock.invoke_model(
-            body=body,
-            modelId=BEDROCK_MODEL_ID,
-            accept='application/json',
-            contentType='application/json'
-        )
-        
-        response_body = json.loads(response.get('body').read())
-        return response_body['content'][0]['text']
-        
-    except Exception as e:
-        log_with_timestamp(f"Bedrock invocation failed: {str(e)}")
-        return ""
+    # Estimate token count (1 token ≈ 4 characters)
+    estimated_tokens = len(prompt) // 4
+    log_with_timestamp(f"Estimated input tokens: {estimated_tokens}")
+    
+    for attempt in range(max_retries):
+        try:
+            body = json.dumps({
+                "anthropic_version": "bedrock-2023-05-31",
+                "max_tokens": 4000,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ]
+            })
+            
+            response = bedrock.invoke_model(
+                body=body,
+                modelId=BEDROCK_MODEL_ID,
+                accept='application/json',
+                contentType='application/json'
+            )
+            
+            response_body = json.loads(response.get('body').read())
+            return response_body['content'][0]['text']
+            
+        except Exception as e:
+            error_msg = str(e)
+            is_throttle = 'ThrottlingException' in error_msg or 'TooManyRequestsException' in error_msg
+            
+            log_with_timestamp(f"Bedrock invocation attempt {attempt + 1}/{max_retries} failed: {error_msg}")
+            
+            if attempt < max_retries - 1:
+                wait_time = 2 ** attempt  # Exponential backoff: 1s, 2s, 4s
+                log_with_timestamp(f"Retrying in {wait_time} seconds...")
+                time.sleep(wait_time)
+            else:
+                log_with_timestamp(f"All Bedrock invocation attempts failed after {max_retries} retries")
+                if is_throttle:
+                    # Re-raise with clear throttling indicator for Step Functions retry
+                    raise Exception(f"BEDROCK_THROTTLED: {error_msg}")
+                raise
 
 def parse_categorization_response(response_text, transaction_batch):
     """Parse Claude's enhanced XML response into structured results"""
@@ -1079,9 +1097,15 @@ def lambda_handler(event, context):
         }
         
     except Exception as e:
-        log_with_timestamp(f"Error in lambda handler: {str(e)}")
+        error_msg = str(e)
+        log_with_timestamp(f"Error in lambda handler: {error_msg}")
         import traceback
         log_with_timestamp(f"Full traceback: {traceback.format_exc()}")
+        
+        # If throttled, raise specific error for Step Functions to retry
+        if 'BEDROCK_THROTTLED' in error_msg or 'ThrottlingException' in error_msg:
+            log_with_timestamp("Bedrock throttling detected - Step Functions should retry this batch")
+            raise Exception(f"THROTTLED: {error_msg}")
         
         # Return error result for Step Functions retry logic
         raise  # Re-raise to trigger Step Functions retry
