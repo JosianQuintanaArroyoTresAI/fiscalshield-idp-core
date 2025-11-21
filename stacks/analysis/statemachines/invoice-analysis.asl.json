@@ -1,0 +1,143 @@
+{
+  "Comment": "Invoice Analysis Workflow - Tax deductibility assessment using HMRC BIM guidance",
+  "StartAt": "TriggerInvoiceAnalysis",
+  "States": {
+    "TriggerInvoiceAnalysis": {
+      "Type": "Task",
+      "Resource": "${TriggerInvoiceAnalysisLambdaArn}",
+      "Comment": "Query pending invoices and prepare batches",
+      "ResultPath": "$.triggerResult",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed",
+            "Lambda.ServiceException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "TriggerFailed"
+        }
+      ],
+      "Next": "CheckBatchesExist"
+    },
+    
+    "CheckBatchesExist": {
+      "Type": "Choice",
+      "Comment": "Check if any batches were prepared",
+      "Choices": [
+        {
+          "Variable": "$.triggerResult.batch_count",
+          "NumericGreaterThan": 0,
+          "Next": "ProcessBatches"
+        }
+      ],
+      "Default": "NoPendingInvoices"
+    },
+    
+    "ProcessBatches": {
+      "Type": "Map",
+      "Comment": "Process invoice batches in parallel with controlled concurrency",
+      "ItemsPath": "$.triggerResult.batches",
+      "MaxConcurrency": 3,
+      "ResultPath": "$.batchResults",
+      "Iterator": {
+        "StartAt": "AnalyzeInvoiceBatch",
+        "States": {
+          "AnalyzeInvoiceBatch": {
+            "Type": "Task",
+            "Resource": "${InvoiceCategorizationLambdaArn}",
+            "Comment": "Analyze invoice batch for tax deductibility using BIM guidance",
+            "TimeoutSeconds": 300,
+            "Retry": [
+              {
+                "ErrorEquals": [
+                  "ThrottlingException",
+                  "TooManyRequestsException"
+                ],
+                "IntervalSeconds": 5,
+                "MaxAttempts": 5,
+                "BackoffRate": 2.5,
+                "Comment": "Retry on Bedrock/DynamoDB throttling with exponential backoff"
+              },
+              {
+                "ErrorEquals": [
+                  "States.TaskFailed",
+                  "Lambda.ServiceException"
+                ],
+                "IntervalSeconds": 2,
+                "MaxAttempts": 3,
+                "BackoffRate": 2.0,
+                "Comment": "Retry on general failures"
+              }
+            ],
+            "Catch": [
+              {
+                "ErrorEquals": ["States.ALL"],
+                "ResultPath": "$.batchError",
+                "Next": "BatchFailed"
+              }
+            ],
+            "End": true
+          },
+          
+          "BatchFailed": {
+            "Type": "Pass",
+            "Comment": "Mark batch as failed for error tracking",
+            "Result": {
+              "success": false,
+              "error": "Invoice batch processing failed after retries"
+            },
+            "End": true
+          }
+        }
+      },
+      "Next": "AggregateResults"
+    },
+    
+    "AggregateResults": {
+      "Type": "Pass",
+      "Comment": "Aggregate batch results for final summary",
+      "Parameters": {
+        "companyNumber.$": "$.triggerResult.company_number",
+        "userId.$": "$.triggerResult.user_id",
+        "totalInvoices.$": "$.triggerResult.total_invoices",
+        "totalBatches.$": "$.triggerResult.batch_count",
+        "batchResults.$": "$.batchResults",
+        "executionTime.$": "$$.Execution.StartTime"
+      },
+      "Next": "AnalysisComplete"
+    },
+    
+    "NoPendingInvoices": {
+      "Type": "Pass",
+      "Comment": "No pending invoices to process",
+      "Result": {
+        "success": true,
+        "message": "No pending invoices found for analysis",
+        "totalInvoices": 0,
+        "totalBatches": 0
+      },
+      "End": true
+    },
+    
+    "TriggerFailed": {
+      "Type": "Fail",
+      "Comment": "Failed to trigger analysis or query pending invoices",
+      "Cause": "TriggerInvoiceAnalysis step failed",
+      "Error": "TriggerInvoiceAnalysisError"
+    },
+    
+    "AnalysisComplete": {
+      "Type": "Succeed",
+      "Comment": "Invoice analysis workflow completed successfully"
+    }
+  }
+}

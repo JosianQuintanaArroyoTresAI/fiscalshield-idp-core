@@ -1,0 +1,159 @@
+name: Deploy All Stacks - Dev (Ordered)
+
+# Deploys stacks in the correct order: Analysis → Core
+# Use this workflow for coordinated deployments when both stacks change
+on:
+  workflow_dispatch:
+    inputs:
+      skip-analysis:
+        description: 'Skip Analysis Stack deployment'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+env:
+  AWS_REGION: eu-central-1
+  ENVIRONMENT: dev
+
+jobs:
+  deploy-analysis:
+    name: Deploy Analysis Stack
+    if: ${{ github.event.inputs.skip-analysis != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: 🔐 Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_DEV }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_DEV }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: 📦 Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install aws-sam-cli
+
+      - name: 🔨 Build and Deploy Analysis Stack
+        working-directory: stacks/analysis
+        run: |
+          sam build --config-env dev --parallel --cached
+          sam deploy \
+            --config-env dev \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --region ${{ env.AWS_REGION }}
+
+      - name: 📊 Verify SSM Parameters
+        run: |
+          echo "✅ Analysis Stack deployed. Verifying SSM parameters..."
+          
+          TRANSACTION_ARN=$(aws ssm get-parameter \
+            --name /fiscalshield/analysis/dev/transaction-categorization-state-machine-arn \
+            --query 'Parameter.Value' --output text 2>/dev/null || echo "NOT_FOUND")
+          
+          INVOICE_ARN=$(aws ssm get-parameter \
+            --name /fiscalshield/analysis/dev/invoice-analysis-state-machine-arn \
+            --query 'Parameter.Value' --output text 2>/dev/null || echo "NOT_FOUND")
+          
+          echo "📝 SSM Parameters:"
+          echo "  Transaction State Machine: $TRANSACTION_ARN"
+          echo "  Invoice State Machine: $INVOICE_ARN"
+          
+          if [[ "$TRANSACTION_ARN" != "NOT_FOUND" && "$INVOICE_ARN" != "NOT_FOUND" ]]; then
+            echo "✅ SSM parameters ready for Core Stack consumption"
+          else
+            echo "⚠️ Warning: Some SSM parameters not found"
+          fi
+
+  deploy-core:
+    name: Deploy Core Stack  
+    needs: [deploy-analysis]
+    if: always()  # Run even if Analysis was skipped
+    runs-on: ubuntu-latest
+    environment: dev
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_DEV }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_DEV }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install dependencies
+        run: |
+          pip install boto3 rich typer PyYAML botocore setuptools
+
+      - name: Build and publish
+        run: |
+          echo "🔨 Building Core Stack..."
+          python3 publish.py fiscalshield-dev idp eu-central-1 --lint off
+        env:
+          CI: true
+          GENERATE_SOURCEMAP: false
+
+      - name: Deploy Core Stack
+        run: |
+          echo "🚀 Deploying Core Stack with auto-populated SSM parameters..."
+          aws cloudformation update-stack \
+            --stack-name fiscalshield-idp-dev \
+            --template-url https://s3.eu-central-1.amazonaws.com/fiscalshield-dev-eu-central-1/idp/idp-main.yaml \
+            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
+            --region ${{ env.AWS_REGION }} \
+            --parameters ParameterKey=AdminEmail,UsePreviousValue=true \
+                         ParameterKey=IDPPattern,UsePreviousValue=true
+
+      - name: Wait for deployment
+        run: |
+          echo "⏳ Waiting for Core Stack deployment..."
+          aws cloudformation wait stack-update-complete \
+            --stack-name fiscalshield-idp-dev \
+            --region ${{ env.AWS_REGION }}
+
+      - name: Deployment summary
+        run: |
+          echo "✅ Ordered deployment complete!"
+          echo ""
+          echo "Deployment Order:"
+          echo "  1. ✅ Analysis Stack (SSM parameters populated)"
+          echo "  2. ✅ Core Stack (auto-configured from SSM)"
+          echo ""
+          echo "Integration Status:"
+          
+          TRANSACTION_ARN=$(aws ssm get-parameter \
+            --name /fiscalshield/analysis/dev/transaction-categorization-state-machine-arn \
+            --query 'Parameter.Value' --output text 2>/dev/null || echo "")
+          
+          INVOICE_ARN=$(aws ssm get-parameter \
+            --name /fiscalshield/analysis/dev/invoice-analysis-state-machine-arn \
+            --query 'Parameter.Value' --output text 2>/dev/null || echo "")
+          
+          if [[ -n "$TRANSACTION_ARN" && -n "$INVOICE_ARN" ]]; then
+            echo "  ✅ Transaction Analysis: ENABLED"
+            echo "  ✅ Invoice Analysis: ENABLED"
+          else
+            echo "  ⚠️ Some integrations may be disabled"
+          fi

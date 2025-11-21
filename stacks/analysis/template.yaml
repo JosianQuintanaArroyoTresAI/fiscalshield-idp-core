@@ -496,7 +496,46 @@ Resources:
         Purpose: Transaction categorization and risk scoring
 
   # ========================================================================
-  # STEP FUNCTIONS STATE MACHINE
+  # LAMBDA FUNCTIONS - INVOICE ANALYSIS
+  # ========================================================================
+
+  TriggerInvoiceAnalysisFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'fiscalshield-analysis-${Environment}-TriggerInvoiceAnalysis'
+      Description: Query pending invoices and prepare batches for Step Functions
+      CodeUri: lambdas/trigger_invoice_analysis/
+      Handler: handler.lambda_handler
+      Role: !GetAtt AnalysisLambdaRole.Arn
+      Timeout: 60
+      MemorySize: 512
+      Environment:
+        Variables:
+          EXTRACTION_RESULTS_TABLE: !Ref ExtractionResultsTableName
+          BATCH_SIZE: '10'
+      Tags:
+        Purpose: Trigger invoice tax compliance analysis workflow
+
+  InvoiceCategorizationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'fiscalshield-analysis-${Environment}-InvoiceCategorization'
+      Description: Analyze invoice tax deductibility using HMRC BIM guidance
+      CodeUri: lambdas/invoice_categorization/
+      Handler: handler.lambda_handler
+      Role: !GetAtt AnalysisLambdaRole.Arn
+      Timeout: 300  # 5 minutes for Bedrock processing
+      MemorySize: 1024
+      Environment:
+        Variables:
+          EXTRACTION_RESULTS_TABLE: !Ref ExtractionResultsTableName
+          HMRC_GUIDANCE_TABLE: !Sub 'fiscalshield-dc-${Environment}-HMRCGuidance'
+          MODEL_ID: 'anthropic.claude-3-5-sonnet-20241022-v2:0'
+      Tags:
+        Purpose: Invoice tax compliance analysis using wholly and exclusively test
+
+  # ========================================================================
+  # STEP FUNCTIONS STATE MACHINES
   # ========================================================================
 
   TransactionCategorizationStateMachine:
@@ -526,6 +565,33 @@ Resources:
       LogGroupName: !Sub '/aws/stepfunctions/fiscalshield-analysis-${Environment}-TransactionCategorization'
       RetentionInDays: !If [IsProduction, 90, 7]
 
+  InvoiceAnalysisStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Name: !Sub 'fiscalshield-analysis-${Environment}-InvoiceAnalysis'
+      DefinitionUri: statemachines/invoice-analysis.asl.json
+      DefinitionSubstitutions:
+        TriggerInvoiceAnalysisLambdaArn: !GetAtt TriggerInvoiceAnalysisFunction.Arn
+        InvoiceCategorizationLambdaArn: !GetAtt InvoiceCategorizationFunction.Arn
+      Role: !GetAtt StepFunctionsExecutionRole.Arn
+      Tracing:
+        Enabled: !If [EnableTracing, true, false]
+      Logging:
+        Level: ALL
+        IncludeExecutionData: true
+        Destinations:
+          - CloudWatchLogsLogGroup:
+              LogGroupArn: !GetAtt InvoiceAnalysisLogGroup.Arn
+      Tags:
+        Environment: !Ref Environment
+        Purpose: Invoice tax compliance analysis workflow orchestration
+
+  InvoiceAnalysisLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/stepfunctions/fiscalshield-analysis-${Environment}-InvoiceAnalysis'
+      RetentionInDays: !If [IsProduction, 90, 7]
+
   StepFunctionsExecutionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -550,6 +616,8 @@ Resources:
                 Resource:
                   - !GetAtt TriggerAnalysisFunction.Arn
                   - !GetAtt CategorizationFunction.Arn
+                  - !GetAtt TriggerInvoiceAnalysisFunction.Arn
+                  - !GetAtt InvoiceCategorizationFunction.Arn
         - PolicyName: CloudWatchLogs
           PolicyDocument:
             Version: '2012-10-17'
@@ -612,6 +680,30 @@ Resources:
         Environment: !Ref Environment
         Stack: fiscalshield-analysis
         Purpose: Cross-stack integration
+
+  TransactionCategorizationStateMachineArnParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub '/fiscalshield/analysis/${Environment}/transaction-categorization-state-machine-arn'
+      Description: Transaction Categorization Step Functions State Machine ARN for Core Stack integration
+      Type: String
+      Value: !Ref TransactionCategorizationStateMachine
+      Tags:
+        Environment: !Ref Environment
+        Stack: fiscalshield-analysis
+        Purpose: Core Stack integration for transaction analysis
+
+  InvoiceAnalysisStateMachineArnParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub '/fiscalshield/analysis/${Environment}/invoice-analysis-state-machine-arn'
+      Description: Invoice Analysis Step Functions State Machine ARN for Core Stack integration
+      Type: String
+      Value: !Ref InvoiceAnalysisStateMachine
+      Tags:
+        Environment: !Ref Environment
+        Stack: fiscalshield-analysis
+        Purpose: Core Stack integration for invoice analysis
 
   # ========================================================================
   # CLOUDWATCH ALARMS
@@ -687,6 +779,18 @@ Outputs:
     Export:
       Name: !Sub '${AWS::StackName}-ApiUrlParameter'
 
+  TransactionCategorizationStateMachineArnParameterName:
+    Description: SSM Parameter Store path for Transaction Categorization State Machine ARN (auto-integrated with Core Stack)
+    Value: !Sub '/fiscalshield/analysis/${Environment}/transaction-categorization-state-machine-arn'
+    Export:
+      Name: !Sub '${AWS::StackName}-TransactionStateMachineParameter'
+
+  InvoiceAnalysisStateMachineArnParameterName:
+    Description: SSM Parameter Store path for Invoice Analysis State Machine ARN (auto-integrated with Core Stack)
+    Value: !Sub '/fiscalshield/analysis/${Environment}/invoice-analysis-state-machine-arn'
+    Export:
+      Name: !Sub '${AWS::StackName}-InvoiceStateMachineParameter'
+
   AMLReportsBucketName:
     Description: S3 bucket for storing generated AML reports
     Value: !Ref AMLReportsBucket
@@ -722,6 +826,30 @@ Outputs:
     Value: !GetAtt TransactionCategorizationStateMachine.Name
     Export:
       Name: !Sub '${AWS::StackName}-StateMachineName'
+
+  TriggerInvoiceAnalysisFunctionArn:
+    Description: ARN of Trigger Invoice Analysis Lambda function
+    Value: !GetAtt TriggerInvoiceAnalysisFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-TriggerInvoiceAnalysisFunction'
+
+  InvoiceCategorizationFunctionArn:
+    Description: ARN of Invoice Categorization Lambda function
+    Value: !GetAtt InvoiceCategorizationFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-InvoiceCategorizationFunction'
+
+  InvoiceAnalysisStateMachineArn:
+    Description: ARN of Invoice Analysis Step Functions State Machine
+    Value: !Ref InvoiceAnalysisStateMachine
+    Export:
+      Name: !Sub '${AWS::StackName}-InvoiceAnalysisStateMachineArn'
+
+  InvoiceAnalysisStateMachineName:
+    Description: Name of Invoice Analysis Step Functions State Machine
+    Value: !GetAtt InvoiceAnalysisStateMachine.Name
+    Export:
+      Name: !Sub '${AWS::StackName}-InvoiceAnalysisStateMachineName'
 
   CategorizationQueueUrl:
     Description: URL of Transaction Categorization SQS Queue (for DLQ only)

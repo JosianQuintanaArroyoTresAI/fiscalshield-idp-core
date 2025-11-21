@@ -283,15 +283,23 @@ Parameters:
       If you provided a Bedrock Guardrail Id above, provide the corresponding Guardrail version here (e.g. DRAFT|1|2|...).
 
   # Analysis Stack Integration
+  # These parameters auto-resolve from SSM Parameter Store if Analysis Stack is deployed
+  # Otherwise, provide the ARN manually or leave blank to disable integration
   TransactionCategorizationStateMachineArn:
     Type: String
-    Default: ""
+    Default: '{{resolve:ssm-safe:/fiscalshield/analysis/dev/transaction-categorization-state-machine-arn}}'
     Description: >-
       ARN of the Transaction Categorization Step Function from the Analysis Stack.
-      Leave blank to disable transaction analysis integration.
-      Format: arn:aws:states:REGION:ACCOUNT:stateMachine:fiscalshield-analysis-ENV-TransactionCategorization
-    AllowedPattern: "^(|arn:aws[a-z-]*:states:[a-z0-9-]+:[0-9]{12}:stateMachine:.+)$"
-    ConstraintDescription: Must be empty or a valid Step Functions state machine ARN
+      Auto-populated from SSM if Analysis Stack is deployed.
+      Provide ARN manually to override, or empty string to disable.
+
+  InvoiceAnalysisStateMachineArn:
+    Type: String
+    Default: '{{resolve:ssm-safe:/fiscalshield/analysis/dev/invoice-analysis-state-machine-arn}}'
+    Description: >-
+      ARN of the Invoice Analysis Step Function from the Analysis Stack.
+      Auto-populated from SSM if Analysis Stack is deployed.
+      Provide ARN manually to override, or empty string to disable.
 
   # General Configuration
   MaxConcurrentWorkflows:
@@ -439,6 +447,7 @@ Conditions:
     ]
 
   HasTransactionAnalysisIntegration: !Not [!Equals [!Ref TransactionCategorizationStateMachineArn, ""]]
+  HasInvoiceAnalysisIntegration: !Not [!Equals [!Ref InvoiceAnalysisStateMachineArn, ""]]
 
   # HITL and Private Workforce conditions
   IsHITLEnabled: !Equals [!Ref EnableHITL, "true"]
@@ -4260,6 +4269,58 @@ Resources:
       KmsKeyId: !GetAtt CustomerManagedEncryptionKey.Arn
       RetentionInDays: !Ref LogRetentionDays
 
+  # Lambda function for triggering invoice analysis
+  TriggerInvoiceAnalysisFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Function does not require VPC access as it only invokes Step Functions"
+          - id: W92
+            reason: "Function does not require reserved concurrency as it scales based on demand"
+    # checkov:skip=CKV_AWS_116: "DLQ not required for AppSync resolver function"
+    # checkov:skip=CKV_AWS_117: "Function does not require VPC access"
+    # checkov:skip=CKV_AWS_115: "Function does not require reserved concurrency"
+    # checkov:skip=CKV_AWS_173: "Environment variables do not contain sensitive data"
+    Properties:
+      PermissionsBoundary:
+        !If [
+          HasPermissionsBoundary,
+          !Ref PermissionsBoundaryArn,
+          !Ref AWS::NoValue,
+        ]
+      CodeUri: src/resolvers/triggerInvoiceAnalysis/
+      Handler: index.lambda_handler
+      Runtime: python3.12
+      Timeout: 30
+      Environment:
+        Variables:
+          STATE_MACHINE_ARN: !Ref InvoiceAnalysisStateMachineArn
+          LOG_LEVEL: !Ref LogLevel
+      Policies:
+        - Version: "2012-10-17"
+          Statement:
+            - Fn::If:
+              - HasInvoiceAnalysisIntegration
+              - Effect: Allow
+                Action:
+                  - states:StartExecution
+                  - states:ListExecutions
+                Resource:
+                  - !Ref InvoiceAnalysisStateMachineArn
+              - Effect: Deny
+                Action: "states:*"
+                Resource: "*"
+      LoggingConfig:
+        LogGroup: !Ref TriggerInvoiceAnalysisLogGroup
+
+  TriggerInvoiceAnalysisLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !GetAtt CustomerManagedEncryptionKey.Arn
+      RetentionInDays: !Ref LogRetentionDays
+
   # AppSync resolvers for agent operations
   ListAvailableAgentsResolver:
     Type: AWS::AppSync::Resolver
@@ -4300,6 +4361,26 @@ Resources:
       ServiceRoleArn: !GetAtt AppSyncServiceRole.Arn
       LambdaConfig:
         LambdaFunctionArn: !GetAtt TriggerTransactionAnalysisFunction.Arn
+
+  TriggerInvoiceAnalysisResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn: GraphQLSchema
+    Properties:
+      ApiId: !GetAtt GraphQLApi.ApiId
+      TypeName: Mutation
+      FieldName: triggerInvoiceAnalysis
+      DataSourceName: !GetAtt TriggerInvoiceAnalysisDataSource.Name
+
+  TriggerInvoiceAnalysisDataSource:
+    Type: AWS::AppSync::DataSource
+    Properties:
+      ApiId: !GetAtt GraphQLApi.ApiId
+      Name: TriggerInvoiceAnalysisDataSource
+      Description: Lambda function for triggering invoice analysis workflow
+      Type: AWS_LAMBDA
+      ServiceRoleArn: !GetAtt AppSyncServiceRole.Arn
+      LambdaConfig:
+        LambdaFunctionArn: !GetAtt TriggerInvoiceAnalysisFunction.Arn
 
   SubmitAgentQueryResolver:
     Type: AWS::AppSync::Resolver
@@ -5681,6 +5762,7 @@ Resources:
                   - !GetAtt DeleteUserCompanyFunction.Arn
                   - !GetAtt ListExtractionResultsFunction.Arn
                   - !GetAtt TriggerTransactionAnalysisFunction.Arn
+                  - !GetAtt TriggerInvoiceAnalysisFunction.Arn
 
   # Lambda function for Create Document resolver
   CreateDocumentResolverFunction:

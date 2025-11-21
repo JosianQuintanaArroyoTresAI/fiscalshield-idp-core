@@ -140,6 +140,13 @@ export const formatInvoiceData = (extractionResult) => {
     processedAt: extractionResult.ProcessedAt,
     s3Uri: s3Uri,
     s3Path: s3Path,
+    // Tax deductibility analysis fields
+    analysisStatus: extractionResult.AnalysisStatus || 'PENDING',
+    deductibilityStatus: extractionResult.DeductibilityStatus,
+    deductibilityPercentage: extractionResult.DeductibilityPercentage,
+    bimSections: extractionResult.BIMSections,
+    hmrcConcern: extractionResult.HMRCConcern,
+    deductibilityReasoning: extractionResult.DeductibilityReasoning,
     // Field-level confidence scores
     confidenceScores: {
       composite: compositeConf,
