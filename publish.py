@@ -1638,10 +1638,14 @@ except Exception as e:
                 build_date_time = datetime.now(timezone.utc).strftime(
                     "%Y-%m-%d %H:%M:%S"
                 )
+                
+                # Compute UI source hash to force rebuilds when UI changes
+                ui_source_hash = self.compute_ui_hash()
 
                 replacements = {
                     "<VERSION>": self.version,
                     "<BUILD_DATE_TIME>": build_date_time,
+                    "<UI_SOURCE_HASH>": ui_source_hash,
                     "<PUBLIC_SAMPLE_UDOP_MODEL>": self.public_sample_udop_model,
                     "<ARTIFACT_BUCKET_TOKEN>": self.bucket,
                     "<ARTIFACT_PREFIX_TOKEN>": self.prefix_and_version,

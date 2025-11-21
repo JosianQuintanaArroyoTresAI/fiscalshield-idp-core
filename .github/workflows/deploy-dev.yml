@@ -387,6 +387,53 @@ jobs:
       env:
         REGION: eu-central-1
     
+    - name: Invalidate CloudFront cache
+      run: |
+        echo "🌐 Invalidating CloudFront cache to serve latest UI..."
+        
+        STACK_NAME=fiscalshield-idp-dev
+        REGION=eu-central-1
+        
+        # Get CloudFront distribution ID
+        DISTRIBUTION_ID=$(aws cloudformation describe-stacks \
+          --stack-name "$STACK_NAME" \
+          --region "$REGION" \
+          --query 'Stacks[0].Outputs[?OutputKey==`CloudFrontDistributionId`].OutputValue' \
+          --output text 2>/dev/null || echo "")
+        
+        if [ -z "$DISTRIBUTION_ID" ]; then
+          # Try to find by resource
+          DISTRIBUTION_ID=$(aws cloudformation describe-stack-resources \
+            --stack-name "$STACK_NAME" \
+            --region "$REGION" \
+            --query 'StackResources[?ResourceType==`AWS::CloudFront::Distribution`].PhysicalResourceId' \
+            --output text 2>/dev/null || echo "")
+        fi
+        
+        if [ -z "$DISTRIBUTION_ID" ]; then
+          echo "⚠️  Could not find CloudFront distribution - skipping invalidation"
+          echo "    You may need to hard refresh your browser (Ctrl+Shift+R)"
+          exit 0
+        fi
+        
+        echo "✅ Found CloudFront distribution: $DISTRIBUTION_ID"
+        
+        # Create invalidation
+        INVALIDATION_ID=$(aws cloudfront create-invalidation \
+          --distribution-id "$DISTRIBUTION_ID" \
+          --paths "/*" \
+          --query 'Invalidation.Id' \
+          --output text)
+        
+        echo "✅ CloudFront invalidation created: $INVALIDATION_ID"
+        echo "⏳ Cache will be cleared in 1-2 minutes"
+        echo ""
+        echo "📋 After deployment:"
+        echo "  1. Wait 2 minutes for CloudFront invalidation"
+        echo "  2. Hard refresh your browser (Ctrl+Shift+R or Cmd+Shift+R)"
+        echo "  3. Changes should be visible"
+      continue-on-error: true
+    
     - name: Run smoke tests
       id: smoke-tests
       run: |

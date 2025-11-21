@@ -2647,6 +2647,7 @@ Resources:
         StackName: !Sub "${AWS::StackName}"
         Version: <VERSION>
         BuildDateTime: <BUILD_DATE_TIME>
+        UISourceHash: <UI_SOURCE_HASH>
         IDPPattern: !Ref IDPPattern
         InputBucket: !Ref InputBucket
         DiscoveryBucket: !Ref DiscoveryBucket
