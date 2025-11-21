@@ -14,12 +14,12 @@ from datetime import datetime
 
 # AWS clients
 dynamodb = boto3.resource('dynamodb')
-bedrock_runtime = boto3.client('bedrock-runtime', region_name='us-east-1')
+bedrock_runtime = boto3.client('bedrock-runtime', region_name=os.environ.get('AWS_REGION', 'eu-west-1'))
 
 # Environment variables
 EXTRACTION_RESULTS_TABLE = os.environ.get('EXTRACTION_RESULTS_TABLE')
 HMRC_GUIDANCE_TABLE = os.environ.get('HMRC_GUIDANCE_TABLE', 'fiscalshield-dc-dev-HMRCGuidance')
-MODEL_ID = os.environ.get('MODEL_ID', 'anthropic.claude-3-5-sonnet-20241022-v2:0')
+MODEL_ID = os.environ.get('MODEL_ID', 'eu.anthropic.claude-3-5-sonnet-20241022-v2:0')
 
 
 class DecimalEncoder(json.JSONEncoder):
