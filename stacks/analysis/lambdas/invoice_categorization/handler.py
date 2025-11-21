@@ -19,7 +19,9 @@ bedrock_runtime = boto3.client('bedrock-runtime', region_name='eu-west-1')
 # Environment variables
 EXTRACTION_RESULTS_TABLE = os.environ.get('EXTRACTION_RESULTS_TABLE')
 HMRC_GUIDANCE_TABLE = os.environ.get('HMRC_GUIDANCE_TABLE', 'fiscalshield-dc-dev-HMRCGuidance')
-MODEL_ID = os.environ.get('MODEL_ID', 'eu.anthropic.claude-3-5-sonnet-20241022-v2:0')
+COMPANY_EVENTS_TABLE = os.environ.get('COMPANY_EVENTS_TABLE', 'fiscalshield-dc-dev-CompanyEvents')
+MODEL_ID = os.environ.get('MODEL_ID', 'eu.anthropic.claude-3-5-sonnet-20240620-v1:0')
+MAX_BATCH_SIZE = 10  # Maximum invoices per batch to avoid token limits
 
 
 class DecimalEncoder(json.JSONEncoder):
@@ -136,7 +138,7 @@ def fetch_company_context(company_number: str) -> Dict[str, Any]:
     Returns company name, industry, SIC codes for context-aware analysis.
     """
     try:
-        company_events_table = dynamodb.Table(f'fiscalshield-dc-{os.environ.get("ENVIRONMENT", "dev")}-CompanyEvents')
+        company_events_table = dynamodb.Table(COMPANY_EVENTS_TABLE)
         
         # Query by company_number (partition key) to get latest event
         response = company_events_table.query(
@@ -279,39 +281,57 @@ Be conservative but fair. If genuinely unclear, mark REQUIRES_REVIEW rather than
     return prompt
 
 
-def invoke_bedrock_for_analysis(prompt: str) -> str:
-    """Invoke Claude via Bedrock to analyze invoices"""
+def invoke_bedrock_for_analysis(prompt: str, max_retries: int = 3) -> str:
+    """Invoke Claude via Bedrock with retry logic for throttling"""
     
-    try:
-        request_body = {
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": 4000,
-            "temperature": 0,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ]
-        }
-        
-        response = bedrock_runtime.invoke_model(
-            modelId=MODEL_ID,
-            body=json.dumps(request_body)
-        )
-        
-        response_body = json.loads(response['body'].read())
-        result_text = response_body['content'][0]['text']
-        
-        # Log full response to CloudWatch for audit trail
-        print("[DEBUG] Claude Response (first 1000 chars):")
-        print(result_text[:1000])
-        
-        return result_text
-        
-    except Exception as e:
-        print(f"[ERROR] Bedrock invocation failed: {str(e)}")
-        raise
+    # Estimate token count (1 token ≈ 4 characters)
+    estimated_tokens = len(prompt) // 4
+    print(f"[INFO] Estimated input tokens: {estimated_tokens}")
+    
+    for attempt in range(max_retries):
+        try:
+            request_body = {
+                "anthropic_version": "bedrock-2023-05-31",
+                "max_tokens": 4000,
+                "temperature": 0,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ]
+            }
+            
+            response = bedrock_runtime.invoke_model(
+                modelId=MODEL_ID,
+                body=json.dumps(request_body)
+            )
+            
+            response_body = json.loads(response['body'].read())
+            result_text = response_body['content'][0]['text']
+            
+            # Log full response to CloudWatch for audit trail
+            print("[DEBUG] Claude Response (first 1000 chars):")
+            print(result_text[:1000])
+            
+            return result_text
+            
+        except Exception as e:
+            error_msg = str(e)
+            is_throttle = 'ThrottlingException' in error_msg or 'TooManyRequestsException' in error_msg
+            
+            print(f"[WARNING] Bedrock invocation attempt {attempt + 1}/{max_retries} failed: {error_msg}")
+            
+            if attempt < max_retries - 1:
+                wait_time = 2 ** attempt  # Exponential backoff: 1s, 2s, 4s
+                print(f"[INFO] Retrying in {wait_time} seconds...")
+                time.sleep(wait_time)
+            else:
+                print(f"[ERROR] All Bedrock invocation attempts failed after {max_retries} retries")
+                if is_throttle:
+                    # Re-raise with clear throttling indicator
+                    raise Exception(f"BEDROCK_THROTTLED: {error_msg}")
+                raise
 
 
 def parse_analysis_with_regex(xml_result: str, invoice_batch: List[Dict]) -> List[Dict]:
@@ -441,6 +461,14 @@ def validate_analysis(analyzed_invoice: Dict) -> bool:
     if status == 'REQUIRES_REVIEW' and percentage not in [None, 'null', '']:
         print(f"[WARNING] Invoice {invoice_id}: REQUIRES_REVIEW should have null percentage - got {percentage}")
     
+    if status == 'PARTIALLY_DEDUCTIBLE':
+        try:
+            pct = int(percentage) if percentage else 0
+            if pct <= 0 or pct >= 100:
+                print(f"[WARNING] Invoice {invoice_id}: PARTIALLY_DEDUCTIBLE with {pct}% - should be between 1-99%")
+        except (ValueError, TypeError):
+            print(f"[WARNING] Invoice {invoice_id}: PARTIALLY_DEDUCTIBLE has invalid percentage: {percentage}")
+    
     return True
 
 
@@ -523,6 +551,7 @@ def lambda_handler(event, context):
     """
     Main Lambda handler for invoice categorization.
     Receives batch of invoices from Step Functions, analyzes deductibility.
+    Returns status and breakdown, or raises exception for Step Functions retry.
     """
     
     print(f"[INFO] Invoice Categorization Lambda invoked")
@@ -540,6 +569,11 @@ def lambda_handler(event, context):
         
         print(f"[INFO] Processing batch of {len(invoice_batch)} invoices")
         
+        # Validate batch size
+        if len(invoice_batch) > MAX_BATCH_SIZE:
+            print(f"[WARNING] Batch size {len(invoice_batch)} exceeds recommended max {MAX_BATCH_SIZE}")
+            print(f"[WARNING] This may cause token limit issues or timeouts")
+        
         # Fetch company context for industry-aware analysis
         company_number = event.get('company_number')
         company_context = fetch_company_context(company_number) if company_number else None
@@ -550,7 +584,7 @@ def lambda_handler(event, context):
         # Create analysis prompt with company context
         prompt = create_invoice_analysis_prompt(invoice_batch, bim_guidance, company_context)
         
-        # Invoke Claude for analysis
+        # Invoke Claude for analysis (with retry logic)
         print("[INFO] Invoking Claude for invoice analysis...")
         xml_result = invoke_bedrock_for_analysis(prompt)
         
@@ -560,16 +594,41 @@ def lambda_handler(event, context):
         # Update DynamoDB
         update_invoices_in_dynamodb(analyzed_invoices)
         
+        # Calculate summary statistics
+        status_counts = {}
+        for inv in analyzed_invoices:
+            status = inv.get('DeductibilityStatus', 'UNKNOWN')
+            status_counts[status] = status_counts.get(status, 0) + 1
+        
+        print(f"[SUMMARY] Analysis breakdown: {status_counts}")
+        print(f"[SUMMARY] Successfully processed {len(analyzed_invoices)}/{len(invoice_batch)} invoices")
+        
         return {
             'statusCode': 200,
             'body': json.dumps({
                 'success': True,
                 'invoices_analyzed': len(analyzed_invoices),
-                'batch_size': len(invoice_batch)
+                'batch_size': len(invoice_batch),
+                'breakdown': status_counts
             }, cls=DecimalEncoder)
         }
         
     except Exception as e:
+        error_msg = str(e)
+        print(f"[ERROR] Invoice categorization failed: {error_msg}")
+        
+        # If throttled, raise specific error for Step Functions to retry
+        if 'BEDROCK_THROTTLED' in error_msg or 'ThrottlingException' in error_msg:
+            print(f"[ERROR] Bedrock throttling detected - Step Functions should retry this batch")
+            raise Exception(f"THROTTLED: {error_msg}")
+        
+        return {
+            'statusCode': 500,
+            'body': json.dumps({
+                'success': False,
+                'error': error_msg
+            })
+        }
         print(f"[ERROR] Invoice categorization failed: {str(e)}")
         return {
             'statusCode': 500,

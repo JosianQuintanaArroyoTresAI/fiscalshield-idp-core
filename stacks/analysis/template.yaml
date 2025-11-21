@@ -536,6 +536,7 @@ Resources:
         Variables:
           EXTRACTION_RESULTS_TABLE: !Ref ExtractionResultsTableName
           HMRC_GUIDANCE_TABLE: !Sub 'fiscalshield-dc-${Environment}-HMRCGuidance'
+          COMPANY_EVENTS_TABLE: !Sub 'fiscalshield-dc-${Environment}-CompanyEvents'
           MODEL_ID: 'eu.anthropic.claude-3-5-sonnet-20240620-v1:0'
           ENVIRONMENT: !Ref Environment
       Tags:
