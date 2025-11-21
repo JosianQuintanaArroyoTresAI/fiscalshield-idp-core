@@ -414,9 +414,7 @@ const DocumentList = () => {
               <Box variant="h4" padding={{ bottom: 'xs' }}>
                 Recommended Action
               </Box>
-              <Badge color={getRecommendedActionColor(rawData.RecommendedAction)}>
-                {rawData.RecommendedAction}
-              </Badge>
+              <Badge color={getRecommendedActionColor(rawData.RecommendedAction)}>{rawData.RecommendedAction}</Badge>
             </div>
           )}
 
@@ -591,11 +589,7 @@ const DocumentList = () => {
               return <Badge color="grey">Pending</Badge>;
             }
 
-            return item.hmrcConcern ? (
-              <Badge color="red">High Risk</Badge>
-            ) : (
-              <Badge color="green">Low Risk</Badge>
-            );
+            return item.hmrcConcern ? <Badge color="red">High Risk</Badge> : <Badge color="green">Low Risk</Badge>;
           },
           width: 120,
           sortingField: 'hmrcConcern',
