@@ -299,9 +299,7 @@ const InvoiceDetailDrawer = ({ invoice, visible, onDismiss }) => {
                 <SpaceBetween direction="horizontal" size="xs">
                   <Box fontSize="heading-m">{invoice.confidence}</Box>
                   <ProgressBar
-                    value={
-                      invoice.confidenceScores?.composite ? invoice.confidenceScores.composite * 100 : 0
-                    }
+                    value={invoice.confidenceScores?.composite ? invoice.confidenceScores.composite * 100 : 0}
                     hideLabel
                   />
                 </SpaceBetween>
@@ -310,11 +308,7 @@ const InvoiceDetailDrawer = ({ invoice, visible, onDismiss }) => {
                 <Box variant="awsui-key-label">Quality Tier</Box>
                 <Badge
                   color={
-                    invoice.qualityTier === 'EXCELLENT'
-                      ? 'green'
-                      : invoice.qualityTier === 'GOOD'
-                      ? 'blue'
-                      : 'grey'
+                    invoice.qualityTier === 'EXCELLENT' ? 'green' : invoice.qualityTier === 'GOOD' ? 'blue' : 'grey'
                   }
                 >
                   {invoice.qualityTier}
@@ -370,9 +364,7 @@ const InvoiceDetailDrawer = ({ invoice, visible, onDismiss }) => {
               <div>
                 <Box variant="awsui-key-label">Processed Date</Box>
                 <Box>
-                  {invoice.processedAt
-                    ? new Date(invoice.processedAt * 1000).toLocaleDateString('en-GB')
-                    : 'N/A'}
+                  {invoice.processedAt ? new Date(invoice.processedAt * 1000).toLocaleDateString('en-GB') : 'N/A'}
                 </Box>
               </div>
             </ColumnLayout>

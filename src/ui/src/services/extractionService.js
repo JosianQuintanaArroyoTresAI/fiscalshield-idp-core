@@ -128,7 +128,7 @@ export const formatInvoiceData = (extractionResult) => {
     invoiceNumber: extractionResult.InvoiceNumber || 'N/A',
     invoiceType: extractionResult.InvoiceType || 'SUPPLIER_INVOICE',
     vendor: extractionResult.VendorName || 'Unknown Vendor',
-    description: extractionResult.Description || (extractionResult.ExtractedData?.description) || 'N/A',
+    description: extractionResult.Description || extractionResult.ExtractedData?.description || 'N/A',
     date: formatDate(extractionResult.InvoiceDate),
     dueDate: formatDate(extractionResult.DueDate),
     amount: formatCurrency(extractionResult.TotalAmount, extractionResult.Currency),

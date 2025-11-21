@@ -1048,7 +1048,9 @@ const DocumentList = () => {
           {
             id: 'statements',
             label: (
-              <Badge color={bankStatements.length > 0 ? 'blue' : 'grey'}>Bank Statements ({bankStatements.length})</Badge>
+              <Badge color={bankStatements.length > 0 ? 'blue' : 'grey'}>
+                Bank Statements ({bankStatements.length})
+              </Badge>
             ),
             content: renderBankStatementsTable(),
           },
