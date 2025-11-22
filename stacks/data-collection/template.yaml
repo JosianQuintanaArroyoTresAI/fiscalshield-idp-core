@@ -623,7 +623,7 @@ Resources:
                   - !Sub 'arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-micro-v1:0'
                   - !Sub 'arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-lite-v1:0'
                   - 'arn:aws:bedrock:*::foundation-model/amazon.nova-*'
-                  - !Sub 'arn:aws:bedrock:${AWS::Region}:*:inference-profile/*'
+                  - !Sub 'arn:aws:bedrock:us-east-1:${AWS::AccountId}:inference-profile/*'
         - PolicyName: CloudWatchMetrics
           PolicyDocument:
             Version: '2012-10-17'
