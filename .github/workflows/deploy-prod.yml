@@ -231,8 +231,8 @@ jobs:
         echo "  Configuration Table: $CONFIG_TABLE"
         
         # Upload config to S3
-        CONFIG_FILE="config_library/pattern-2/lending-package-sample/config.yaml"
-        S3_KEY="pattern-2/lending-package-sample/config.yaml"
+        CONFIG_FILE="config_library/pattern-2/fiscalshield-production/config.yaml"
+        S3_KEY="config_library/pattern-2/fiscalshield-production/config.yaml"
         
         if [ ! -f "$CONFIG_FILE" ]; then
           echo "❌ Config file not found: $CONFIG_FILE"
@@ -258,7 +258,7 @@ jobs:
         
         try:
             # Load config from file
-            with open('config_library/pattern-2/lending-package-sample/config.yaml', 'r') as f:
+            with open('config_library/pattern-2/fiscalshield-production/config.yaml', 'r') as f:
                 config = yaml.safe_load(f)
             
             # Write to DynamoDB with correct schema (Configuration as partition key)
@@ -266,7 +266,7 @@ jobs:
             table = dynamodb.Table('$CONFIG_TABLE')
             
             table.put_item(Item={
-                'Configuration': 'pattern-2/lending-package-sample',
+                'Configuration': 'Default',
                 'classification': config.get('classification', {}),
                 'extraction': config.get('extraction', {}),
                 'ocr': config.get('ocr', {}),
