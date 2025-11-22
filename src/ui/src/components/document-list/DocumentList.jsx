@@ -191,7 +191,7 @@ const DocumentList = () => {
           documentType: DOCUMENT_TYPES.INVOICE,
         });
 
-        const result = await fetchExtractionResults(activeCompany.companyNumber, DOCUMENT_TYPES.INVOICE, 10);
+        const result = await fetchExtractionResults(activeCompany.companyNumber, DOCUMENT_TYPES.INVOICE, 1000);
 
         console.log('[INVOICES DEBUG] Received result:', result);
 
@@ -228,7 +228,7 @@ const DocumentList = () => {
       setIsLoadingBankStatements(true);
       try {
         logger.debug(`Loading bank statements for company ${activeCompany.companyNumber}`);
-        const result = await fetchExtractionResults(activeCompany.companyNumber, DOCUMENT_TYPES.BANK_STATEMENT, 10);
+        const result = await fetchExtractionResults(activeCompany.companyNumber, DOCUMENT_TYPES.BANK_STATEMENT, 1000);
 
         const formattedStatements = result.items.map(formatBankStatementData);
         setBankStatements(formattedStatements);
@@ -379,6 +379,11 @@ const DocumentList = () => {
           cell: (item) => item.amount,
           width: 120,
           sortingField: 'amount',
+          sortingComparator: (a, b) => {
+            const amountA = parseFloat(a.rawData?.TotalAmount || a.rawData?.Amount || 0);
+            const amountB = parseFloat(b.rawData?.TotalAmount || b.rawData?.Amount || 0);
+            return amountA - amountB;
+          },
         },
         {
           id: 'status',
@@ -494,6 +499,8 @@ const DocumentList = () => {
       loadingText="Loading invoices"
       sortingDisabled={false}
       onRowClick={({ detail }) => setSelectedInvoice(detail.item)}
+      selectedItems={selectedInvoice ? [selectedInvoice] : []}
+      selectionType="single"
       header={
         <Header
           counter={`(${invoices.length})`}
