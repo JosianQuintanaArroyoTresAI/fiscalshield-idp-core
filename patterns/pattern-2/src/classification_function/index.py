@@ -59,65 +59,6 @@ def handler(event, context):
     # NEW: Check if user provided document type hint
     user_hint = document.user_document_type
     trust_user_hint = config.get("classification", {}).get("trust_user_hint", False)
-    
-    if user_hint and trust_user_hint:
-        logger.info(
-            f"User indicated document type: '{user_hint}'. trust_user_hint=True, using user hint for classification"
-        )
-        
-        # Apply user hint to all pages
-        from idp_common.models import Section
-        for page_id, page in document.pages.items():
-            page.classification = user_hint
-            page.confidence = 1.0  # Full confidence in user's selection
-        
-        # Create single section with all pages (user said they're all the same type)
-        section = Section(
-            section_id="1",
-            classification=user_hint,
-            confidence=1.0,
-            page_ids=list(document.pages.keys()),
-        )
-        document.sections = [section]
-        
-        logger.info(
-            f"✅ Created section with classification='{user_hint}' for {len(document.pages)} pages. "
-            f"This will route to: {'InvoiceExtraction' if user_hint == 'invoice' else 'GenericExtraction'} Lambda"
-        )
-        
-        # Store metadata about classification method for audit/drift detection
-        if not document.metadata:
-            document.metadata = {}
-        document.metadata["classification_method"] = "user_hint"
-        document.metadata["user_provided_type"] = user_hint
-        document.metadata["llm_classification_skipped"] = True
-        
-        # Update document in tracking
-        document.workflow_execution_arn = event.get("execution_arn")
-        document_service = create_document_service()
-        logger.info("Updating document with user-hinted classification")
-        document_service.update_document(document)
-        
-        # Add Lambda metering
-        try:
-            lambda_metering = calculate_lambda_metering(
-                "Classification", context, start_time
-            )
-            document.metering = merge_metering_data(document.metering, lambda_metering)
-        except Exception as e:
-            logger.warning(f"Failed to add Lambda metering: {str(e)}")
-        
-        # Prepare output
-        response = {
-            "document": document.serialize_document(
-                working_bucket, "classification_user_hint", logger
-            )
-        }
-        
-        logger.info(
-            f"Classification completed using user hint - Response: {json.dumps(response, default=str)}"
-        )
-        return response
 
     # Intelligent Classification detection: Skip if pages already have classifications
     # NOTE: Exclude "unclassified" - it means classification failed previously, so we should retry
@@ -195,14 +136,32 @@ def handler(event, context):
     if not document.metadata:
         document.metadata = {}
     
-    # Check if we should use user hint for routing despite running LLM
+    # Check if we should use user hint for routing
+    # Two modes:
+    # 1. trust_user_hint=True: Run boundary detection but use user's classification type for all sections
+    # 2. validate_hint_on_mismatch=True: Run LLM classification, compare with user hint, use hint if mismatch
     validate_on_mismatch = config.get("classification", {}).get("validate_hint_on_mismatch", False)
-    use_user_hint_for_routing = (user_hint and validate_on_mismatch)
+    use_user_hint_for_routing = (user_hint and (trust_user_hint or validate_on_mismatch))
+    
+    # Check if we should use user hint for routing
+    # Two modes:
+    # 1. trust_user_hint=True: Run boundary detection but use user's classification type for all sections
+    # 2. validate_hint_on_mismatch=True: Run LLM classification, compare with user hint, use hint if mismatch
+    validate_on_mismatch = config.get("classification", {}).get("validate_hint_on_mismatch", False)
+    use_user_hint_for_routing = (user_hint and (trust_user_hint or validate_on_mismatch))
     
     if use_user_hint_for_routing:
-        document.metadata["classification_method"] = "user_hint_validated"
+        if trust_user_hint:
+            document.metadata["classification_method"] = "boundary_detection_with_user_hint"
+            logger.info(
+                f"🔄 Using user hint '{user_hint}' for all {len(document.sections)} sections "
+                f"(boundary detection ran, classification type overridden)"
+            )
+        else:
+            document.metadata["classification_method"] = "user_hint_validated"
+            logger.info(f"🔄 Using user hint '{user_hint}' for routing (validation mode)")
+        
         document.metadata["user_provided_type"] = user_hint
-        logger.info(f"🔄 Using user hint '{user_hint}' for routing (validation mode)")
     else:
         document.metadata["classification_method"] = "llm"
     
