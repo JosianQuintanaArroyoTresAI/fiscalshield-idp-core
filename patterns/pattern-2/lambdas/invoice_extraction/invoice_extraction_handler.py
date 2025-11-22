@@ -2519,11 +2519,17 @@ def lambda_handler(event, context):
         # Get extraction prompt (dynamic from ConfigurationTable)
         prompt_template = get_invoice_extraction_prompt()
         
-        # PHASE 3: Choose extraction strategy based on feature flag and section size
-        if USE_CHUNKED_EXTRACTION and len(section_text) > CHUNK_SIZE:
-            log_with_timestamp(
-                f"🔄 Section text ({len(section_text)} chars) exceeds chunk size ({CHUNK_SIZE})"
-            )
+        # PHASE 4: Choose extraction strategy
+        # Priority: Pre-computed boundaries > Section size > Standard extraction
+        if USE_CHUNKED_EXTRACTION and (pre_computed_boundaries or len(section_text) > CHUNK_SIZE):
+            if pre_computed_boundaries:
+                log_with_timestamp(
+                    f"✅ Using PRE-COMPUTED boundaries ({len(pre_computed_boundaries)} invoices)"
+                )
+            else:
+                log_with_timestamp(
+                    f"🔄 Section text ({len(section_text)} chars) exceeds chunk size ({CHUNK_SIZE})"
+                )
             log_with_timestamp("   Using CHUNKED extraction strategy...")
             
             result = process_section_with_chunking(
@@ -2532,7 +2538,7 @@ def lambda_handler(event, context):
                 document_id=document_id,
                 section_id=section_id,
                 user_id=user_id,
-                pre_computed_boundaries=pre_computed_boundaries  # NEW: Pass boundaries from classification
+                pre_computed_boundaries=pre_computed_boundaries  # PHASE 4: Pass boundaries from classification
             )
             
             invoices = result['invoices']
