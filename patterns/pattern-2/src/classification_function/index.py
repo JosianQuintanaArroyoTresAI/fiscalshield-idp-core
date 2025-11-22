@@ -314,10 +314,12 @@ def handler(event, context):
                 for page_id in section.page_ids:
                     if page_id in document.pages:
                         page = document.pages[page_id]
-                        if hasattr(page, 'text_uri') and page.text_uri:
+                        # Check for parsed_text_uri (Nova OCR) or raw_text_uri (Textract)
+                        text_uri = getattr(page, 'parsed_text_uri', None) or getattr(page, 'raw_text_uri', None)
+                        if text_uri:
                             try:
                                 from idp_common import s3
-                                page_text = s3.get_text_content(page.text_uri)
+                                page_text = s3.get_text_content(text_uri)
                                 section_text += f"\n[PAGE:{page_id}]\n{page_text}"
                             except Exception as e:
                                 logger.warning(f"Failed to load text for page {page_id}: {e}")

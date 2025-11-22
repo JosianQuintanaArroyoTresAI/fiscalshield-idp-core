@@ -280,7 +280,7 @@ class InvoiceBoundaryDetector:
             return None
     
     def _create_flexible_pattern(self, hint: str) -> str:
-        """
+        r"""
         Convert LLM hint into flexible regex pattern.
         
         Examples:
