@@ -776,6 +776,49 @@ def log_with_timestamp(message: str):
     print(f"[{timestamp}] {message}")
 
 
+def create_chunks_from_boundaries(text: str, boundaries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Create chunks from pre-computed invoice boundaries (from classification).
+    
+    This is the OPTIMAL chunking strategy - each chunk contains exactly ONE invoice,
+    no overlap needed, no risk of splitting invoices, minimal deduplication.
+    
+    Args:
+        text: Full section text
+        boundaries: List of boundary dicts from classification:
+                   [{'id': 1, 'start': 0, 'end': 2847, 'pages': [1], ...}, ...]
+    
+    Returns:
+        List of chunk dictionaries compatible with existing processing logic
+    """
+    chunks = []
+    
+    for boundary in boundaries:
+        invoice_id = boundary.get('id', 0)
+        start = boundary.get('start', 0)
+        end = boundary.get('end', len(text))
+        pages = boundary.get('pages', [invoice_id])
+        
+        # Extract invoice text
+        chunk_text = text[start:end]
+        
+        # Create chunk metadata (compatible with existing format)
+        chunk = {
+            'chunk': chunk_text,
+            'start': start,
+            'end': end,
+            'pages': pages,
+            'invoice_count': 1,  # Each chunk = exactly 1 invoice
+            'chunking_strategy': 'pre_computed',  # NEW strategy identifier
+            'boundary_id': invoice_id,
+            'boundary_source': 'classification'
+        }
+        
+        chunks.append(chunk)
+    
+    return chunks
+
+
 def update_chunk_status(
     document_id: str,
     section_id: str,
@@ -1966,13 +2009,14 @@ def process_section_with_chunking(
     prompt_template: str,
     document_id: str,
     section_id: str,
-    user_id: str
+    user_id: str,
+    pre_computed_boundaries: List[Dict[str, Any]] = None
 ) -> List[Dict[str, Any]]:
     """
     Process large section text using chunking strategy (Phase 3)
     
     This function:
-    1. Splits text into chunks (semantic OR overlap-based)
+    1. Splits text into chunks (pre-computed boundaries OR semantic OR overlap-based)
     2. Processes each chunk separately with Bedrock
     3. Tracks chunk processing status in TrackingTable for resume capability
     4. Checks if all chunks complete and triggers deduplication
@@ -1984,6 +2028,7 @@ def process_section_with_chunking(
         document_id: Document identifier
         section_id: Section identifier
         user_id: User identifier (for deduplication queries)
+        pre_computed_boundaries: Optional boundary metadata from classification (PHASE 4 ENHANCEMENT)
         
     Returns:
         List of invoice dictionaries (deduplicated if all chunks complete)
@@ -1993,29 +2038,46 @@ def process_section_with_chunking(
     # Initialize chunking extractor
     extractor = ChunkedInvoiceExtractor(chunk_size=CHUNK_SIZE, overlap_size=OVERLAP_SIZE)
     
+    # PHASE 4: Use pre-computed boundaries from classification if available
+    if pre_computed_boundaries and len(pre_computed_boundaries) > 0:
+        log_with_timestamp(f"✨ Using PRE-COMPUTED boundaries from classification ({len(pre_computed_boundaries)} invoices)")
+        chunks = create_chunks_from_boundaries(section_text, pre_computed_boundaries)
+        log_with_timestamp(
+            f"📚 Created {len(chunks)} chunks from pre-computed boundaries "
+            f"(1 chunk per invoice, no overlap needed)"
+        )
     # Create chunks - CHOOSE STRATEGY BASED ON CONFIG
-    if USE_SEMANTIC_CHUNKING:
+    elif USE_SEMANTIC_CHUNKING:
         log_with_timestamp("🧠 Using SEMANTIC chunking (invoice boundary detection)")
         chunks = extractor.create_semantic_chunks(section_text)
     else:
         log_with_timestamp("📏 Using OVERLAP chunking (fixed-size with overlap)")
         chunks = extractor.create_chunks_with_overlap(section_text)
     
-    # Log chunking strategy used (will be 'semantic' or 'overlap')
+    # Log chunking strategy used (will be 'semantic', 'overlap', or 'pre_computed')
     strategy = chunks[0].get('chunking_strategy', 'unknown') if chunks else 'none'
-    log_with_timestamp(
-        f"📚 Created {len(chunks)} chunks using '{strategy}' strategy "
-        f"from {len(section_text)} chars"
-    )
     
-    # CloudWatch metrics: Track semantic vs overlap chunking performance
+    # Special handling for pre-computed boundaries
+    if strategy == 'pre_computed':
+        log_with_timestamp(
+            f"📚 Using {len(chunks)} PRE-COMPUTED chunks "
+            f"(1 invoice per chunk, minimal deduplication needed)"
+        )
+    else:
+        log_with_timestamp(
+            f"📚 Created {len(chunks)} chunks using '{strategy}' strategy "
+            f"from {len(section_text)} chars"
+        )
+    
+    # CloudWatch metrics: Track chunking performance
     if chunks:
         semantic_count = sum(1 for c in chunks if c.get('chunking_strategy') == 'semantic')
         overlap_count = sum(1 for c in chunks if c.get('chunking_strategy') == 'overlap')
+        precomputed_count = sum(1 for c in chunks if c.get('chunking_strategy') == 'pre_computed')
         
         log_with_timestamp(
-            f"📊 Chunking stats: {semantic_count} semantic, {overlap_count} overlap "
-            f"(semantic success rate: {semantic_count/len(chunks)*100:.1f}%)"
+            f"📊 Chunking stats: {precomputed_count} pre-computed, {semantic_count} semantic, "
+            f"{overlap_count} overlap (optimal strategy success: {precomputed_count/len(chunks)*100:.1f}%)"
         )
     
     # Process each chunk
@@ -2323,6 +2385,26 @@ def lambda_handler(event, context):
         log_with_timestamp(f"📋 Section data keys: {list(section_data.keys())}")
         log_with_timestamp(f"📋 Section data: {json.dumps(section_data, default=str)[:500]}")
 
+        # NEW: Extract pre-computed boundaries from classification (Phase 4 Enhancement)
+        pre_computed_boundaries = None
+        if 'attributes' in section_data and section_data['attributes']:
+            attributes = section_data['attributes']
+            if 'boundaries' in attributes:
+                pre_computed_boundaries = attributes['boundaries']
+                log_with_timestamp(
+                    f"✨ Found pre-computed boundaries: {len(pre_computed_boundaries)} invoices "
+                    f"(from classification structure analysis)"
+                )
+                
+                # Log overlap risk analysis if available
+                if 'fallback_chunking' in attributes:
+                    fallback_info = attributes['fallback_chunking']
+                    if fallback_info.get('has_overlap_risk'):
+                        log_with_timestamp(
+                            f"⚠️  Overlap Risk: {len(fallback_info.get('at_risk_invoices', []))} invoices "
+                            f"in {len(fallback_info.get('overlap_zones', []))} overlap zones"
+                        )
+
         # Get section text from OCR results
         section_text = ""
         section_pages = section_data.get('page_ids', [])
@@ -2437,11 +2519,17 @@ def lambda_handler(event, context):
         # Get extraction prompt (dynamic from ConfigurationTable)
         prompt_template = get_invoice_extraction_prompt()
         
-        # PHASE 3: Choose extraction strategy based on feature flag and section size
-        if USE_CHUNKED_EXTRACTION and len(section_text) > CHUNK_SIZE:
-            log_with_timestamp(
-                f"🔄 Section text ({len(section_text)} chars) exceeds chunk size ({CHUNK_SIZE})"
-            )
+        # PHASE 4: Choose extraction strategy
+        # Priority: Pre-computed boundaries > Section size > Standard extraction
+        if USE_CHUNKED_EXTRACTION and (pre_computed_boundaries or len(section_text) > CHUNK_SIZE):
+            if pre_computed_boundaries:
+                log_with_timestamp(
+                    f"✅ Using PRE-COMPUTED boundaries ({len(pre_computed_boundaries)} invoices)"
+                )
+            else:
+                log_with_timestamp(
+                    f"🔄 Section text ({len(section_text)} chars) exceeds chunk size ({CHUNK_SIZE})"
+                )
             log_with_timestamp("   Using CHUNKED extraction strategy...")
             
             result = process_section_with_chunking(
@@ -2449,7 +2537,8 @@ def lambda_handler(event, context):
                 prompt_template=prompt_template,
                 document_id=document_id,
                 section_id=section_id,
-                user_id=user_id
+                user_id=user_id,
+                pre_computed_boundaries=pre_computed_boundaries  # PHASE 4: Pass boundaries from classification
             )
             
             invoices = result['invoices']

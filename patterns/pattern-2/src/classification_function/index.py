@@ -15,6 +15,7 @@ from idp_common import classification, metrics, get_config
 from idp_common.models import Document, Status
 from idp_common.docs_service import create_document_service
 from idp_common.utils import calculate_lambda_metering, merge_metering_data
+from idp_common.classification.structure_analysis import enhance_classification_with_structure_analysis
 
 # Configuration will be loaded in handler function
 region = os.environ["AWS_REGION"]
@@ -297,6 +298,86 @@ def handler(event, context):
 
     t1 = time.time()
     logger.info(f"Time taken for classification: {t1-t0:.2f} seconds")
+
+    # NEW: Add structure analysis for invoice sections
+    # This detects invoice boundaries and provides optimization metadata for extraction
+    try:
+        chunk_size = int(os.environ.get('CHUNK_SIZE', '60000'))
+        overlap_size = int(os.environ.get('OVERLAP_SIZE', '5000'))
+        
+        for section in document.sections:
+            if section.classification.lower() == 'invoice':
+                logger.info(f"🔍 Analyzing structure for invoice section {section.section_id}")
+                
+                # Get section text (combine all pages in section)
+                section_text = ""
+                for page_id in section.page_ids:
+                    if page_id in document.pages:
+                        page = document.pages[page_id]
+                        # Check for parsed_text_uri (Nova OCR) or raw_text_uri (Textract)
+                        text_uri = getattr(page, 'parsed_text_uri', None) or getattr(page, 'raw_text_uri', None)
+                        if text_uri:
+                            try:
+                                from idp_common import s3
+                                page_text = s3.get_text_content(text_uri)
+                                section_text += f"\n[PAGE:{page_id}]\n{page_text}"
+                            except Exception as e:
+                                logger.warning(f"Failed to load text for page {page_id}: {e}")
+                
+                if section_text:
+                    logger.info(f"Section text length: {len(section_text)} chars")
+                    
+                    # Initialize attributes dict if not exists
+                    if not section.attributes:
+                        section.attributes = {}
+                    
+                    # Run boundary detection using PAGE markers (PRIMARY strategy)
+                    try:
+                        from idp_common.classification.structure_analysis import InvoiceBoundaryDetector
+                        
+                        detector = InvoiceBoundaryDetector(
+                            chunk_size=chunk_size,
+                            overlap_size=overlap_size
+                        )
+                        
+                        # Try PAGE-marker-based detection first (most reliable)
+                        boundaries = detector.detect_boundaries_page_based(section_text)
+                        
+                        if boundaries:
+                            logger.info(f"✅ PAGE-marker strategy succeeded: {len(boundaries)} boundaries detected")
+                            section.attributes['boundaries'] = boundaries
+                            section.attributes['boundary_strategy'] = 'page_markers'
+                        else:
+                            logger.info(f"⚠️ PAGE-marker strategy found no boundaries, extraction will use overlap chunking")
+                            section.attributes['boundary_strategy'] = 'none'
+                        
+                        # Add metadata for extraction Lambda
+                        section.attributes['structure_hint'] = {
+                            'section_text_length': len(section_text),
+                            'chunk_size': chunk_size,
+                            'overlap_size': overlap_size,
+                            'boundaries_detected': len(boundaries) if boundaries else 0
+                        }
+                        
+                        logger.info(
+                            f"✅ Added boundaries to section {section.section_id} "
+                            f"({len(boundaries) if boundaries else 0} invoices detected)"
+                        )
+                    except Exception as e:
+                        logger.warning(f"Boundary detection failed: {e}, extraction will use overlap chunking")
+                        section.attributes['boundary_strategy'] = 'error'
+                        section.attributes['structure_hint'] = {
+                            'section_text_length': len(section_text),
+                            'chunk_size': chunk_size,
+                            'overlap_size': overlap_size,
+                            'error': str(e)
+                        }
+                else:
+                    logger.warning(f"No text found for invoice section {section.section_id}")
+    
+    except Exception as e:
+        logger.warning(f"Structure analysis enhancement failed (non-critical): {e}")
+        # Don't fail the workflow if structure analysis fails
 
     # Add Lambda metering for successful classification execution
     try:
