@@ -28,16 +28,14 @@ logger.setLevel(os.environ.get('LOG_LEVEL', 'INFO'))
 dynamodb = boto3.resource('dynamodb')
 secrets_client = boto3.client('secretsmanager')
 s3_client = boto3.client('s3')
-# Bedrock client must be in us-east-1 for cross-region inference profiles
-bedrock_client = boto3.client('bedrock-runtime', region_name='us-east-1')
+bedrock_client = boto3.client('bedrock-runtime')
 
 # Environment variables
 CACHE_TABLE_NAME = os.environ.get('CACHE_TABLE_NAME', 'fiscalshield-dc-dev-CompanyEvents')
 ARTICLES_TABLE_NAME = os.environ.get('ARTICLES_TABLE_NAME', 'fiscalshield-dc-dev-AdverseMediaArticles')
 SECRET_NAME = os.environ.get('SECRET_NAME', 'fiscalshield-dc-dev-NewsAPI')
 DATA_ARCHIVE_BUCKET = os.environ.get('DATA_ARCHIVE_BUCKET')
-# Nova Micro requires cross-region inference profile ARN
-BEDROCK_MODEL_ID = os.environ.get('BEDROCK_MODEL_ID', 'us.amazon.nova-micro-v1:0')
+BEDROCK_MODEL_ID = os.environ.get('BEDROCK_MODEL_ID', 'amazon.nova-micro-v1:0')
 RISK_SCORE_SCALE = int(os.environ.get('RISK_SCORE_SCALE', '5'))
 RETENTION_YEARS = int(os.environ.get('RETENTION_YEARS', '7'))
 
