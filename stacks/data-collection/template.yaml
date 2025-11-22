@@ -620,8 +620,10 @@ Resources:
                   - bedrock:InvokeModel
                   - bedrock:InvokeModelWithResponseStream
                 Resource:
-                  - !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.nova-micro-v1:0'
-                  - !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.nova-lite-v1:0'
+                  - !Sub 'arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-micro-v1:0'
+                  - !Sub 'arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-lite-v1:0'
+                  - 'arn:aws:bedrock:*::foundation-model/amazon.nova-*'
+                  - !Sub 'arn:aws:bedrock:${AWS::Region}:*:inference-profile/*'
         - PolicyName: CloudWatchMetrics
           PolicyDocument:
             Version: '2012-10-17'
@@ -948,7 +950,7 @@ Resources:
           ARTICLES_TABLE_NAME: !Ref AdverseMediaArticlesTable
           SECRET_NAME: !Ref NewsApiSecret
           DATA_ARCHIVE_BUCKET: !Sub 'fiscalshield-dc-${Environment}-data-archive-${AWS::AccountId}'
-          BEDROCK_MODEL_ID: 'amazon.nova-micro-v1:0'
+          BEDROCK_MODEL_ID: 'us.amazon.nova-micro-v1:0'
           RISK_SCORE_SCALE: '5'
           RETENTION_YEARS: '7'
       Events:

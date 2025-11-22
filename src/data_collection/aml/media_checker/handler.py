@@ -35,7 +35,8 @@ CACHE_TABLE_NAME = os.environ.get('CACHE_TABLE_NAME', 'fiscalshield-dc-dev-Compa
 ARTICLES_TABLE_NAME = os.environ.get('ARTICLES_TABLE_NAME', 'fiscalshield-dc-dev-AdverseMediaArticles')
 SECRET_NAME = os.environ.get('SECRET_NAME', 'fiscalshield-dc-dev-NewsAPI')
 DATA_ARCHIVE_BUCKET = os.environ.get('DATA_ARCHIVE_BUCKET')
-BEDROCK_MODEL_ID = os.environ.get('BEDROCK_MODEL_ID', 'amazon.nova-micro-v1:0')
+# Nova Micro requires cross-region inference profile ARN
+BEDROCK_MODEL_ID = os.environ.get('BEDROCK_MODEL_ID', 'us.amazon.nova-micro-v1:0')
 RISK_SCORE_SCALE = int(os.environ.get('RISK_SCORE_SCALE', '5'))
 RETENTION_YEARS = int(os.environ.get('RETENTION_YEARS', '7'))
 
