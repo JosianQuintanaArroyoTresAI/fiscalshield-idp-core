@@ -28,7 +28,8 @@ logger.setLevel(os.environ.get('LOG_LEVEL', 'INFO'))
 dynamodb = boto3.resource('dynamodb')
 secrets_client = boto3.client('secretsmanager')
 s3_client = boto3.client('s3')
-bedrock_client = boto3.client('bedrock-runtime')
+# Bedrock client must be in us-east-1 for cross-region inference profiles
+bedrock_client = boto3.client('bedrock-runtime', region_name='us-east-1')
 
 # Environment variables
 CACHE_TABLE_NAME = os.environ.get('CACHE_TABLE_NAME', 'fiscalshield-dc-dev-CompanyEvents')
