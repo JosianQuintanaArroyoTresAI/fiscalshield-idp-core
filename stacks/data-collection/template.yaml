@@ -259,6 +259,66 @@ Resources:
         - Key: DataRetention
           Value: Auto-expire with TTL
 
+  AdverseMediaArticlesTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Sub 'fiscalshield-dc-${Environment}-AdverseMediaArticles'
+      BillingMode: PAY_PER_REQUEST
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true  # Always enabled for compliance
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      AttributeDefinitions:
+        - AttributeName: company_number
+          AttributeType: S
+        - AttributeName: article_id
+          AttributeType: S
+        - AttributeName: scan_date
+          AttributeType: S
+        - AttributeName: risk_score
+          AttributeType: N
+      KeySchema:
+        - AttributeName: company_number
+          KeyType: HASH
+        - AttributeName: article_id
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: scan-date-index
+          KeySchema:
+            - AttributeName: company_number
+              KeyType: HASH
+            - AttributeName: scan_date
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: risk-score-index
+          KeySchema:
+            - AttributeName: company_number
+              KeyType: HASH
+            - AttributeName: risk_score
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: Name
+          Value: !Sub 'fiscalshield-dc-${Environment}-AdverseMediaArticles'
+        - Key: Purpose
+          Value: Store individual adverse media articles with AI risk analysis
+        - Key: DataRetention
+          Value: 7 years for compliance
+        - Key: GDPRCompliant
+          Value: 'true'
+        - Key: ComplianceType
+          Value: AML-Screening
+
   HMRCGuidanceTable:
     Type: AWS::DynamoDB::Table
     DeletionPolicy: Retain
@@ -507,10 +567,12 @@ Resources:
                   - !GetAtt HMRCDataTable.Arn
                   - !GetAtt RateLimitsTable.Arn
                   - !GetAtt HMRCGuidanceTable.Arn
+                  - !GetAtt AdverseMediaArticlesTable.Arn
                   - !Sub '${FilingEventsTable.Arn}/index/*'
                   - !Sub '${CompanyEventsTable.Arn}/index/*'
                   - !Sub '${HMRCDataTable.Arn}/index/*'
                   - !Sub '${HMRCGuidanceTable.Arn}/index/*'
+                  - !Sub '${AdverseMediaArticlesTable.Arn}/index/*'
         - PolicyName: SecretsManagerAccess
           PolicyDocument:
             Version: '2012-10-17'
@@ -548,6 +610,18 @@ Resources:
                 Resource:
                   - !Sub 'arn:aws:s3:::fiscalshield-dc-${Environment}-data-archive-${AWS::AccountId}'
                   - !Sub 'arn:aws:s3:::fiscalshield-dc-${Environment}-data-archive-${AWS::AccountId}/*'
+        - PolicyName: BedrockAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: InvokeNovaMicro
+                Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:InvokeModelWithResponseStream
+                Resource:
+                  - !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.nova-micro-v1:0'
+                  - !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.nova-lite-v1:0'
         - PolicyName: CloudWatchMetrics
           PolicyDocument:
             Version: '2012-10-17'
@@ -871,8 +945,12 @@ Resources:
       Environment:
         Variables:
           CACHE_TABLE_NAME: !Ref CompanyEventsTable
+          ARTICLES_TABLE_NAME: !Ref AdverseMediaArticlesTable
           SECRET_NAME: !Ref NewsApiSecret
           DATA_ARCHIVE_BUCKET: !Sub 'fiscalshield-dc-${Environment}-data-archive-${AWS::AccountId}'
+          BEDROCK_MODEL_ID: 'amazon.nova-micro-v1:0'
+          RISK_SCORE_SCALE: '5'
+          RETENTION_YEARS: '7'
       Events:
         PostMediaCheck:
           Type: Api
@@ -1161,6 +1239,12 @@ Outputs:
     Value: !Ref HMRCGuidanceTable
     Export:
       Name: !Sub '${AWS::StackName}-HMRCGuidanceTable'
+
+  AdverseMediaArticlesTableName:
+    Description: DynamoDB table for individual adverse media articles with AI risk analysis
+    Value: !Ref AdverseMediaArticlesTable
+    Export:
+      Name: !Sub '${AWS::StackName}-AdverseMediaArticlesTable'
 
   DataArchiveBucketName:
     Description: S3 bucket for archiving large API responses
