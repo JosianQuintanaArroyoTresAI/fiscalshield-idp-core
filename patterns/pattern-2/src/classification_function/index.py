@@ -325,27 +325,53 @@ def handler(event, context):
                                 logger.warning(f"Failed to load text for page {page_id}: {e}")
                 
                 if section_text:
-                    # Note: We don't have the raw LLM response here
-                    # For now, skip LLM-based analysis and use pattern-based detection
-                    # TODO: Integrate with classification service to get LLM response
                     logger.info(f"Section text length: {len(section_text)} chars")
                     
                     # Initialize attributes dict if not exists
                     if not section.attributes:
                         section.attributes = {}
                     
-                    # Add basic structure hint for extraction function
-                    section.attributes['structure_hint'] = {
-                        'section_text_length': len(section_text),
-                        'chunk_size': chunk_size,
-                        'overlap_size': overlap_size,
-                        'requires_analysis': True
-                    }
-                    
-                    logger.info(
-                        f"✅ Added structure hint for section {section.section_id} "
-                        f"({len(section_text)} chars, needs boundary detection)"
-                    )
+                    # Run boundary detection using PAGE markers (PRIMARY strategy)
+                    try:
+                        from idp_common.classification.structure_analysis import InvoiceBoundaryDetector
+                        
+                        detector = InvoiceBoundaryDetector(
+                            chunk_size=chunk_size,
+                            overlap_size=overlap_size
+                        )
+                        
+                        # Try PAGE-marker-based detection first (most reliable)
+                        boundaries = detector.detect_boundaries_page_based(section_text)
+                        
+                        if boundaries:
+                            logger.info(f"✅ PAGE-marker strategy succeeded: {len(boundaries)} boundaries detected")
+                            section.attributes['boundaries'] = boundaries
+                            section.attributes['boundary_strategy'] = 'page_markers'
+                        else:
+                            logger.info(f"⚠️ PAGE-marker strategy found no boundaries, extraction will use overlap chunking")
+                            section.attributes['boundary_strategy'] = 'none'
+                        
+                        # Add metadata for extraction Lambda
+                        section.attributes['structure_hint'] = {
+                            'section_text_length': len(section_text),
+                            'chunk_size': chunk_size,
+                            'overlap_size': overlap_size,
+                            'boundaries_detected': len(boundaries) if boundaries else 0
+                        }
+                        
+                        logger.info(
+                            f"✅ Added boundaries to section {section.section_id} "
+                            f"({len(boundaries) if boundaries else 0} invoices detected)"
+                        )
+                    except Exception as e:
+                        logger.warning(f"Boundary detection failed: {e}, extraction will use overlap chunking")
+                        section.attributes['boundary_strategy'] = 'error'
+                        section.attributes['structure_hint'] = {
+                            'section_text_length': len(section_text),
+                            'chunk_size': chunk_size,
+                            'overlap_size': overlap_size,
+                            'error': str(e)
+                        }
                 else:
                     logger.warning(f"No text found for invoice section {section.section_id}")
     
