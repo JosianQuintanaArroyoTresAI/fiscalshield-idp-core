@@ -391,10 +391,10 @@ const DocumentList = () => {
           cell: (item) => {
             const status = item.analysisStatus || 'PENDING';
             const colorMap = {
-              'ANALYZED': 'green',
-              'PENDING': 'grey',
-              'FAILED': 'red',
-              'IN_PROGRESS': 'blue'
+              ANALYZED: 'green',
+              PENDING: 'grey',
+              FAILED: 'red',
+              IN_PROGRESS: 'blue',
             };
             return <Badge color={colorMap[status] || 'grey'}>{status}</Badge>;
           },
