@@ -22,6 +22,7 @@ HMRC_GUIDANCE_TABLE = os.environ.get('HMRC_GUIDANCE_TABLE', 'fiscalshield-dc-dev
 COMPANY_EVENTS_TABLE = os.environ.get('COMPANY_EVENTS_TABLE', 'fiscalshield-dc-dev-CompanyEvents')
 MODEL_ID = os.environ.get('MODEL_ID', 'eu.anthropic.claude-3-5-sonnet-20240620-v1:0')
 MAX_BATCH_SIZE = 10  # Maximum invoices per batch to avoid token limits
+RECOMMENDED_BATCH_SIZE = 8  # Recommended batch size to reduce XML truncation risk
 
 
 class DecimalEncoder(json.JSONEncoder):
@@ -663,16 +664,31 @@ def update_invoices_in_dynamodb(analyzed_invoices: List[Dict]):
     
     for invoice in analyzed_invoices:
         try:
-            # Validate analysis results
-            if not validate_analysis(invoice):
-                print(f"[WARNING] Skipping invalid analysis for invoice {invoice.get('InvoiceId')}")
-                continue
-            
             pk = invoice.get('PK')
             sk = invoice.get('SK')
             
             if not pk or not sk:
                 print(f"[WARNING] Invoice missing PK/SK: {invoice.get('InvoiceId')}")
+                continue
+            
+            # Check if this is a failed invoice (parsing error)
+            if invoice.get('AnalysisStatus') == 'FAILED':
+                # Minimal update for failed invoices
+                extraction_table.update_item(
+                    Key={'PK': pk, 'SK': sk},
+                    UpdateExpression='SET AnalysisStatus = :status, AnalyzedAt = :analyzed_at, DeductibilityReasoning = :reasoning',
+                    ExpressionAttributeValues={
+                        ':status': 'FAILED',
+                        ':analyzed_at': invoice.get('AnalyzedAt'),
+                        ':reasoning': invoice.get('DeductibilityReasoning', 'Analysis failed')
+                    }
+                )
+                print(f"[INFO] Marked invoice as FAILED: {invoice.get('InvoiceId')}")
+                continue
+            
+            # Validate analysis results for successful invoices
+            if not validate_analysis(invoice):
+                print(f"[WARNING] Skipping invalid analysis for invoice {invoice.get('InvoiceId')}")
                 continue
             
             # Handle null percentage properly
@@ -863,6 +879,23 @@ def lambda_handler(event, context):
         
         # Parse results
         analyzed_invoices = parse_analysis_from_xml(xml_result, invoice_batch)
+        
+        # Identify invoices that failed to parse (lost in XML truncation)
+        analyzed_ids = {inv.get('InvoiceId') for inv in analyzed_invoices}
+        failed_invoices = [inv for inv in invoice_batch if inv.get('InvoiceId') not in analyzed_ids]
+        
+        if failed_invoices:
+            print(f"[WARNING] {len(failed_invoices)} invoices failed to parse from XML response")
+            for failed_inv in failed_invoices:
+                print(f"[WARNING] Failed invoice: {failed_inv.get('InvoiceId')}")
+                # Mark as failed so they can be retried
+                failed_inv.update({
+                    'AnalysisStatus': 'FAILED',
+                    'AnalyzedAt': int(time.time()),
+                    'DeductibilityReasoning': 'XML parsing failed - invoice response truncated. Please retry analysis.',
+                })
+            # Add failed invoices to the list so they get status updated in DynamoDB
+            analyzed_invoices.extend(failed_invoices)
         
         # Update DynamoDB
         update_invoices_in_dynamodb(analyzed_invoices)

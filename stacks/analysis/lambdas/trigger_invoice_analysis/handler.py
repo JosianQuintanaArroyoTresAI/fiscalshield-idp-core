@@ -16,7 +16,7 @@ dynamodb = boto3.resource('dynamodb')
 
 # Environment variables
 EXTRACTION_RESULTS_TABLE = os.environ.get('EXTRACTION_RESULTS_TABLE')
-BATCH_SIZE = int(os.environ.get('BATCH_SIZE', '10'))  # Invoices per batch (smaller than transactions due to longer content)
+BATCH_SIZE = int(os.environ.get('BATCH_SIZE', '8'))  # Reduced to 8 to prevent XML truncation (was 10)
 
 
 class DecimalEncoder(json.JSONEncoder):
