@@ -116,6 +116,20 @@ const DocumentList = () => {
   });
 
   const {
+    items: invoiceItems,
+    collectionProps: invoiceCollectionProps,
+    paginationProps: invoicePaginationProps,
+  } = useCollection(invoices, {
+    sorting: {
+      defaultState: {
+        sortingColumn: { sortingField: 'date' },
+        isDescending: true,
+      },
+    },
+    pagination: { pageSize: 10 },
+  });
+
+  const {
     items: bankStatementItems,
     collectionProps: bankStatementCollectionProps,
     paginationProps: bankStatementPaginationProps,
@@ -177,7 +191,7 @@ const DocumentList = () => {
           documentType: DOCUMENT_TYPES.INVOICE,
         });
 
-        const result = await fetchExtractionResults(activeCompany.companyNumber, DOCUMENT_TYPES.INVOICE, 50);
+        const result = await fetchExtractionResults(activeCompany.companyNumber, DOCUMENT_TYPES.INVOICE, 1000);
 
         console.log('[INVOICES DEBUG] Received result:', result);
 
@@ -214,7 +228,7 @@ const DocumentList = () => {
       setIsLoadingBankStatements(true);
       try {
         logger.debug(`Loading bank statements for company ${activeCompany.companyNumber}`);
-        const result = await fetchExtractionResults(activeCompany.companyNumber, DOCUMENT_TYPES.BANK_STATEMENT, 50);
+        const result = await fetchExtractionResults(activeCompany.companyNumber, DOCUMENT_TYPES.BANK_STATEMENT, 1000);
 
         const formattedStatements = result.items.map(formatBankStatementData);
         setBankStatements(formattedStatements);
@@ -312,6 +326,7 @@ const DocumentList = () => {
   // Invoices Table Component
   const renderInvoicesTable = () => (
     <Table
+      {...invoiceCollectionProps}
       columnDefinitions={[
         {
           id: 'invoiceType',
@@ -364,6 +379,11 @@ const DocumentList = () => {
           cell: (item) => item.amount,
           width: 120,
           sortingField: 'amount',
+          sortingComparator: (a, b) => {
+            const amountA = parseFloat(a.rawData?.TotalAmount || a.rawData?.Amount || 0);
+            const amountB = parseFloat(b.rawData?.TotalAmount || b.rawData?.Amount || 0);
+            return amountA - amountB;
+          },
         },
         {
           id: 'status',
@@ -474,11 +494,13 @@ const DocumentList = () => {
           sortingField: 'hmrcConcern',
         },
       ]}
-      items={invoices}
+      items={invoiceItems}
       loading={isLoadingInvoices}
       loadingText="Loading invoices"
       sortingDisabled={false}
       onRowClick={({ detail }) => setSelectedInvoice(detail.item)}
+      selectedItems={selectedInvoice ? [selectedInvoice] : []}
+      selectionType="single"
       header={
         <Header
           counter={`(${invoices.length})`}
@@ -524,7 +546,7 @@ const DocumentList = () => {
           </SpaceBetween>
         </Box>
       }
-      pagination={<Pagination currentPageIndex={1} pagesCount={1} disabled={!invoicesNextToken} />}
+      pagination={<Pagination {...invoicePaginationProps} ariaLabels={paginationLabels} />}
     />
   );
 
