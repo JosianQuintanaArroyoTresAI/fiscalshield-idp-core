@@ -146,6 +146,21 @@ jobs:
           echo "✅ Found Analysis State Machine ARN: $ANALYSIS_STATE_MACHINE_ARN"
         fi
         
+        # Get Invoice Analysis State Machine ARN from SSM Parameter Store
+        INVOICE_ANALYSIS_STATE_MACHINE_ARN=$(aws ssm get-parameter \
+          --name "/fiscalshield/analysis/prod/invoice-analysis-state-machine-arn" \
+          --query 'Parameter.Value' \
+          --output text \
+          --region eu-central-1 2>/dev/null || echo "")
+        
+        if [ -z "$INVOICE_ANALYSIS_STATE_MACHINE_ARN" ]; then
+          echo "⚠️ Invoice Analysis State Machine ARN not found in SSM"
+          echo "   Invoice analysis feature will be disabled"
+          INVOICE_ANALYSIS_STATE_MACHINE_ARN=""
+        else
+          echo "✅ Found Invoice Analysis State Machine ARN: $INVOICE_ANALYSIS_STATE_MACHINE_ARN"
+        fi
+        
         if [ "${{ steps.check_stack.outputs.stack_exists }}" == "true" ]; then
           echo "🔄 Updating existing stack..."
           aws cloudformation update-stack \
@@ -158,6 +173,7 @@ jobs:
                          ParameterKey=Pattern2Configuration,UsePreviousValue=true \
                          ParameterKey=DocumentKnowledgeBase,UsePreviousValue=true \
                          ParameterKey=TransactionCategorizationStateMachineArn,ParameterValue="$ANALYSIS_STATE_MACHINE_ARN" \
+                         ParameterKey=InvoiceAnalysisStateMachineArn,ParameterValue="$INVOICE_ANALYSIS_STATE_MACHINE_ARN" \
                          ParameterKey=AllowedSignUpEmailDomain,ParameterValue="gmail.com\,outlook.com\,yahoo.com\,hotmail.com\,icloud.com\,protonmail.com\,duck.com"
         else
           echo "🆕 Creating new stack..."
@@ -173,6 +189,8 @@ jobs:
               ParameterKey=Pattern2Configuration,ParameterValue=rvl-cdip-package-sample \
               ParameterKey=Pattern3Configuration,ParameterValue=rvl-cdip-package-sample \
               ParameterKey=DocumentKnowledgeBase,ParameterValue=DISABLED \
+              ParameterKey=TransactionCategorizationStateMachineArn,ParameterValue="$ANALYSIS_STATE_MACHINE_ARN" \
+              ParameterKey=InvoiceAnalysisStateMachineArn,ParameterValue="$INVOICE_ANALYSIS_STATE_MACHINE_ARN" \
               ParameterKey=AllowedSignUpEmailDomain,ParameterValue="gmail.com\,outlook.com\,yahoo.com\,hotmail.com\,icloud.com\,protonmail.com\,duck.com\,tresai.ai" \
               ParameterKey=EnableHITL,ParameterValue=true \
               ParameterKey=LogLevel,ParameterValue=INFO \
