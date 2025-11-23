@@ -322,9 +322,11 @@ For each invoice, determine:
    - YES if suspicious/personal, NO if clearly business
 
 5. REASONING:
-   - Clear explanation of your assessment
+   - KEEP IT CONCISE (1-2 sentences maximum)
    - Reference specific BIM rules
    - Note any red flags or documentation requirements
+
+IMPORTANT: Be concise in ALL text fields to ensure complete XML generation for all invoices in the batch.
 
 REQUIRED XML FORMAT:
 
@@ -335,39 +337,39 @@ REQUIRED XML FORMAT:
     <deductibility_confidence>HIGH|MEDIUM|LOW</deductibility_confidence>
     <bim_sections>BIM37000, BIM37600</bim_sections>
     <hmrc_concern>YES|NO</hmrc_concern>
-    <reasoning>Detailed explanation referencing BIM guidance and confidence level</reasoning>
-    <documentation_required>List any additional documentation needed for audit defense</documentation_required>
+    <reasoning>Concise 1-2 sentence explanation</reasoning>
+    <documentation_required>Brief list of needed documentation</documentation_required>
     <recommended_action>APPROVE|REQUEST_DOCUMENTATION|APPORTION|REJECT</recommended_action>
     
     <!-- ALL INVOICES: Include Test 1 at minimum -->
     <compliance_tests>
       <test_1_wholly_exclusively>PASS|FAIL|DUALITY</test_1_wholly_exclusively>
       <test_1_confidence>HIGH|MEDIUM|LOW (only if uncertain)</test_1_confidence>
-      <test_1_reasoning>Brief explanation if confidence is MEDIUM or LOW</test_1_reasoning>
+      <test_1_reasoning>One sentence if needed</test_1_reasoning>
       
       <test_2_entertainment>NOT_APPLICABLE|STAFF_ENTERTAINMENT|CLIENT_ENTERTAINMENT</test_2_entertainment>
       <test_2_confidence>HIGH|MEDIUM|LOW (only if uncertain)</test_2_confidence>
-      <test_2_reasoning>Brief explanation if confidence is MEDIUM or LOW</test_2_reasoning>
+      <test_2_reasoning>One sentence if needed</test_2_reasoning>
       
       <test_3_travel>NOT_APPLICABLE|BUSINESS_TRAVEL|COMMUTING</test_3_travel>
       <test_3_confidence>HIGH|MEDIUM|LOW (only if uncertain)</test_3_confidence>
-      <test_3_reasoning>Brief explanation if confidence is MEDIUM or LOW</test_3_reasoning>
+      <test_3_reasoning>One sentence if needed</test_3_reasoning>
       
       <test_4_training>NOT_APPLICABLE|WORK_RELATED|PERSONAL_DEVELOPMENT</test_4_training>
       <test_4_confidence>HIGH|MEDIUM|LOW (only if uncertain)</test_4_confidence>
-      <test_4_reasoning>Brief explanation if confidence is MEDIUM or LOW</test_4_reasoning>
+      <test_4_reasoning>One sentence if needed</test_4_reasoning>
       
       <test_5_statutory_ban>NOT_APPLICABLE|PENALTIES|DEPRECIATION</test_5_statutory_ban>
       
       <test_6_mixed_use>NOT_APPLICABLE|APPORTIONABLE|NO_MIXED_USE</test_6_mixed_use>
       <test_6_business_percentage>0-100 (if apportionable)</test_6_business_percentage>
       <test_6_confidence>HIGH|MEDIUM|LOW (ALWAYS include if apportionable)</test_6_confidence>
-      <test_6_reasoning>Explain basis for % estimate</test_6_reasoning>
-      <test_6_documentation_needed>What evidence would verify the %</test_6_documentation_needed>
+      <test_6_reasoning>One sentence basis for %</test_6_reasoning>
+      <test_6_documentation_needed>Brief list</test_6_documentation_needed>
       
       <test_7_duality>PASS|FAIL</test_7_duality>
       <test_7_confidence>HIGH|MEDIUM|LOW (only if uncertain)</test_7_confidence>
-      <test_7_reasoning>Brief explanation if confidence is MEDIUM or LOW, or if FAIL cite Mallalieu principle</test_7_reasoning>
+      <test_7_reasoning>One sentence if needed</test_7_reasoning>
       
       <addback_amount>0.00 or calculated amount</addback_amount>
       <addback_reason>Explanation if addback > 0 (include test that triggered it)</addback_reason>
