@@ -135,6 +135,22 @@ ManifestUri: "s3://bucket/batch-inputs/..."
 TotalDocuments: 150
 ```
 
+## Batch Inference vs Direct Processing
+
+### Batch Inference (Recommended for Production)
+- **Cost**: 50% discount ($1.50 vs $3.00 per 1M input tokens)
+- **Latency**: 6-24 hours
+- **Minimum**: ~100 documents recommended for cost-effectiveness
+- **Best for**: Daily/weekly evaluation runs with high volume
+
+### Direct Processing (Recommended for Development)
+- **Cost**: Full price ($3.00 per 1M input tokens)
+- **Latency**: Seconds to minutes
+- **Minimum**: No minimum batch size
+- **Best for**: Low volume, immediate feedback, testing
+
+**Switch between modes**: Set `BatchInferenceEnabled` parameter to `true` or `false`
+
 ## Cost Estimation
 
 ### Example: 1000 documents/day, 10% sampling rate
@@ -151,6 +167,8 @@ TotalDocuments: 150
 Compare to:
 - Textract baseline: $195/month (3000 pages × $0.065)
 - On-demand LLM: $9-15/month
+
+**Note**: Production with higher volume (10,000+ docs/month) benefits significantly more from batch inference.
 
 ## Querying Metrics
 
