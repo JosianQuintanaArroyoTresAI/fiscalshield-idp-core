@@ -27,15 +27,15 @@ mock_boto3.resource.return_value = mock_dynamodb
 mock_boto3.client.return_value = mock_bedrock
 sys.modules['boto3'] = mock_boto3
 
-# Add invoice categorization handler to path
+# Add invoice categorization handler to path with unique module name to avoid conflicts
 CATEGORIZATION_PATH = Path(__file__).parent.parent.parent.parent / 'stacks' / 'analysis' / 'lambdas' / 'invoice_categorization'
 sys.path.insert(0, str(CATEGORIZATION_PATH))
 
-from handler import (
-    parse_stage1_classification,
-    parse_stage2_deep_testing,
-    MODEL_ID
-)
+# Import with unique name to avoid collision with other test files
+import handler as invoice_handler
+parse_stage1_classification = invoice_handler.parse_stage1_classification
+parse_stage2_deep_testing = invoice_handler.parse_stage2_deep_testing
+MODEL_ID = invoice_handler.MODEL_ID
 
 
 # =============================================================================
