@@ -290,6 +290,73 @@ const InvoiceDetailDrawer = ({ invoice, visible, onDismiss }) => {
           </Container>
         )}
 
+        {/* Compliance Tests - For EXPENSE_CLAIM only */}
+        {isAnalyzed && invoice.invoiceType === 'EXPENSE_CLAIM' && rawData.Test1_WhollyExclusively && (
+          <Container header={<Header variant="h3">Statutory Compliance Tests</Header>}>
+            <SpaceBetween size="m">
+              <Alert type="info" header="Multi-Test Framework Applied">
+                This expense claim has been assessed using the full UK statutory compliance framework with 5 specific tests.
+              </Alert>
+
+              <ColumnLayout columns={2} variant="text-grid">
+                <div>
+                  <Box variant="awsui-key-label">TEST 1: Wholly & Exclusively (S54 CTA 2009)</Box>
+                  <Badge color={rawData.Test1_WhollyExclusively === 'PASS' ? 'green' : rawData.Test1_WhollyExclusively === 'FAIL' ? 'red' : 'grey'}>
+                    {rawData.Test1_WhollyExclusively || 'N/A'}
+                  </Badge>
+                </div>
+                <div>
+                  <Box variant="awsui-key-label">TEST 2: Entertainment (S45-47 CTA 2009)</Box>
+                  <Badge color={
+                    rawData.Test2_Entertainment === 'STAFF_ENTERTAINMENT' ? 'green' :
+                    rawData.Test2_Entertainment === 'CLIENT_ENTERTAINMENT' ? 'red' : 'grey'
+                  }>
+                    {rawData.Test2_Entertainment?.replace(/_/g, ' ') || 'NOT APPLICABLE'}
+                  </Badge>
+                </div>
+                <div>
+                  <Box variant="awsui-key-label">TEST 3: Travel (S54 CTA + S38 ITEPA)</Box>
+                  <Badge color={
+                    rawData.Test3_Travel === 'BUSINESS_TRAVEL' ? 'green' :
+                    rawData.Test3_Travel === 'COMMUTING' ? 'red' : 'grey'
+                  }>
+                    {rawData.Test3_Travel?.replace(/_/g, ' ') || 'NOT APPLICABLE'}
+                  </Badge>
+                </div>
+                <div>
+                  <Box variant="awsui-key-label">TEST 4: Training (S74 CTA)</Box>
+                  <Badge color={
+                    rawData.Test4_Training === 'WORK_RELATED' ? 'green' :
+                    rawData.Test4_Training === 'PERSONAL_DEVELOPMENT' ? 'blue' : 'grey'
+                  }>
+                    {rawData.Test4_Training?.replace(/_/g, ' ') || 'NOT APPLICABLE'}
+                  </Badge>
+                </div>
+                <div>
+                  <Box variant="awsui-key-label">TEST 5: Statutory Ban</Box>
+                  <Badge color={
+                    rawData.Test5_StatutoryBan === 'NOT_APPLICABLE' ? 'green' :
+                    (rawData.Test5_StatutoryBan === 'PENALTIES' || rawData.Test5_StatutoryBan === 'DEPRECIATION') ? 'red' : 'grey'
+                  }>
+                    {rawData.Test5_StatutoryBan?.replace(/_/g, ' ') || 'NOT APPLICABLE'}
+                  </Badge>
+                </div>
+              </ColumnLayout>
+
+              {rawData.AddbackAmount && parseFloat(rawData.AddbackAmount) > 0 && (
+                <Alert type="warning" header={`Tax Addback Required: £${rawData.AddbackAmount}`}>
+                  <SpaceBetween size="xs">
+                    <Box variant="p">{rawData.AddbackReason}</Box>
+                    <Box variant="small" color="text-status-error">
+                      This amount must be added back to taxable profits.
+                    </Box>
+                  </SpaceBetween>
+                </Alert>
+              )}
+            </SpaceBetween>
+          </Container>
+        )}
+
         {/* Extraction Quality */}
         <ExpandableSection headerText="Extraction Quality" defaultExpanded={false}>
           <SpaceBetween size="m">

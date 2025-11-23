@@ -203,10 +203,49 @@ For example, gym equipment for a fitness business is clearly deductible, but for
     for idx, invoice in enumerate(invoice_batch, 1):
         invoice_type = invoice.get('InvoiceType', 'UNKNOWN')
         scrutiny_flag = ''
+        analysis_framework = ''
         
         # Flag employee expenses for stricter scrutiny
         if invoice_type == 'EMPLOYEE_EXPENSE':
             scrutiny_flag = '\n⚠️ EMPLOYEE EXPENSE - Apply stricter scrutiny for potential personal benefit'
+        
+        # Type-specific analysis instructions
+        if invoice_type == 'EXPENSE_CLAIM':
+            analysis_framework = """
+
+🔍 APPLY FULL MULTI-TEST COMPLIANCE FRAMEWORK:
+
+TEST 1: S54 CTA 2009 - Wholly and Exclusively?
+  - Is the sole purpose of this expense for the trade?
+  - YES → Continue to specific tests (2-5)
+  - NO → Mark for TEST 7 (Duality assessment)
+
+TEST 2: Entertainment? (S45-47 CTA 2009)
+  - IF Staff Entertainment → DEDUCTIBLE (S45(2))
+  - IF Client Entertainment → DISALLOWED (S45) - ADDBACK = 100%
+
+TEST 3: Travel Expense? (S54 CTA + S38 ITEPA)
+  - IF Business Travel → DEDUCTIBLE (S54)
+  - IF Commuting (home to regular workplace) → DISALLOWED (S38 ITEPA) - ADDBACK = 100%
+
+TEST 4: Training? (S74 CTA)
+  - IF Work-Related (enhances current skills) → DEDUCTIBLE (S74)
+  - IF Personal Development (new career/retraining) → Assess case-by-case
+
+TEST 5: Statutory Bans?
+  - IF Penalties/Fines (S1304) → DISALLOWED - ADDBACK = 100%
+  - IF Depreciation (S53) → Use Capital Allowances instead - ADDBACK = 100%
+
+For this invoice, identify which test(s) apply and provide detailed outcomes.
+"""
+        else:
+            # SUPPLIER_INVOICE - simplified analysis
+            analysis_framework = """
+
+📋 APPLY SIMPLIFIED WHOLLY & EXCLUSIVELY ASSESSMENT:
+  - Is this expense incurred wholly and exclusively for business purposes?
+  - Standard deductibility assessment (no detailed multi-test framework required)
+"""
         
         invoice_text = f"""
 Invoice #{idx}
@@ -216,7 +255,7 @@ Supplier: {invoice.get('SupplierName') or invoice.get('VendorName') or 'Unknown'
 Amount: £{invoice.get('TotalAmount', '0')}
 Date: {invoice.get('InvoiceDate') or 'Unknown'}
 Description: {invoice.get('Description', 'No description available')}
-Line Items: {invoice.get('LineItems', 'Not available')}
+Line Items: {invoice.get('LineItems', 'Not available')}{analysis_framework}
 """
         invoice_list.append(invoice_text)
     
@@ -264,7 +303,7 @@ For each invoice, determine:
 REQUIRED XML FORMAT:
 
 <batch_analysis>
-  <invoice id="[EXACT_INVOICE_ID]">
+  <invoice id="[EXACT_INVOICE_ID]" type="EXPENSE_CLAIM|SUPPLIER_INVOICE">
     <deductibility_status>FULLY_DEDUCTIBLE|PARTIALLY_DEDUCTIBLE|NOT_DEDUCTIBLE|REQUIRES_REVIEW</deductibility_status>
     <deductibility_percentage>0-100 or null</deductibility_percentage>
     <bim_sections>BIM37000, BIM37600</bim_sections>
@@ -272,10 +311,24 @@ REQUIRED XML FORMAT:
     <reasoning>Detailed explanation referencing BIM guidance</reasoning>
     <documentation_required>List any additional documentation needed for audit defense</documentation_required>
     <recommended_action>APPROVE|REQUEST_DOCUMENTATION|APPORTION|REJECT</recommended_action>
+    
+    <!-- FOR EXPENSE_CLAIM ONLY: Include detailed test results -->
+    <compliance_tests>
+      <test_1_wholly_exclusively>PASS|FAIL|DUALITY</test_1_wholly_exclusively>
+      <test_2_entertainment>NOT_APPLICABLE|STAFF_ENTERTAINMENT|CLIENT_ENTERTAINMENT</test_2_entertainment>
+      <test_3_travel>NOT_APPLICABLE|BUSINESS_TRAVEL|COMMUTING</test_3_travel>
+      <test_4_training>NOT_APPLICABLE|WORK_RELATED|PERSONAL_DEVELOPMENT</test_4_training>
+      <test_5_statutory_ban>NOT_APPLICABLE|PENALTIES|DEPRECIATION</test_5_statutory_ban>
+      <addback_amount>0.00 or calculated amount</addback_amount>
+      <addback_reason>Explanation if addback > 0</addback_reason>
+    </compliance_tests>
   </invoice>
 </batch_analysis>
 
-Be conservative but fair. If genuinely unclear, mark REQUIRES_REVIEW rather than guessing.
+NOTES:
+- For SUPPLIER_INVOICE: Omit <compliance_tests> section, use simplified assessment
+- For EXPENSE_CLAIM: Complete all test fields, calculate addback where applicable
+- Be conservative but fair. If genuinely unclear, mark REQUIRES_REVIEW rather than guessing.
 """
     
     return prompt
@@ -378,6 +431,19 @@ def parse_analysis_with_regex(xml_result: str, invoice_batch: List[Dict]) -> Lis
             'ModelUsed': MODEL_ID
         })
         
+        # Extract compliance test results for EXPENSE_CLAIM invoices
+        test1 = extract_field('test_1_wholly_exclusively')
+        if test1:  # If compliance tests are present
+            analyzed_invoice.update({
+                'Test1_WhollyExclusively': test1,
+                'Test2_Entertainment': extract_field('test_2_entertainment'),
+                'Test3_Travel': extract_field('test_3_travel'),
+                'Test4_Training': extract_field('test_4_training'),
+                'Test5_StatutoryBan': extract_field('test_5_statutory_ban'),
+                'AddbackAmount': extract_field('addback_amount'),
+                'AddbackReason': extract_field('addback_reason')
+            })
+        
         analyzed_invoices.append(analyzed_invoice)
     
     return analyzed_invoices
@@ -424,6 +490,19 @@ def parse_analysis_from_xml(xml_result: str, invoice_batch: List[Dict]) -> List[
                 'AnalyzedAt': int(time.time()),
                 'ModelUsed': MODEL_ID
             })
+            
+            # Parse compliance tests for EXPENSE_CLAIM invoices
+            compliance_tests = invoice_elem.find('compliance_tests')
+            if compliance_tests is not None:
+                analyzed_invoice.update({
+                    'Test1_WhollyExclusively': get_text(compliance_tests, 'test_1_wholly_exclusively'),
+                    'Test2_Entertainment': get_text(compliance_tests, 'test_2_entertainment'),
+                    'Test3_Travel': get_text(compliance_tests, 'test_3_travel'),
+                    'Test4_Training': get_text(compliance_tests, 'test_4_training'),
+                    'Test5_StatutoryBan': get_text(compliance_tests, 'test_5_statutory_ban'),
+                    'AddbackAmount': get_text(compliance_tests, 'addback_amount'),
+                    'AddbackReason': get_text(compliance_tests, 'addback_reason')
+                })
             
             analyzed_invoices.append(analyzed_invoice)
         
@@ -532,6 +611,27 @@ def update_invoices_in_dynamodb(analyzed_invoices: List[Dict]):
                 ':analyzed_at': invoice.get('AnalyzedAt'),
                 ':model': invoice.get('ModelUsed')
             })
+            
+            # Add compliance test results if present (EXPENSE_CLAIM invoices)
+            if invoice.get('Test1_WhollyExclusively'):
+                update_expr += ''',
+                    Test1_WhollyExclusively = :test1,
+                    Test2_Entertainment = :test2,
+                    Test3_Travel = :test3,
+                    Test4_Training = :test4,
+                    Test5_StatutoryBan = :test5,
+                    AddbackAmount = :addback_amt,
+                    AddbackReason = :addback_reason
+                '''
+                expr_values.update({
+                    ':test1': invoice.get('Test1_WhollyExclusively'),
+                    ':test2': invoice.get('Test2_Entertainment'),
+                    ':test3': invoice.get('Test3_Travel'),
+                    ':test4': invoice.get('Test4_Training'),
+                    ':test5': invoice.get('Test5_StatutoryBan'),
+                    ':addback_amt': invoice.get('AddbackAmount'),
+                    ':addback_reason': invoice.get('AddbackReason')
+                })
             
             # Update with analysis fields
             extraction_table.update_item(

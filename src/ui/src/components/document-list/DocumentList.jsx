@@ -493,6 +493,32 @@ const DocumentList = () => {
           width: 120,
           sortingField: 'hmrcConcern',
         },
+        {
+          id: 'addback',
+          header: 'Tax Addback',
+          cell: (item) => {
+            // Only show for EXPENSE_CLAIM invoices with analyzed status
+            if (item.invoiceType !== 'EXPENSE_CLAIM' || !item.analysisStatus || item.analysisStatus === 'PENDING') {
+              return (
+                <Box color="text-status-inactive" variant="small">
+                  —
+                </Box>
+              );
+            }
+
+            const addbackAmount = item.rawData?.AddbackAmount;
+            if (addbackAmount && parseFloat(addbackAmount) > 0) {
+              return (
+                <Badge color="red">
+                  £{parseFloat(addbackAmount).toFixed(2)}
+                </Badge>
+              );
+            }
+
+            return <Badge color="green">None</Badge>;
+          },
+          width: 110,
+        },
       ]}
       items={invoiceItems}
       loading={isLoadingInvoices}
