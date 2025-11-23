@@ -386,61 +386,20 @@ const DocumentList = () => {
           },
         },
         {
-          id: 'status',
-          header: 'Status',
-          cell: (item) => <Badge color={getStatusVariant(item.status)}>{item.status}</Badge>,
-          width: 120,
-          sortingField: 'status',
-        },
-        {
-          id: 'confidence',
-          header: 'Confidence',
-          cell: (item) => (
-            <Badge
-              color={
-                item.qualityTier === 'EXCELLENT'
-                  ? 'green'
-                  : item.qualityTier === 'GOOD'
-                  ? 'blue'
-                  : item.qualityTier === 'ACCEPTABLE'
-                  ? 'grey'
-                  : 'red'
-              }
-            >
-              {item.confidence}
-            </Badge>
-          ),
-          width: 120,
-          sortingField: 'confidence',
-        },
-        {
-          id: 'quality',
-          header: 'Quality',
-          cell: (item) => (
-            <Badge
-              color={
-                item.qualityTier === 'EXCELLENT'
-                  ? 'green'
-                  : item.qualityTier === 'GOOD'
-                  ? 'blue'
-                  : item.qualityTier === 'ACCEPTABLE'
-                  ? 'grey'
-                  : 'red'
-              }
-            >
-              {item.qualityTier}
-            </Badge>
-          ),
-          width: 120,
-          sortingField: 'qualityTier',
-        },
-        {
-          id: 'hitl',
-          header: 'Review',
-          cell: (item) =>
-            item.hitlRequired ? <Badge color="red">HITL Required</Badge> : <Badge color="green">Auto-approved</Badge>,
+          id: 'analysisStatus',
+          header: 'Analysis Status',
+          cell: (item) => {
+            const status = item.analysisStatus || 'PENDING';
+            const colorMap = {
+              ANALYZED: 'green',
+              PENDING: 'grey',
+              FAILED: 'red',
+              IN_PROGRESS: 'blue',
+            };
+            return <Badge color={colorMap[status] || 'grey'}>{status}</Badge>;
+          },
           width: 130,
-          sortingField: 'hitlRequired',
+          sortingField: 'analysisStatus',
         },
         {
           id: 'deductibilityStatus',
@@ -492,6 +451,28 @@ const DocumentList = () => {
           },
           width: 120,
           sortingField: 'hmrcConcern',
+        },
+        {
+          id: 'addback',
+          header: 'Tax Addback',
+          cell: (item) => {
+            // Only show for EXPENSE_CLAIM invoices with analyzed status
+            if (item.invoiceType !== 'EXPENSE_CLAIM' || !item.analysisStatus || item.analysisStatus === 'PENDING') {
+              return (
+                <Box color="text-status-inactive" variant="small">
+                  —
+                </Box>
+              );
+            }
+
+            const addbackAmount = item.rawData?.AddbackAmount;
+            if (addbackAmount && parseFloat(addbackAmount) > 0) {
+              return <Badge color="red">£{parseFloat(addbackAmount).toFixed(2)}</Badge>;
+            }
+
+            return <Badge color="green">None</Badge>;
+          },
+          width: 110,
         },
       ]}
       items={invoiceItems}

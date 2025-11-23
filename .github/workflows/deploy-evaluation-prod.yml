@@ -1,0 +1,116 @@
+name: Deploy Evaluation Stack - Prod
+
+# Deploys evaluation stack to production when changes are detected
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'stacks/evaluation/**'
+  workflow_dispatch:
+
+env:
+  AWS_REGION: eu-central-1
+  EVALUATION_REGION: eu-central-1  # EU models for GDPR compliance
+  STACK_NAME: fiscalshield-idp-prod-evaluation
+  PRODUCTION_STACK: fiscalshield-idp-prod
+
+jobs:
+  deploy-evaluation:
+    name: Deploy Evaluation Stack
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 30
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: 🔐 Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_PROD }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_PROD }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: 📦 Install SAM CLI
+        run: |
+          python -m pip install --upgrade pip
+          pip install aws-sam-cli
+
+      - name: ✅ Verify production stack exists
+        run: |
+          echo "Checking for production stack: ${{ env.PRODUCTION_STACK }}"
+          aws cloudformation describe-stacks \
+            --stack-name ${{ env.PRODUCTION_STACK }} \
+            --region ${{ env.AWS_REGION }} \
+            --query 'Stacks[0].StackStatus' \
+            --output text
+          echo "✓ Production stack found"
+
+      - name: 🔨 Build evaluation stack
+        working-directory: stacks/evaluation
+        run: |
+          sam build --parallel --cached
+
+      - name: 🚀 Deploy evaluation stack
+        working-directory: stacks/evaluation
+        run: |
+          sam deploy \
+            --stack-name ${{ env.STACK_NAME }} \
+            --region ${{ env.AWS_REGION }} \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --parameter-overrides \
+              StackName=${{ env.PRODUCTION_STACK }} \
+              EvaluationRegion=${{ env.EVALUATION_REGION }} \
+              EvaluationModelId=eu.anthropic.claude-3-7-sonnet-20250219-v1:0 \
+              SamplingRate=10 \
+              LowConfidenceThreshold=0.7 \
+              MediumConfidenceSamplingRate=20 \
+              HighConfidenceSamplingRate=5 \
+              BatchInferenceEnabled=true \
+              EvaluationSchedule="cron(0 3 * * ? *)" \
+              LogLevel=INFO
+
+      - name: 📊 Deployment summary
+        if: success()
+        run: |
+          echo "✅ Production Evaluation Stack deployment complete!"
+          echo ""
+          echo "Stack Details:"
+          echo "  Name: ${{ env.STACK_NAME }}"
+          echo "  Region: ${{ env.AWS_REGION }}"
+          echo "  Evaluation Region: ${{ env.EVALUATION_REGION }} (EU for GDPR)"
+          echo "  Model: Claude 3.7 Sonnet (EU)"
+          echo ""
+          
+          # Get state machine ARN
+          STATE_MACHINE_ARN=$(aws cloudformation describe-stacks \
+            --stack-name ${{ env.STACK_NAME }} \
+            --region ${{ env.AWS_REGION }} \
+            --query 'Stacks[0].Outputs[?OutputKey==`EvaluationStateMachineArn`].OutputValue' \
+            --output text)
+          
+          echo "Resources:"
+          echo "  State Machine: $STATE_MACHINE_ARN"
+          echo "  Schedule: Daily at 3 AM UTC"
+          echo ""
+          echo "⚠️  Production Notes:"
+          echo "  - Using EU-based models for GDPR compliance"
+          echo "  - Batch inference requires 100+ documents minimum"
+          echo "  - Monitor costs via CloudWatch/Cost Explorer"
+
+      - name: ⚠️ Deployment failed
+        if: failure()
+        run: |
+          echo "❌ Production Evaluation Stack deployment failed!"
+          echo "Check the logs above for details."
+          exit 1

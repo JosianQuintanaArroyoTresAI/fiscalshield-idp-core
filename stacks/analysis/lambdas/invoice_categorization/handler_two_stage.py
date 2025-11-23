@@ -226,9 +226,8 @@ def invoke_bedrock(prompt: str, stage: str, max_retries: int = 3) -> str:
 
 
 def parse_stage1_classification(json_result: str, invoice_batch: List[Dict]) -> List[Dict]:
-    """Parse Stage 1 classification results with per-invoice error handling"""
+    """Parse Stage 1 classification results"""
     classified_invoices = []
-    failed_invoices = []
     
     try:
         json_text = json_result.strip()
@@ -240,63 +239,38 @@ def parse_stage1_classification(json_result: str, invoice_batch: List[Dict]) -> 
         classifications = data.get('classifications', [])
         
         for classification in classifications:
-            try:
-                invoice_id = classification.get('invoice_id')
-                original_invoice = next((inv for inv in invoice_batch if inv.get('InvoiceId') == invoice_id), None)
-                
-                if not original_invoice:
-                    print(f"[STAGE1] No match for {invoice_id}")
-                    continue
-                
-                classified_invoice = original_invoice.copy()
-                classified_invoice.update({
-                    'DeductibilityStatus': classification.get('status'),
-                    'DeductibilityPercentage': classification.get('percentage'),
-                    'DeductibilityReasoning': classification.get('reason'),
-                    'NeedsDeepTesting': classification.get('needs_deep_testing', False),
-                    'AnalysisStatus': 'ANALYZED',
-                    'AnalyzedAt': int(time.time()),
-                    'ModelUsed': MODEL_ID,
-                    'AnalysisStage': 'STAGE1_CLASSIFICATION'
-                })
-                
-                classified_invoices.append(classified_invoice)
-                
-            except Exception as invoice_error:
-                print(f"[STAGE1] Failed to process invoice {classification.get('invoice_id', 'unknown')}: {str(invoice_error)}")
-                # Mark invoice as failed but continue processing others
-                if original_invoice:
-                    failed_invoice = original_invoice.copy()
-                    failed_invoice.update({
-                        'AnalysisStatus': 'FAILED',
-                        'AnalysisError': f"Stage 1 parsing error: {str(invoice_error)}",
-                        'AnalyzedAt': int(time.time()),
-                        'AnalysisStage': 'STAGE1_CLASSIFICATION'
-                    })
-                    failed_invoices.append(failed_invoice)
-        
-        print(f"[STAGE1] Classified {len(classified_invoices)}/{len(invoice_batch)} invoices, {len(failed_invoices)} failed")
-        return classified_invoices + failed_invoices  # Return both successful and failed
-        
-    except Exception as e:
-        print(f"[ERROR] Stage 1 parsing completely failed: {str(e)}")
-        # Mark all invoices as failed if JSON parsing fails completely
-        for invoice in invoice_batch:
-            failed_invoice = invoice.copy()
-            failed_invoice.update({
-                'AnalysisStatus': 'FAILED',
-                'AnalysisError': f"Stage 1 JSON parsing failed: {str(e)}",
+            invoice_id = classification.get('invoice_id')
+            original_invoice = next((inv for inv in invoice_batch if inv.get('InvoiceId') == invoice_id), None)
+            
+            if not original_invoice:
+                print(f"[STAGE1] No match for {invoice_id}")
+                continue
+            
+            classified_invoice = original_invoice.copy()
+            classified_invoice.update({
+                'DeductibilityStatus': classification.get('status'),
+                'DeductibilityPercentage': classification.get('percentage'),
+                'DeductibilityReasoning': classification.get('reason'),
+                'NeedsDeepTesting': classification.get('needs_deep_testing', False),
+                'AnalysisStatus': 'ANALYZED',  # Mark as analyzed after Stage 1
                 'AnalyzedAt': int(time.time()),
+                'ModelUsed': MODEL_ID,
                 'AnalysisStage': 'STAGE1_CLASSIFICATION'
             })
-            failed_invoices.append(failed_invoice)
-        return failed_invoices
+            
+            classified_invoices.append(classified_invoice)
+        
+        print(f"[STAGE1] Classified {len(classified_invoices)}/{len(invoice_batch)} invoices")
+        return classified_invoices
+        
+    except Exception as e:
+        print(f"[ERROR] Stage 1 parsing failed: {str(e)}")
+        return []
 
 
 def parse_stage2_deep_testing(json_result: str, invoice_batch: List[Dict]) -> List[Dict]:
-    """Parse Stage 2 deep testing results with per-invoice error handling"""
+    """Parse Stage 2 deep testing results"""
     analyzed_invoices = []
-    failed_invoices = []
     
     try:
         json_text = json_result.strip()
@@ -308,94 +282,70 @@ def parse_stage2_deep_testing(json_result: str, invoice_batch: List[Dict]) -> Li
         analyses = data.get('analyses', [])
         
         for analysis in analyses:
-            try:
-                invoice_id = analysis.get('invoice_id')
-                original_invoice = next((inv for inv in invoice_batch if inv.get('InvoiceId') == invoice_id), None)
-                
-                if not original_invoice:
-                    print(f"[STAGE2] No match for {invoice_id}")
-                    continue
-                
-                analyzed_invoice = original_invoice.copy()
+            invoice_id = analysis.get('invoice_id')
+            original_invoice = next((inv for inv in invoice_batch if inv.get('InvoiceId') == invoice_id), None)
+            
+            if not original_invoice:
+                print(f"[STAGE2] No match for {invoice_id}")
+                continue
+            
+            analyzed_invoice = original_invoice.copy()
+            analyzed_invoice.update({
+                'DeductibilityStatus': analysis.get('status'),
+                'DeductibilityPercentage': analysis.get('percentage'),
+                'DeductibilityReasoning': analysis.get('reasoning'),
+                'BIMSections': analysis.get('bim_sections'),
+                'AnalysisStatus': 'ANALYZED',  # Re-confirm analyzed status
+                'AnalyzedAt': int(time.time()),
+                'ModelUsed': MODEL_ID,
+                'AnalysisStage': 'STAGE2_DEEP_TESTING'
+            })
+            
+            # Parse compliance tests
+            tests = analysis.get('tests', {})
+            if tests:
+                test1 = tests.get('test_1', {})
                 analyzed_invoice.update({
-                    'DeductibilityStatus': analysis.get('status'),
-                    'DeductibilityPercentage': analysis.get('percentage'),
-                    'DeductibilityReasoning': analysis.get('reasoning'),
-                    'BIMSections': analysis.get('bim_sections'),
-                    'AnalysisStatus': 'ANALYZED',
-                    'AnalyzedAt': int(time.time()),
-                    'ModelUsed': MODEL_ID,
-                    'AnalysisStage': 'STAGE2_DEEP_TESTING'
+                    'Test1_WhollyExclusively': test1.get('result'),
+                    'Test1_Reasoning': test1.get('reasoning'),
                 })
                 
-                # Parse compliance tests
-                tests = analysis.get('tests', {})
-                if tests:
-                    test1 = tests.get('test_1', {})
-                    analyzed_invoice.update({
-                        'Test1_WhollyExclusively': test1.get('result'),
-                        'Test1_Reasoning': test1.get('reasoning'),
-                    })
-                    
-                    # Tests 2-7 (for EXPENSE_CLAIM)
-                    for test_num in range(2, 8):
-                        test_key = f'test_{test_num}'
-                        test_data = tests.get(test_key, {})
-                        if test_data:
-                            if test_num == 2:
-                                analyzed_invoice['Test2_Entertainment'] = test_data.get('result')
-                            elif test_num == 3:
-                                analyzed_invoice['Test3_Travel'] = test_data.get('result')
-                            elif test_num == 4:
-                                analyzed_invoice['Test4_Training'] = test_data.get('result')
-                            elif test_num == 5:
-                                analyzed_invoice['Test5_StatutoryBan'] = test_data.get('result')
-                            elif test_num == 6:
-                                analyzed_invoice['Test6_MixedUse'] = test_data.get('result')
-                                analyzed_invoice['Test6_BusinessPercentage'] = test_data.get('business_pct')
-                            elif test_num == 7:
-                                analyzed_invoice['Test7_Duality'] = test_data.get('result')
-                    
-                    # Addback
-                    analyzed_invoice['AddbackAmount'] = tests.get('addback_amount')
+                # Tests 2-7 (for EXPENSE_CLAIM)
+                for test_num in range(2, 8):
+                    test_key = f'test_{test_num}'
+                    test_data = tests.get(test_key, {})
+                    if test_data:
+                        if test_num == 2:
+                            analyzed_invoice['Test2_Entertainment'] = test_data.get('result')
+                        elif test_num == 3:
+                            analyzed_invoice['Test3_Travel'] = test_data.get('result')
+                        elif test_num == 4:
+                            analyzed_invoice['Test4_Training'] = test_data.get('result')
+                        elif test_num == 5:
+                            analyzed_invoice['Test5_StatutoryBan'] = test_data.get('result')
+                        elif test_num == 6:
+                            analyzed_invoice['Test6_MixedUse'] = test_data.get('result')
+                            analyzed_invoice['Test6_BusinessPercentage'] = test_data.get('business_pct')
+                        elif test_num == 7:
+                            analyzed_invoice['Test7_Duality'] = test_data.get('result')
                 
-                analyzed_invoices.append(analyzed_invoice)
-                
-            except Exception as invoice_error:
-                print(f"[STAGE2] Failed to process invoice {analysis.get('invoice_id', 'unknown')}: {str(invoice_error)}")
-                # Keep Stage 1 results but mark Stage 2 as failed
-                if original_invoice:
-                    failed_invoice = original_invoice.copy()
-                    failed_invoice.update({
-                        'AnalysisError': f"Stage 2 parsing error: {str(invoice_error)}",
-                        'AnalyzedAt': int(time.time()),
-                        'AnalysisStage': 'STAGE2_DEEP_TESTING_FAILED'
-                    })
-                    failed_invoices.append(failed_invoice)
+                # Addback
+                analyzed_invoice['AddbackAmount'] = tests.get('addback_amount')
+            
+            analyzed_invoices.append(analyzed_invoice)
         
-        print(f"[STAGE2] Deep tested {len(analyzed_invoices)}/{len(invoice_batch)} invoices, {len(failed_invoices)} failed")
-        return analyzed_invoices + failed_invoices  # Return both successful and failed
+        print(f"[STAGE2] Deep tested {len(analyzed_invoices)}/{len(invoice_batch)} invoices")
+        return analyzed_invoices
         
     except Exception as e:
-        print(f"[ERROR] Stage 2 parsing completely failed: {str(e)}")
-        # Keep Stage 1 results for all invoices but log Stage 2 failure
-        for invoice in invoice_batch:
-            failed_invoice = invoice.copy()
-            failed_invoice.update({
-                'AnalysisError': f"Stage 2 JSON parsing failed: {str(e)}",
-                'AnalyzedAt': int(time.time()),
-                'AnalysisStage': 'STAGE2_DEEP_TESTING_FAILED'
-            })
-            failed_invoices.append(failed_invoice)
-        return failed_invoices
+        print(f"[ERROR] Stage 2 parsing failed: {str(e)}")
+        return []
 
 
 def update_invoices_in_dynamodb(invoices: List[Dict], stage: str):
-    """Update invoices in DynamoDB after analysis stage with per-invoice error handling"""
+    """Update invoices in DynamoDB after analysis stage"""
     
     extraction_table = dynamodb.Table(EXTRACTION_RESULTS_TABLE)
-    success_count = 0
-    failure_count = 0
     
     for invoice in invoices:
         try:
@@ -404,7 +354,6 @@ def update_invoices_in_dynamodb(invoices: List[Dict], stage: str):
             
             if not pk or not sk:
                 print(f"[{stage}] Missing PK/SK for {invoice.get('InvoiceId')}")
-                failure_count += 1
                 continue
             
             # Handle null percentage
@@ -465,15 +414,10 @@ def update_invoices_in_dynamodb(invoices: List[Dict], stage: str):
                 ExpressionAttributeValues=expr_values
             )
             
-            success_count += 1
             print(f"[{stage}] Updated {invoice.get('InvoiceId')} - {invoice.get('DeductibilityStatus')}")
             
         except Exception as e:
-            failure_count += 1
             print(f"[ERROR] Failed to update {invoice.get('InvoiceId')}: {str(e)}")
-            # Continue processing other invoices
-    
-    print(f"[{stage}] DynamoDB updates: {success_count} succeeded, {failure_count} failed")
 
 
 def lambda_handler(event, context):

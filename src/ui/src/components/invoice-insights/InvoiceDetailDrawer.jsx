@@ -226,25 +226,50 @@ const InvoiceDetailDrawer = ({ invoice, visible, onDismiss }) => {
                   </Badge>
                 </div>
                 <div>
+                  <Box variant="awsui-key-label">Confidence Level</Box>
+                  <Badge
+                    color={
+                      rawData.DeductibilityConfidence === 'HIGH'
+                        ? 'green'
+                        : rawData.DeductibilityConfidence === 'MEDIUM'
+                        ? 'blue'
+                        : 'grey'
+                    }
+                  >
+                    {rawData.DeductibilityConfidence || 'N/A'}
+                  </Badge>
+                </div>
+                <div>
                   <Box variant="awsui-key-label">Tax Savings (19% CT)</Box>
                   <Box fontSize="heading-m" fontWeight="bold" color="text-status-success">
                     {calculateTaxSavings(invoice.amount, rawData.DeductibilityPercentage)}
                   </Box>
                 </div>
+              </ColumnLayout>
+
+              <ColumnLayout columns={2} variant="text-grid">
                 <div>
                   <Box variant="awsui-key-label">HMRC Risk</Box>
                   <Badge color={rawData.HMRCConcern ? 'red' : 'green'}>
                     {rawData.HMRCConcern ? 'High Risk' : 'Low Risk'}
                   </Badge>
                 </div>
+                <div>
+                  <Box variant="awsui-key-label">Recommended Action</Box>
+                  <Badge color={getRecommendedActionColor(rawData.RecommendedAction)}>
+                    {rawData.RecommendedAction?.replace(/_/g, ' ') || 'N/A'}
+                  </Badge>
+                </div>
               </ColumnLayout>
 
-              <div>
-                <Box variant="awsui-key-label">Recommended Action</Box>
-                <Badge color={getRecommendedActionColor(rawData.RecommendedAction)}>
-                  {rawData.RecommendedAction?.replace(/_/g, ' ') || 'N/A'}
-                </Badge>
-              </div>
+              {rawData.DeductibilityReasoning && (
+                <div>
+                  <Box variant="awsui-key-label">Tax Analysis</Box>
+                  <Box variant="p" padding={{ top: 'xs' }}>
+                    {rawData.DeductibilityReasoning}
+                  </Box>
+                </div>
+              )}
 
               {rawData.HMRCConcern && (
                 <Alert type="error" header="HMRC Compliance Risk">
@@ -258,26 +283,16 @@ const InvoiceDetailDrawer = ({ invoice, visible, onDismiss }) => {
         {/* HMRC Guidance (BIM Sections) */}
         {isAnalyzed && rawData.BIMSections && (
           <Container header={<Header variant="h3">HMRC Guidance Applied</Header>}>
-            <SpaceBetween size="m">
-              <div>
-                <Box variant="awsui-key-label">Business Income Manual (BIM) Sections</Box>
-                <SpaceBetween direction="horizontal" size="xs">
-                  {rawData.BIMSections.split(',').map((section, idx) => (
-                    <Badge key={idx} color="blue">
-                      {section.trim()}
-                    </Badge>
-                  ))}
-                </SpaceBetween>
-              </div>
-              {rawData.DeductibilityReasoning && (
-                <div>
-                  <Box variant="awsui-key-label">AI Tax Analysis</Box>
-                  <Box variant="p" color="text-body-secondary">
-                    {rawData.DeductibilityReasoning}
-                  </Box>
-                </div>
-              )}
-            </SpaceBetween>
+            <div>
+              <Box variant="awsui-key-label">Business Income Manual (BIM) Sections</Box>
+              <SpaceBetween direction="horizontal" size="xs">
+                {rawData.BIMSections.split(',').map((section, idx) => (
+                  <Badge key={idx} color="blue">
+                    {section.trim()}
+                  </Badge>
+                ))}
+              </SpaceBetween>
+            </div>
           </Container>
         )}
 
@@ -287,6 +302,271 @@ const InvoiceDetailDrawer = ({ invoice, visible, onDismiss }) => {
             <Alert type="warning" header="Additional Documentation Required">
               {rawData.DocumentationRequired}
             </Alert>
+          </Container>
+        )}
+
+        {/* Compliance Tests - For EXPENSE_CLAIM only */}
+        {isAnalyzed && invoice.invoiceType === 'EXPENSE_CLAIM' && rawData.Test1_WhollyExclusively && (
+          <Container header={<Header variant="h3">Statutory Compliance Tests</Header>}>
+            <SpaceBetween size="m">
+              <Alert type="info" header="Multi-Test Framework Applied">
+                This expense claim has been assessed using the full UK statutory compliance framework with 7 specific
+                tests.
+              </Alert>
+
+              <ColumnLayout columns={2} variant="text-grid">
+                <div>
+                  <Box variant="awsui-key-label">TEST 1: Wholly & Exclusively (S54 CTA 2009)</Box>
+                  <SpaceBetween direction="horizontal" size="xs">
+                    <Badge
+                      color={
+                        rawData.Test1_WhollyExclusively === 'PASS'
+                          ? 'green'
+                          : rawData.Test1_WhollyExclusively === 'FAIL'
+                          ? 'red'
+                          : 'grey'
+                      }
+                    >
+                      {rawData.Test1_WhollyExclusively || 'N/A'}
+                    </Badge>
+                    {rawData.Test1_Confidence && (
+                      <Badge
+                        color={
+                          rawData.Test1_Confidence === 'HIGH'
+                            ? 'green'
+                            : rawData.Test1_Confidence === 'MEDIUM'
+                            ? 'blue'
+                            : 'grey'
+                        }
+                      >
+                        {rawData.Test1_Confidence}
+                      </Badge>
+                    )}
+                  </SpaceBetween>
+                  {rawData.Test1_Reasoning && (
+                    <Box variant="small" color="text-body-secondary" padding={{ top: 'xxs' }}>
+                      {rawData.Test1_Reasoning}
+                    </Box>
+                  )}
+                </div>
+
+                <div>
+                  <Box variant="awsui-key-label">TEST 2: Entertainment (S45-47 CTA 2009)</Box>
+                  <SpaceBetween direction="horizontal" size="xs">
+                    <Badge
+                      color={
+                        rawData.Test2_Entertainment === 'STAFF_ENTERTAINMENT'
+                          ? 'green'
+                          : rawData.Test2_Entertainment === 'CLIENT_ENTERTAINMENT'
+                          ? 'red'
+                          : 'grey'
+                      }
+                    >
+                      {rawData.Test2_Entertainment?.replace(/_/g, ' ') || 'NOT APPLICABLE'}
+                    </Badge>
+                    {rawData.Test2_Confidence && (
+                      <Badge
+                        color={
+                          rawData.Test2_Confidence === 'HIGH'
+                            ? 'green'
+                            : rawData.Test2_Confidence === 'MEDIUM'
+                            ? 'blue'
+                            : 'grey'
+                        }
+                      >
+                        {rawData.Test2_Confidence}
+                      </Badge>
+                    )}
+                  </SpaceBetween>
+                  {rawData.Test2_Reasoning && (
+                    <Box variant="small" color="text-body-secondary" padding={{ top: 'xxs' }}>
+                      {rawData.Test2_Reasoning}
+                    </Box>
+                  )}
+                </div>
+
+                <div>
+                  <Box variant="awsui-key-label">TEST 3: Travel (S54 CTA + S38 ITEPA)</Box>
+                  <SpaceBetween direction="horizontal" size="xs">
+                    <Badge
+                      color={
+                        rawData.Test3_Travel === 'BUSINESS_TRAVEL'
+                          ? 'green'
+                          : rawData.Test3_Travel === 'COMMUTING'
+                          ? 'red'
+                          : 'grey'
+                      }
+                    >
+                      {rawData.Test3_Travel?.replace(/_/g, ' ') || 'NOT APPLICABLE'}
+                    </Badge>
+                    {rawData.Test3_Confidence && (
+                      <Badge
+                        color={
+                          rawData.Test3_Confidence === 'HIGH'
+                            ? 'green'
+                            : rawData.Test3_Confidence === 'MEDIUM'
+                            ? 'blue'
+                            : 'grey'
+                        }
+                      >
+                        {rawData.Test3_Confidence}
+                      </Badge>
+                    )}
+                  </SpaceBetween>
+                  {rawData.Test3_Reasoning && (
+                    <Box variant="small" color="text-body-secondary" padding={{ top: 'xxs' }}>
+                      {rawData.Test3_Reasoning}
+                    </Box>
+                  )}
+                </div>
+
+                <div>
+                  <Box variant="awsui-key-label">TEST 4: Training (S74 CTA)</Box>
+                  <SpaceBetween direction="horizontal" size="xs">
+                    <Badge
+                      color={
+                        rawData.Test4_Training === 'WORK_RELATED'
+                          ? 'green'
+                          : rawData.Test4_Training === 'PERSONAL_DEVELOPMENT'
+                          ? 'blue'
+                          : 'grey'
+                      }
+                    >
+                      {rawData.Test4_Training?.replace(/_/g, ' ') || 'NOT APPLICABLE'}
+                    </Badge>
+                    {rawData.Test4_Confidence && (
+                      <Badge
+                        color={
+                          rawData.Test4_Confidence === 'HIGH'
+                            ? 'green'
+                            : rawData.Test4_Confidence === 'MEDIUM'
+                            ? 'blue'
+                            : 'grey'
+                        }
+                      >
+                        {rawData.Test4_Confidence}
+                      </Badge>
+                    )}
+                  </SpaceBetween>
+                  {rawData.Test4_Reasoning && (
+                    <Box variant="small" color="text-body-secondary" padding={{ top: 'xxs' }}>
+                      {rawData.Test4_Reasoning}
+                    </Box>
+                  )}
+                </div>
+
+                <div>
+                  <Box variant="awsui-key-label">TEST 5: Statutory Ban</Box>
+                  <Badge
+                    color={
+                      rawData.Test5_StatutoryBan === 'NOT_APPLICABLE'
+                        ? 'green'
+                        : rawData.Test5_StatutoryBan === 'PENALTIES' || rawData.Test5_StatutoryBan === 'DEPRECIATION'
+                        ? 'red'
+                        : 'grey'
+                    }
+                  >
+                    {rawData.Test5_StatutoryBan?.replace(/_/g, ' ') || 'NOT APPLICABLE'}
+                  </Badge>
+                </div>
+              </ColumnLayout>
+
+              {/* Test 6: Mixed Use */}
+              {rawData.Test6_MixedUse && rawData.Test6_MixedUse !== 'NOT_APPLICABLE' && (
+                <Container>
+                  <SpaceBetween size="s">
+                    <div>
+                      <Box variant="awsui-key-label">TEST 6: Mixed Use / Apportionable (S54(2))</Box>
+                      <SpaceBetween direction="horizontal" size="xs">
+                        <Badge color={rawData.Test6_MixedUse === 'APPORTIONABLE' ? 'blue' : 'green'}>
+                          {rawData.Test6_MixedUse?.replace(/_/g, ' ')}
+                        </Badge>
+                        {rawData.Test6_Confidence && (
+                          <Badge
+                            color={
+                              rawData.Test6_Confidence === 'HIGH'
+                                ? 'green'
+                                : rawData.Test6_Confidence === 'MEDIUM'
+                                ? 'blue'
+                                : 'grey'
+                            }
+                          >
+                            Confidence: {rawData.Test6_Confidence}
+                          </Badge>
+                        )}
+                      </SpaceBetween>
+                    </div>
+
+                    {rawData.Test6_BusinessPercentage && (
+                      <div>
+                        <Box variant="awsui-key-label">Business Use Percentage</Box>
+                        <Box fontSize="heading-m" fontWeight="bold">
+                          {rawData.Test6_BusinessPercentage}%
+                        </Box>
+                      </div>
+                    )}
+
+                    {rawData.Test6_Reasoning && (
+                      <div>
+                        <Box variant="awsui-key-label">Apportionment Basis</Box>
+                        <Box variant="p" color="text-body-secondary">
+                          {rawData.Test6_Reasoning}
+                        </Box>
+                      </div>
+                    )}
+
+                    {rawData.Test6_DocumentationNeeded && (
+                      <Alert type="warning" header="Verification Required">
+                        {rawData.Test6_DocumentationNeeded}
+                      </Alert>
+                    )}
+                  </SpaceBetween>
+                </Container>
+              )}
+
+              {/* Test 7: Duality */}
+              <div>
+                <Box variant="awsui-key-label">TEST 7: Duality of Purpose (S54(2))</Box>
+                <SpaceBetween direction="horizontal" size="xs">
+                  <Badge
+                    color={
+                      rawData.Test7_Duality === 'PASS' ? 'green' : rawData.Test7_Duality === 'FAIL' ? 'red' : 'grey'
+                    }
+                  >
+                    {rawData.Test7_Duality || 'N/A'}
+                  </Badge>
+                  {rawData.Test7_Confidence && (
+                    <Badge
+                      color={
+                        rawData.Test7_Confidence === 'HIGH'
+                          ? 'green'
+                          : rawData.Test7_Confidence === 'MEDIUM'
+                          ? 'blue'
+                          : 'grey'
+                      }
+                    >
+                      {rawData.Test7_Confidence}
+                    </Badge>
+                  )}
+                </SpaceBetween>
+                {rawData.Test7_Reasoning && (
+                  <Box variant="small" color="text-body-secondary" padding={{ top: 'xxs' }}>
+                    {rawData.Test7_Reasoning}
+                  </Box>
+                )}
+              </div>
+
+              {rawData.AddbackAmount && parseFloat(rawData.AddbackAmount) > 0 && (
+                <Alert type="warning" header={`Tax Addback Required: £${rawData.AddbackAmount}`}>
+                  <SpaceBetween size="xs">
+                    <Box variant="p">{rawData.AddbackReason}</Box>
+                    <Box variant="small" color="text-status-error">
+                      This amount must be added back to taxable profits.
+                    </Box>
+                  </SpaceBetween>
+                </Alert>
+              )}
+            </SpaceBetween>
           </Container>
         )}
 

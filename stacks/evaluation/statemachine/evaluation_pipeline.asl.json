@@ -1,0 +1,154 @@
+{
+  "Comment": "Evaluation Pipeline State Machine - Samples, re-evaluates, and compares extraction results",
+  "StartAt": "SampleDocuments",
+  "States": {
+    "SampleDocuments": {
+      "Type": "Task",
+      "Resource": "${SamplerFunctionArn}",
+      "Comment": "Sample documents based on confidence scores",
+      "ResultPath": "$.samplingResult",
+      "Next": "CheckSampleCount",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "HandleSamplingError"
+        }
+      ]
+    },
+    
+    "CheckSampleCount": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.samplingResult.totalDocuments",
+          "NumericEquals": 0,
+          "Next": "NoDocumentsToEvaluate"
+        }
+      ],
+      "Default": "DecideBatchOrDirect"
+    },
+    
+    "NoDocumentsToEvaluate": {
+      "Type": "Succeed",
+      "Comment": "No documents sampled for evaluation"
+    },
+    
+    "DecideBatchOrDirect": {
+      "Type": "Choice",
+      "Comment": "Decide between batch inference or direct processing",
+      "Choices": [
+        {
+          "Variable": "$.samplingResult.useBatchInference",
+          "BooleanEquals": true,
+          "Next": "SubmitBatchJob"
+        }
+      ],
+      "Default": "DirectReEvaluation"
+    },
+    
+    "SubmitBatchJob": {
+      "Type": "Task",
+      "Resource": "${ReEvaluationFunctionArn}",
+      "Comment": "Submit batch inference job to Bedrock",
+      "Parameters": {
+        "mode": "batch",
+        "batchMetadata.$": "$.samplingResult.batchMetadata"
+      },
+      "ResultPath": "$.batchJob",
+      "Next": "WaitForBatchCompletion"
+    },
+    
+    "WaitForBatchCompletion": {
+      "Type": "Wait",
+      "Seconds": 3600,
+      "Comment": "Wait 1 hour before checking batch job status",
+      "Next": "CheckBatchStatus"
+    },
+    
+    "CheckBatchStatus": {
+      "Type": "Task",
+      "Resource": "${BatchJobMonitorFunctionArn}",
+      "Comment": "Check if batch job is complete",
+      "ResultPath": "$.batchStatus",
+      "Next": "IsBatchComplete"
+    },
+    
+    "IsBatchComplete": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.batchStatus.status",
+          "StringEquals": "COMPLETED",
+          "Next": "CompareResults"
+        },
+        {
+          "Variable": "$.batchStatus.status",
+          "StringEquals": "FAILED",
+          "Next": "BatchJobFailed"
+        }
+      ],
+      "Default": "WaitForBatchCompletion"
+    },
+    
+    "DirectReEvaluation": {
+      "Type": "Task",
+      "Resource": "${ReEvaluationFunctionArn}",
+      "Comment": "Re-evaluate documents directly (on-demand inference)",
+      "Parameters": {
+        "mode": "direct",
+        "batchMetadata.$": "$.samplingResult.batchMetadata"
+      },
+      "ResultPath": "$.reEvaluationResult",
+      "Next": "CompareResults",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "HandleReEvaluationError"
+        }
+      ]
+    },
+    
+    "CompareResults": {
+      "Type": "Task",
+      "Resource": "${ComparatorFunctionArn}",
+      "Comment": "Compare baseline vs evaluation results field-by-field",
+      "Parameters": {
+        "evaluationId.$": "$.samplingResult.batchMetadata.evaluationId",
+        "mode.$": "$.mode"
+      },
+      "ResultPath": "$.comparisonResult",
+      "Next": "EvaluationComplete"
+    },
+    
+    "EvaluationComplete": {
+      "Type": "Succeed",
+      "Comment": "Evaluation pipeline completed successfully"
+    },
+    
+    "HandleSamplingError": {
+      "Type": "Pass",
+      "Result": "Sampling failed",
+      "Next": "EvaluationFailed"
+    },
+    
+    "HandleReEvaluationError": {
+      "Type": "Pass",
+      "Result": "Re-evaluation failed",
+      "Next": "EvaluationFailed"
+    },
+    
+    "BatchJobFailed": {
+      "Type": "Pass",
+      "Result": "Batch job failed",
+      "Next": "EvaluationFailed"
+    },
+    
+    "EvaluationFailed": {
+      "Type": "Fail",
+      "Error": "EvaluationPipelineError",
+      "Cause": "One or more evaluation steps failed"
+    }
+  }
+}

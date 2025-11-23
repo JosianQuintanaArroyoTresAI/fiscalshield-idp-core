@@ -16,7 +16,7 @@ dynamodb = boto3.resource('dynamodb')
 
 # Environment variables
 EXTRACTION_RESULTS_TABLE = os.environ.get('EXTRACTION_RESULTS_TABLE')
-BATCH_SIZE = int(os.environ.get('BATCH_SIZE', '10'))  # Invoices per batch (smaller than transactions due to longer content)
+BATCH_SIZE = int(os.environ.get('BATCH_SIZE', '8'))  # Reduced to 8 to prevent XML truncation (was 10)
 
 
 class DecimalEncoder(json.JSONEncoder):
@@ -38,7 +38,9 @@ def query_pending_invoices(company_number: str, user_id: str, max_items: int = 1
         max_items: Maximum number of items to fetch (default 1000)
     
     Returns:
-        List of pending invoices (AnalysisStatus is None or 'PENDING')
+        List of pending invoices (AnalysisStatus is None, 'PENDING', or 'FAILED')
+        FAILED invoices are included to allow automatic retry (up to max attempts)
+        FAILED_PERMANENT invoices are excluded (max retries exceeded)
     """
     
     extraction_table = dynamodb.Table(EXTRACTION_RESULTS_TABLE)
@@ -54,10 +56,12 @@ def query_pending_invoices(company_number: str, user_id: str, max_items: int = 1
             query_params = {
                 'IndexName': 'GSI7-ClientTypeDate',
                 'KeyConditionExpression': 'GSI6PK = :gsi6pk',
-                'FilterExpression': '(attribute_not_exists(AnalysisStatus) OR AnalysisStatus = :status)',
+                'FilterExpression': '(attribute_not_exists(AnalysisStatus) OR AnalysisStatus = :pending OR AnalysisStatus = :failed) AND (attribute_not_exists(AnalysisStatus) OR AnalysisStatus <> :failed_perm)',
                 'ExpressionAttributeValues': {
                     ':gsi6pk': f"client#{company_number}#type#INVOICE",
-                    ':status': 'PENDING'
+                    ':pending': 'PENDING',
+                    ':failed': 'FAILED',
+                    ':failed_perm': 'FAILED_PERMANENT'
                 }
             }
             
