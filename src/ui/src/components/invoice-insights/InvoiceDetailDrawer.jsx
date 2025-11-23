@@ -262,6 +262,15 @@ const InvoiceDetailDrawer = ({ invoice, visible, onDismiss }) => {
                 </div>
               </ColumnLayout>
 
+              {rawData.DeductibilityReasoning && (
+                <div>
+                  <Box variant="awsui-key-label">Tax Analysis</Box>
+                  <Box variant="p" padding={{ top: 'xs' }}>
+                    {rawData.DeductibilityReasoning}
+                  </Box>
+                </div>
+              )}
+
               {rawData.HMRCConcern && (
                 <Alert type="error" header="HMRC Compliance Risk">
                   This expense may attract HMRC scrutiny. Ensure proper documentation is maintained.
@@ -274,26 +283,16 @@ const InvoiceDetailDrawer = ({ invoice, visible, onDismiss }) => {
         {/* HMRC Guidance (BIM Sections) */}
         {isAnalyzed && rawData.BIMSections && (
           <Container header={<Header variant="h3">HMRC Guidance Applied</Header>}>
-            <SpaceBetween size="m">
-              <div>
-                <Box variant="awsui-key-label">Business Income Manual (BIM) Sections</Box>
-                <SpaceBetween direction="horizontal" size="xs">
-                  {rawData.BIMSections.split(',').map((section, idx) => (
-                    <Badge key={idx} color="blue">
-                      {section.trim()}
-                    </Badge>
-                  ))}
-                </SpaceBetween>
-              </div>
-              {rawData.DeductibilityReasoning && (
-                <div>
-                  <Box variant="awsui-key-label">AI Tax Analysis</Box>
-                  <Box variant="p" color="text-body-secondary">
-                    {rawData.DeductibilityReasoning}
-                  </Box>
-                </div>
-              )}
-            </SpaceBetween>
+            <div>
+              <Box variant="awsui-key-label">Business Income Manual (BIM) Sections</Box>
+              <SpaceBetween direction="horizontal" size="xs">
+                {rawData.BIMSections.split(',').map((section, idx) => (
+                  <Badge key={idx} color="blue">
+                    {section.trim()}
+                  </Badge>
+                ))}
+              </SpaceBetween>
+            </div>
           </Container>
         )}
 
