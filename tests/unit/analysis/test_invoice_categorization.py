@@ -19,6 +19,9 @@ from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 from decimal import Decimal
 
+# Mock AWS services BEFORE importing handler (boto3 not available in test environment)
+sys.modules['boto3'] = MagicMock()
+
 # Add invoice categorization handler to path
 CATEGORIZATION_PATH = Path(__file__).parent.parent.parent.parent / 'stacks' / 'analysis' / 'lambdas' / 'invoice_categorization'
 sys.path.insert(0, str(CATEGORIZATION_PATH))
