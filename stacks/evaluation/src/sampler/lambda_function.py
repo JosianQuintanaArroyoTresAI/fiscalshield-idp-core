@@ -315,10 +315,14 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         logger.info(f"Evaluation batch prepared: {batch_metadata['evaluationId']}")
         
+        # Check if batch inference is enabled from environment
+        use_batch = os.environ.get("BATCH_INFERENCE_ENABLED", "true").lower() == "true"
+        
         return {
             "statusCode": 200,
             "batchMetadata": batch_metadata,
-            "totalDocuments": batch_metadata["totalDocuments"]
+            "totalDocuments": batch_metadata["totalDocuments"],
+            "useBatchInference": use_batch
         }
     
     except Exception as e:

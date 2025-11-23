@@ -39,8 +39,8 @@
       "Comment": "Decide between batch inference or direct processing",
       "Choices": [
         {
-          "Variable": "${UseBatchInference}",
-          "StringEquals": "true",
+          "Variable": "$.samplingResult.useBatchInference",
+          "BooleanEquals": true,
           "Next": "SubmitBatchJob"
         }
       ],

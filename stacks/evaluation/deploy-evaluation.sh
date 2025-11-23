@@ -97,7 +97,7 @@ sam deploy \
         MediumConfidenceSamplingRate=20 \
         HighConfidenceSamplingRate=5 \
         BatchInferenceEnabled="${BATCH_ENABLED}" \
-        EvaluationSchedule="cron(0 2 * * ? *)" \
+        EvaluationSchedule="'cron(0 2 * * ? *)'" \
         LogLevel=INFO \
     --capabilities CAPABILITY_NAMED_IAM \
     --resolve-s3 \

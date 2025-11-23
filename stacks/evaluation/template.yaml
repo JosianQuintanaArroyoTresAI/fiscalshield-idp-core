@@ -364,6 +364,7 @@ Resources:
           LOW_CONFIDENCE_THRESHOLD: !Ref LowConfidenceThreshold
           MEDIUM_SAMPLING_RATE: !Ref MediumConfidenceSamplingRate
           HIGH_SAMPLING_RATE: !Ref HighConfidenceSamplingRate
+          BATCH_INFERENCE_ENABLED: !Ref BatchInferenceEnabled
           LOG_LEVEL: !Ref LogLevel
 
   ComparatorFunction:
@@ -456,7 +457,7 @@ Resources:
     Type: AWS::Serverless::StateMachine
     Properties:
       Name: !Sub "${StackName}-EvaluationPipeline"
-      RoleArn: !GetAtt EvaluationStateMachineRole.Arn
+      Role: !GetAtt EvaluationStateMachineRole.Arn
       DefinitionUri: statemachine/evaluation_pipeline.asl.json
       DefinitionSubstitutions:
         SamplerFunctionArn: !GetAtt SamplerFunction.Arn
@@ -492,7 +493,7 @@ Resources:
                   - states:StartExecution
                 Resource: !GetAtt EvaluationStateMachine.Arn
 
-  EvaluationSchedule:
+  EvaluationScheduleResource:
     Type: AWS::Scheduler::Schedule
     Properties:
       Name: !Sub "${StackName}-EvaluationSchedule"
