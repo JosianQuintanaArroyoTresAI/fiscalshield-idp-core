@@ -20,7 +20,12 @@ from unittest.mock import Mock, patch, MagicMock
 from decimal import Decimal
 
 # Mock AWS services BEFORE importing handler (boto3 not available in test environment)
-sys.modules['boto3'] = MagicMock()
+mock_boto3 = MagicMock()
+mock_dynamodb = MagicMock()
+mock_bedrock = MagicMock()
+mock_boto3.resource.return_value = mock_dynamodb
+mock_boto3.client.return_value = mock_bedrock
+sys.modules['boto3'] = mock_boto3
 
 # Add invoice categorization handler to path
 CATEGORIZATION_PATH = Path(__file__).parent.parent.parent.parent / 'stacks' / 'analysis' / 'lambdas' / 'invoice_categorization'
