@@ -219,14 +219,17 @@ TEST 1: S54 CTA 2009 - Wholly and Exclusively?
   - Is the sole purpose of this expense for the trade?
   - YES → Continue to specific tests (2-5)
   - NO → Mark for TEST 7 (Duality assessment)
+  - Add confidence if uncertain (e.g., limited invoice description)
 
 TEST 2: Entertainment? (S45-47 CTA 2009)
   - IF Staff Entertainment → DEDUCTIBLE (S45(2))
   - IF Client Entertainment → DISALLOWED (S45) - ADDBACK = 100%
+  - Add confidence if unclear from invoice description
 
 TEST 3: Travel Expense? (S54 CTA + S38 ITEPA)
   - IF Business Travel → DEDUCTIBLE (S54)
   - IF Commuting (home to regular workplace) → DISALLOWED (S38 ITEPA) - ADDBACK = 100%
+  - Add confidence if destination/purpose unclear
 
 TEST 4: Training? (S74 CTA)
   - IF Work-Related (enhances current skills) → DEDUCTIBLE (S74)
@@ -236,7 +239,27 @@ TEST 5: Statutory Bans?
   - IF Penalties/Fines (S1304) → DISALLOWED - ADDBACK = 100%
   - IF Depreciation (S53) → Use Capital Allowances instead - ADDBACK = 100%
 
-For this invoice, identify which test(s) apply and provide detailed outcomes.
+TEST 6: Mixed Use / Apportionable? (S54(2))
+  - Does this expense have BOTH business and personal use?
+  - Examples: Home office, car, mobile phone, internet
+  - IF YES → Estimate business use % based on available information
+  - ALWAYS mark as LOW confidence unless invoice provides usage data
+  - Calculate: ADDBACK = Total × (1 - Business_Use_%)
+  - Specify what documentation is needed to verify the %
+
+TEST 7: Duality of Purpose? (S54(2))
+  - Does the expense have inherently DUAL objectives (business AND personal benefit)?
+  - Key case: Mallalieu v Drummond - expense must be for business ONLY
+  - Examples of duality: Business suit (professional + personal clothing), Gym membership (health + stress relief)
+  - IF Dual Purpose = TRUE → ADDBACK = 100% (entire expense disallowed)
+  - IF Passes duality test → Continue to deduction
+
+CONFIDENCE LEVELS:
+  - HIGH: Clear evidence in invoice (e.g., "Staff Christmas Party", "Train to client meeting with receipt")
+  - MEDIUM: Reasonable inference from description (e.g., "Fuel" for business vehicle)
+  - LOW: Insufficient information, requires verification (e.g., "Mobile phone" without usage breakdown)
+
+For this invoice, identify which test(s) apply and provide detailed outcomes with confidence levels where appropriate.
 """
         else:
             # SUPPLIER_INVOICE - simplified analysis
@@ -306,29 +329,55 @@ REQUIRED XML FORMAT:
   <invoice id="[EXACT_INVOICE_ID]" type="EXPENSE_CLAIM|SUPPLIER_INVOICE">
     <deductibility_status>FULLY_DEDUCTIBLE|PARTIALLY_DEDUCTIBLE|NOT_DEDUCTIBLE|REQUIRES_REVIEW</deductibility_status>
     <deductibility_percentage>0-100 or null</deductibility_percentage>
+    <deductibility_confidence>HIGH|MEDIUM|LOW</deductibility_confidence>
     <bim_sections>BIM37000, BIM37600</bim_sections>
     <hmrc_concern>YES|NO</hmrc_concern>
-    <reasoning>Detailed explanation referencing BIM guidance</reasoning>
+    <reasoning>Detailed explanation referencing BIM guidance and confidence level</reasoning>
     <documentation_required>List any additional documentation needed for audit defense</documentation_required>
     <recommended_action>APPROVE|REQUEST_DOCUMENTATION|APPORTION|REJECT</recommended_action>
     
     <!-- FOR EXPENSE_CLAIM ONLY: Include detailed test results -->
     <compliance_tests>
       <test_1_wholly_exclusively>PASS|FAIL|DUALITY</test_1_wholly_exclusively>
+      <test_1_confidence>HIGH|MEDIUM|LOW (only if uncertain)</test_1_confidence>
+      <test_1_reasoning>Brief explanation if confidence is MEDIUM or LOW</test_1_reasoning>
+      
       <test_2_entertainment>NOT_APPLICABLE|STAFF_ENTERTAINMENT|CLIENT_ENTERTAINMENT</test_2_entertainment>
+      <test_2_confidence>HIGH|MEDIUM|LOW (only if uncertain)</test_2_confidence>
+      <test_2_reasoning>Brief explanation if confidence is MEDIUM or LOW</test_2_reasoning>
+      
       <test_3_travel>NOT_APPLICABLE|BUSINESS_TRAVEL|COMMUTING</test_3_travel>
+      <test_3_confidence>HIGH|MEDIUM|LOW (only if uncertain)</test_3_confidence>
+      <test_3_reasoning>Brief explanation if confidence is MEDIUM or LOW</test_3_reasoning>
+      
       <test_4_training>NOT_APPLICABLE|WORK_RELATED|PERSONAL_DEVELOPMENT</test_4_training>
+      <test_4_confidence>HIGH|MEDIUM|LOW (only if uncertain)</test_4_confidence>
+      <test_4_reasoning>Brief explanation if confidence is MEDIUM or LOW</test_4_reasoning>
+      
       <test_5_statutory_ban>NOT_APPLICABLE|PENALTIES|DEPRECIATION</test_5_statutory_ban>
+      
+      <test_6_mixed_use>NOT_APPLICABLE|APPORTIONABLE|NO_MIXED_USE</test_6_mixed_use>
+      <test_6_business_percentage>0-100 (if apportionable)</test_6_business_percentage>
+      <test_6_confidence>HIGH|MEDIUM|LOW (ALWAYS include if apportionable)</test_6_confidence>
+      <test_6_reasoning>Explain basis for % estimate</test_6_reasoning>
+      <test_6_documentation_needed>What evidence would verify the %</test_6_documentation_needed>
+      
+      <test_7_duality>PASS|FAIL</test_7_duality>
+      <test_7_confidence>HIGH|MEDIUM|LOW (only if uncertain)</test_7_confidence>
+      <test_7_reasoning>Brief explanation if confidence is MEDIUM or LOW, or if FAIL cite Mallalieu principle</test_7_reasoning>
+      
       <addback_amount>0.00 or calculated amount</addback_amount>
-      <addback_reason>Explanation if addback > 0</addback_reason>
+      <addback_reason>Explanation if addback > 0 (include test that triggered it)</addback_reason>
     </compliance_tests>
   </invoice>
 </batch_analysis>
 
 NOTES:
 - For SUPPLIER_INVOICE: Omit <compliance_tests> section, use simplified assessment
-- For EXPENSE_CLAIM: Complete all test fields, calculate addback where applicable
-- Be conservative but fair. If genuinely unclear, mark REQUIRES_REVIEW rather than guessing.
+- For EXPENSE_CLAIM: Complete all 7 tests, add confidence only when NOT clear-cut
+- Test 6 apportionment: ALWAYS include confidence (it's an estimate unless hard evidence provided)
+- Be honest about uncertainty - LOW confidence + documentation request is better than false certainty
+- If genuinely unclear, mark REQUIRES_REVIEW rather than guessing
 """
     
     return prompt
@@ -421,6 +470,7 @@ def parse_analysis_with_regex(xml_result: str, invoice_batch: List[Dict]) -> Lis
         analyzed_invoice.update({
             'DeductibilityStatus': extract_field('deductibility_status'),
             'DeductibilityPercentage': extract_field('deductibility_percentage'),
+            'DeductibilityConfidence': extract_field('deductibility_confidence'),
             'BIMSections': extract_field('bim_sections'),
             'HMRCConcern': extract_field('hmrc_concern') == 'YES',
             'DeductibilityReasoning': extract_field('reasoning'),
@@ -435,11 +485,35 @@ def parse_analysis_with_regex(xml_result: str, invoice_batch: List[Dict]) -> Lis
         test1 = extract_field('test_1_wholly_exclusively')
         if test1:  # If compliance tests are present
             analyzed_invoice.update({
+                # Test 1
                 'Test1_WhollyExclusively': test1,
+                'Test1_Confidence': extract_field('test_1_confidence'),
+                'Test1_Reasoning': extract_field('test_1_reasoning'),
+                # Test 2
                 'Test2_Entertainment': extract_field('test_2_entertainment'),
+                'Test2_Confidence': extract_field('test_2_confidence'),
+                'Test2_Reasoning': extract_field('test_2_reasoning'),
+                # Test 3
                 'Test3_Travel': extract_field('test_3_travel'),
+                'Test3_Confidence': extract_field('test_3_confidence'),
+                'Test3_Reasoning': extract_field('test_3_reasoning'),
+                # Test 4
                 'Test4_Training': extract_field('test_4_training'),
+                'Test4_Confidence': extract_field('test_4_confidence'),
+                'Test4_Reasoning': extract_field('test_4_reasoning'),
+                # Test 5
                 'Test5_StatutoryBan': extract_field('test_5_statutory_ban'),
+                # Test 6
+                'Test6_MixedUse': extract_field('test_6_mixed_use'),
+                'Test6_BusinessPercentage': extract_field('test_6_business_percentage'),
+                'Test6_Confidence': extract_field('test_6_confidence'),
+                'Test6_Reasoning': extract_field('test_6_reasoning'),
+                'Test6_DocumentationNeeded': extract_field('test_6_documentation_needed'),
+                # Test 7
+                'Test7_Duality': extract_field('test_7_duality'),
+                'Test7_Confidence': extract_field('test_7_confidence'),
+                'Test7_Reasoning': extract_field('test_7_reasoning'),
+                # Addback
                 'AddbackAmount': extract_field('addback_amount'),
                 'AddbackReason': extract_field('addback_reason')
             })
@@ -481,6 +555,7 @@ def parse_analysis_from_xml(xml_result: str, invoice_batch: List[Dict]) -> List[
             analyzed_invoice.update({
                 'DeductibilityStatus': get_text(invoice_elem, 'deductibility_status'),
                 'DeductibilityPercentage': get_text(invoice_elem, 'deductibility_percentage'),
+                'DeductibilityConfidence': get_text(invoice_elem, 'deductibility_confidence'),
                 'BIMSections': get_text(invoice_elem, 'bim_sections'),
                 'HMRCConcern': get_text(invoice_elem, 'hmrc_concern') == 'YES',
                 'DeductibilityReasoning': get_text(invoice_elem, 'reasoning'),
@@ -495,11 +570,35 @@ def parse_analysis_from_xml(xml_result: str, invoice_batch: List[Dict]) -> List[
             compliance_tests = invoice_elem.find('compliance_tests')
             if compliance_tests is not None:
                 analyzed_invoice.update({
+                    # Test 1
                     'Test1_WhollyExclusively': get_text(compliance_tests, 'test_1_wholly_exclusively'),
+                    'Test1_Confidence': get_text(compliance_tests, 'test_1_confidence'),
+                    'Test1_Reasoning': get_text(compliance_tests, 'test_1_reasoning'),
+                    # Test 2
                     'Test2_Entertainment': get_text(compliance_tests, 'test_2_entertainment'),
+                    'Test2_Confidence': get_text(compliance_tests, 'test_2_confidence'),
+                    'Test2_Reasoning': get_text(compliance_tests, 'test_2_reasoning'),
+                    # Test 3
                     'Test3_Travel': get_text(compliance_tests, 'test_3_travel'),
+                    'Test3_Confidence': get_text(compliance_tests, 'test_3_confidence'),
+                    'Test3_Reasoning': get_text(compliance_tests, 'test_3_reasoning'),
+                    # Test 4
                     'Test4_Training': get_text(compliance_tests, 'test_4_training'),
+                    'Test4_Confidence': get_text(compliance_tests, 'test_4_confidence'),
+                    'Test4_Reasoning': get_text(compliance_tests, 'test_4_reasoning'),
+                    # Test 5
                     'Test5_StatutoryBan': get_text(compliance_tests, 'test_5_statutory_ban'),
+                    # Test 6
+                    'Test6_MixedUse': get_text(compliance_tests, 'test_6_mixed_use'),
+                    'Test6_BusinessPercentage': get_text(compliance_tests, 'test_6_business_percentage'),
+                    'Test6_Confidence': get_text(compliance_tests, 'test_6_confidence'),
+                    'Test6_Reasoning': get_text(compliance_tests, 'test_6_reasoning'),
+                    'Test6_DocumentationNeeded': get_text(compliance_tests, 'test_6_documentation_needed'),
+                    # Test 7
+                    'Test7_Duality': get_text(compliance_tests, 'test_7_duality'),
+                    'Test7_Confidence': get_text(compliance_tests, 'test_7_confidence'),
+                    'Test7_Reasoning': get_text(compliance_tests, 'test_7_reasoning'),
+                    # Addback
                     'AddbackAmount': get_text(compliance_tests, 'addback_amount'),
                     'AddbackReason': get_text(compliance_tests, 'addback_reason')
                 })
@@ -612,26 +711,94 @@ def update_invoices_in_dynamodb(analyzed_invoices: List[Dict]):
                 ':model': invoice.get('ModelUsed')
             })
             
+            # Add deductibility confidence if present
+            if invoice.get('DeductibilityConfidence'):
+                update_expr += ', DeductibilityConfidence = :deduct_conf'
+                expr_values[':deduct_conf'] = invoice.get('DeductibilityConfidence')
+            
             # Add compliance test results if present (EXPENSE_CLAIM invoices)
             if invoice.get('Test1_WhollyExclusively'):
-                update_expr += ''',
-                    Test1_WhollyExclusively = :test1,
-                    Test2_Entertainment = :test2,
-                    Test3_Travel = :test3,
-                    Test4_Training = :test4,
-                    Test5_StatutoryBan = :test5,
-                    AddbackAmount = :addback_amt,
-                    AddbackReason = :addback_reason
-                '''
-                expr_values.update({
-                    ':test1': invoice.get('Test1_WhollyExclusively'),
-                    ':test2': invoice.get('Test2_Entertainment'),
-                    ':test3': invoice.get('Test3_Travel'),
-                    ':test4': invoice.get('Test4_Training'),
-                    ':test5': invoice.get('Test5_StatutoryBan'),
-                    ':addback_amt': invoice.get('AddbackAmount'),
-                    ':addback_reason': invoice.get('AddbackReason')
-                })
+                # Build dynamic expression for optional confidence/reasoning fields
+                test_fields = []
+                
+                # Test 1
+                test_fields.append('Test1_WhollyExclusively = :test1')
+                expr_values[':test1'] = invoice.get('Test1_WhollyExclusively')
+                if invoice.get('Test1_Confidence'):
+                    test_fields.append('Test1_Confidence = :test1_conf')
+                    expr_values[':test1_conf'] = invoice.get('Test1_Confidence')
+                if invoice.get('Test1_Reasoning'):
+                    test_fields.append('Test1_Reasoning = :test1_reason')
+                    expr_values[':test1_reason'] = invoice.get('Test1_Reasoning')
+                
+                # Test 2
+                test_fields.append('Test2_Entertainment = :test2')
+                expr_values[':test2'] = invoice.get('Test2_Entertainment')
+                if invoice.get('Test2_Confidence'):
+                    test_fields.append('Test2_Confidence = :test2_conf')
+                    expr_values[':test2_conf'] = invoice.get('Test2_Confidence')
+                if invoice.get('Test2_Reasoning'):
+                    test_fields.append('Test2_Reasoning = :test2_reason')
+                    expr_values[':test2_reason'] = invoice.get('Test2_Reasoning')
+                
+                # Test 3
+                test_fields.append('Test3_Travel = :test3')
+                expr_values[':test3'] = invoice.get('Test3_Travel')
+                if invoice.get('Test3_Confidence'):
+                    test_fields.append('Test3_Confidence = :test3_conf')
+                    expr_values[':test3_conf'] = invoice.get('Test3_Confidence')
+                if invoice.get('Test3_Reasoning'):
+                    test_fields.append('Test3_Reasoning = :test3_reason')
+                    expr_values[':test3_reason'] = invoice.get('Test3_Reasoning')
+                
+                # Test 4
+                test_fields.append('Test4_Training = :test4')
+                expr_values[':test4'] = invoice.get('Test4_Training')
+                if invoice.get('Test4_Confidence'):
+                    test_fields.append('Test4_Confidence = :test4_conf')
+                    expr_values[':test4_conf'] = invoice.get('Test4_Confidence')
+                if invoice.get('Test4_Reasoning'):
+                    test_fields.append('Test4_Reasoning = :test4_reason')
+                    expr_values[':test4_reason'] = invoice.get('Test4_Reasoning')
+                
+                # Test 5
+                test_fields.append('Test5_StatutoryBan = :test5')
+                expr_values[':test5'] = invoice.get('Test5_StatutoryBan')
+                
+                # Test 6
+                test_fields.append('Test6_MixedUse = :test6')
+                expr_values[':test6'] = invoice.get('Test6_MixedUse')
+                if invoice.get('Test6_BusinessPercentage'):
+                    test_fields.append('Test6_BusinessPercentage = :test6_pct')
+                    expr_values[':test6_pct'] = invoice.get('Test6_BusinessPercentage')
+                if invoice.get('Test6_Confidence'):
+                    test_fields.append('Test6_Confidence = :test6_conf')
+                    expr_values[':test6_conf'] = invoice.get('Test6_Confidence')
+                if invoice.get('Test6_Reasoning'):
+                    test_fields.append('Test6_Reasoning = :test6_reason')
+                    expr_values[':test6_reason'] = invoice.get('Test6_Reasoning')
+                if invoice.get('Test6_DocumentationNeeded'):
+                    test_fields.append('Test6_DocumentationNeeded = :test6_docs')
+                    expr_values[':test6_docs'] = invoice.get('Test6_DocumentationNeeded')
+                
+                # Test 7
+                test_fields.append('Test7_Duality = :test7')
+                expr_values[':test7'] = invoice.get('Test7_Duality')
+                if invoice.get('Test7_Confidence'):
+                    test_fields.append('Test7_Confidence = :test7_conf')
+                    expr_values[':test7_conf'] = invoice.get('Test7_Confidence')
+                if invoice.get('Test7_Reasoning'):
+                    test_fields.append('Test7_Reasoning = :test7_reason')
+                    expr_values[':test7_reason'] = invoice.get('Test7_Reasoning')
+                
+                # Addback
+                test_fields.append('AddbackAmount = :addback_amt')
+                test_fields.append('AddbackReason = :addback_reason')
+                expr_values[':addback_amt'] = invoice.get('AddbackAmount')
+                expr_values[':addback_reason'] = invoice.get('AddbackReason')
+                
+                # Add all test fields to update expression
+                update_expr += ', ' + ', '.join(test_fields)
             
             # Update with analysis fields
             extraction_table.update_item(
