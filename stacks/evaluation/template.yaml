@@ -245,6 +245,12 @@ Resources:
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
+              # List DynamoDB tables for discovery
+              - Effect: Allow
+                Action:
+                  - dynamodb:ListTables
+                Resource: "*"
+              
               # Read from production ExtractionResultsTable
               - Effect: Allow
                 Action:
