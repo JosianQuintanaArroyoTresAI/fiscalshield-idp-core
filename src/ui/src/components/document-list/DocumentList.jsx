@@ -508,11 +508,7 @@ const DocumentList = () => {
 
             const addbackAmount = item.rawData?.AddbackAmount;
             if (addbackAmount && parseFloat(addbackAmount) > 0) {
-              return (
-                <Badge color="red">
-                  £{parseFloat(addbackAmount).toFixed(2)}
-                </Badge>
-              );
+              return <Badge color="red">£{parseFloat(addbackAmount).toFixed(2)}</Badge>;
             }
 
             return <Badge color="green">None</Badge>;
