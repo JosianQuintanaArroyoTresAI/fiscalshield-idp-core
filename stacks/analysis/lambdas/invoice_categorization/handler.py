@@ -23,6 +23,7 @@ COMPANY_EVENTS_TABLE = os.environ.get('COMPANY_EVENTS_TABLE', 'fiscalshield-dc-d
 MODEL_ID = os.environ.get('MODEL_ID', 'eu.anthropic.claude-3-5-sonnet-20240620-v1:0')
 MAX_BATCH_SIZE = 10  # Maximum invoices per batch to avoid token limits
 RECOMMENDED_BATCH_SIZE = 8  # Recommended batch size to reduce XML truncation risk
+MAX_RETRY_ATTEMPTS = 3  # Maximum number of times to retry a failed invoice
 
 
 class DecimalEncoder(json.JSONEncoder):
@@ -672,18 +673,20 @@ def update_invoices_in_dynamodb(analyzed_invoices: List[Dict]):
                 continue
             
             # Check if this is a failed invoice (parsing error)
-            if invoice.get('AnalysisStatus') == 'FAILED':
+            if invoice.get('AnalysisStatus') in ['FAILED', 'FAILED_PERMANENT']:
                 # Minimal update for failed invoices
                 extraction_table.update_item(
                     Key={'PK': pk, 'SK': sk},
-                    UpdateExpression='SET AnalysisStatus = :status, AnalyzedAt = :analyzed_at, DeductibilityReasoning = :reasoning',
+                    UpdateExpression='SET AnalysisStatus = :status, AnalyzedAt = :analyzed_at, DeductibilityReasoning = :reasoning, AnalysisRetryCount = :retry_count',
                     ExpressionAttributeValues={
-                        ':status': 'FAILED',
+                        ':status': invoice.get('AnalysisStatus'),
                         ':analyzed_at': invoice.get('AnalyzedAt'),
-                        ':reasoning': invoice.get('DeductibilityReasoning', 'Analysis failed')
+                        ':reasoning': invoice.get('DeductibilityReasoning', 'Analysis failed'),
+                        ':retry_count': invoice.get('AnalysisRetryCount', 0)
                     }
                 )
-                print(f"[INFO] Marked invoice as FAILED: {invoice.get('InvoiceId')}")
+                status_label = 'PERMANENTLY FAILED' if invoice.get('AnalysisStatus') == 'FAILED_PERMANENT' else 'FAILED'
+                print(f"[INFO] Marked invoice as {status_label}: {invoice.get('InvoiceId')} (retry count: {invoice.get('AnalysisRetryCount', 0)})")
                 continue
             
             # Validate analysis results for successful invoices
@@ -887,13 +890,31 @@ def lambda_handler(event, context):
         if failed_invoices:
             print(f"[WARNING] {len(failed_invoices)} invoices failed to parse from XML response")
             for failed_inv in failed_invoices:
-                print(f"[WARNING] Failed invoice: {failed_inv.get('InvoiceId')}")
-                # Mark as failed so they can be retried
-                failed_inv.update({
-                    'AnalysisStatus': 'FAILED',
-                    'AnalyzedAt': int(time.time()),
-                    'DeductibilityReasoning': 'XML parsing failed - invoice response truncated. Please retry analysis.',
-                })
+                invoice_id = failed_inv.get('InvoiceId')
+                print(f"[WARNING] Failed invoice: {invoice_id}")
+                
+                # Check retry count
+                retry_count = failed_inv.get('AnalysisRetryCount', 0)
+                new_retry_count = retry_count + 1
+                
+                if new_retry_count >= MAX_RETRY_ATTEMPTS:
+                    # Max retries reached - mark as permanently failed
+                    print(f"[ERROR] Invoice {invoice_id} reached max retry attempts ({MAX_RETRY_ATTEMPTS})")
+                    failed_inv.update({
+                        'AnalysisStatus': 'FAILED_PERMANENT',
+                        'AnalyzedAt': int(time.time()),
+                        'AnalysisRetryCount': new_retry_count,
+                        'DeductibilityReasoning': f'Analysis failed after {MAX_RETRY_ATTEMPTS} attempts. Manual review required.',
+                    })
+                else:
+                    # Mark as failed for retry
+                    print(f"[INFO] Invoice {invoice_id} will be retried (attempt {new_retry_count}/{MAX_RETRY_ATTEMPTS})")
+                    failed_inv.update({
+                        'AnalysisStatus': 'FAILED',
+                        'AnalyzedAt': int(time.time()),
+                        'AnalysisRetryCount': new_retry_count,
+                        'DeductibilityReasoning': f'XML parsing failed - attempt {new_retry_count}/{MAX_RETRY_ATTEMPTS}. Will retry automatically.',
+                    })
             # Add failed invoices to the list so they get status updated in DynamoDB
             analyzed_invoices.extend(failed_invoices)
         
