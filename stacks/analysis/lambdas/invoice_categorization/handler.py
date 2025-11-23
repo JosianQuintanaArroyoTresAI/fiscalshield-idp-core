@@ -209,17 +209,20 @@ For example, gym equipment for a fitness business is clearly deductible, but for
         if invoice_type == 'EMPLOYEE_EXPENSE':
             scrutiny_flag = '\n⚠️ EMPLOYEE EXPENSE - Apply stricter scrutiny for potential personal benefit'
         
-        # Type-specific analysis instructions
-        if invoice_type == 'EXPENSE_CLAIM':
-            analysis_framework = """
-
-🔍 APPLY FULL MULTI-TEST COMPLIANCE FRAMEWORK:
+        # Test 1 applies to ALL invoices
+        base_analysis = """
 
 TEST 1: S54 CTA 2009 - Wholly and Exclusively?
   - Is the sole purpose of this expense for the trade?
-  - YES → Continue to specific tests (2-5)
-  - NO → Mark for TEST 7 (Duality assessment)
+  - This test applies to ALL invoice types (SUPPLIER_INVOICE and EXPENSE_CLAIM)
   - Add confidence if uncertain (e.g., limited invoice description)
+"""
+        
+        # Type-specific analysis instructions
+        if invoice_type == 'EXPENSE_CLAIM':
+            analysis_framework = base_analysis + """
+
+🔍 EXPENSE CLAIM - APPLY ADDITIONAL COMPLIANCE TESTS (2-7):
 
 TEST 2: Entertainment? (S45-47 CTA 2009)
   - IF Staff Entertainment → DEDUCTIBLE (S45(2))
@@ -262,12 +265,12 @@ CONFIDENCE LEVELS:
 For this invoice, identify which test(s) apply and provide detailed outcomes with confidence levels where appropriate.
 """
         else:
-            # SUPPLIER_INVOICE - simplified analysis
-            analysis_framework = """
+            # SUPPLIER_INVOICE - Test 1 only
+            analysis_framework = base_analysis + """
 
-📋 APPLY SIMPLIFIED WHOLLY & EXCLUSIVELY ASSESSMENT:
-  - Is this expense incurred wholly and exclusively for business purposes?
-  - Standard deductibility assessment (no detailed multi-test framework required)
+📋 SUPPLIER INVOICE - TEST 1 ONLY:
+  - Apply the wholly & exclusively test
+  - No need for additional tests (2-7) unless expense claim characteristics detected
 """
         
         invoice_text = f"""
@@ -336,7 +339,7 @@ REQUIRED XML FORMAT:
     <documentation_required>List any additional documentation needed for audit defense</documentation_required>
     <recommended_action>APPROVE|REQUEST_DOCUMENTATION|APPORTION|REJECT</recommended_action>
     
-    <!-- FOR EXPENSE_CLAIM ONLY: Include detailed test results -->
+    <!-- ALL INVOICES: Include Test 1 at minimum -->
     <compliance_tests>
       <test_1_wholly_exclusively>PASS|FAIL|DUALITY</test_1_wholly_exclusively>
       <test_1_confidence>HIGH|MEDIUM|LOW (only if uncertain)</test_1_confidence>
@@ -373,7 +376,8 @@ REQUIRED XML FORMAT:
 </batch_analysis>
 
 NOTES:
-- For SUPPLIER_INVOICE: Omit <compliance_tests> section, use simplified assessment
+- For ALL INVOICES: Always include Test 1 (wholly & exclusively) in <compliance_tests>
+- For SUPPLIER_INVOICE: Include ONLY Test 1, mark Tests 2-7 as NOT_APPLICABLE
 - For EXPENSE_CLAIM: Complete all 7 tests, add confidence only when NOT clear-cut
 - Test 6 apportionment: ALWAYS include confidence (it's an estimate unless hard evidence provided)
 - Be honest about uncertainty - LOW confidence + documentation request is better than false certainty
@@ -394,7 +398,7 @@ def invoke_bedrock_for_analysis(prompt: str, max_retries: int = 3) -> str:
         try:
             request_body = {
                 "anthropic_version": "bedrock-2023-05-31",
-                "max_tokens": 4000,
+                "max_tokens": 8000,
                 "temperature": 0,
                 "messages": [
                     {
@@ -444,8 +448,8 @@ def parse_analysis_with_regex(xml_result: str, invoice_batch: List[Dict]) -> Lis
     
     analyzed_invoices = []
     
-    # Extract each <invoice> block
-    invoice_pattern = r'<invoice id="([^"]+)">(.*?)</invoice>'
+    # Extract each <invoice> block - handle attributes in opening tag
+    invoice_pattern = r'<invoice[^>]*id="([^"]+)"[^>]*>(.*?)</invoice>'
     matches = re.finditer(invoice_pattern, xml_result, re.DOTALL)
     
     for match in matches:
