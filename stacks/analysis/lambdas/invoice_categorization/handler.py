@@ -328,64 +328,43 @@ For each invoice, determine:
    - Reference specific BIM rules
    - Note any red flags or documentation requirements
 
-IMPORTANT: Be concise in ALL text fields to ensure complete XML generation for all invoices in the batch.
+IMPORTANT: Be concise in ALL text fields to ensure complete response for all invoices.
 
-REQUIRED XML FORMAT:
+REQUIRED JSON FORMAT (respond with valid JSON only, no markdown):
 
-<batch_analysis>
-  <invoice id="[EXACT_INVOICE_ID]" type="EXPENSE_CLAIM|SUPPLIER_INVOICE">
-    <deductibility_status>FULLY_DEDUCTIBLE|PARTIALLY_DEDUCTIBLE|NOT_DEDUCTIBLE|REQUIRES_REVIEW</deductibility_status>
-    <deductibility_percentage>0-100 or null</deductibility_percentage>
-    <deductibility_confidence>HIGH|MEDIUM|LOW</deductibility_confidence>
-    <bim_sections>BIM37000, BIM37600</bim_sections>
-    <hmrc_concern>YES|NO</hmrc_concern>
-    <reasoning>Concise 1-2 sentence explanation</reasoning>
-    <documentation_required>Brief list of needed documentation</documentation_required>
-    <recommended_action>APPROVE|REQUEST_DOCUMENTATION|APPORTION|REJECT</recommended_action>
-    
-    <!-- ALL INVOICES: Include Test 1 at minimum -->
-    <compliance_tests>
-      <test_1_wholly_exclusively>PASS|FAIL|DUALITY</test_1_wholly_exclusively>
-      <test_1_confidence>HIGH|MEDIUM|LOW (only if uncertain)</test_1_confidence>
-      <test_1_reasoning>One sentence if needed</test_1_reasoning>
-      
-      <test_2_entertainment>NOT_APPLICABLE|STAFF_ENTERTAINMENT|CLIENT_ENTERTAINMENT</test_2_entertainment>
-      <test_2_confidence>HIGH|MEDIUM|LOW (only if uncertain)</test_2_confidence>
-      <test_2_reasoning>One sentence if needed</test_2_reasoning>
-      
-      <test_3_travel>NOT_APPLICABLE|BUSINESS_TRAVEL|COMMUTING</test_3_travel>
-      <test_3_confidence>HIGH|MEDIUM|LOW (only if uncertain)</test_3_confidence>
-      <test_3_reasoning>One sentence if needed</test_3_reasoning>
-      
-      <test_4_training>NOT_APPLICABLE|WORK_RELATED|PERSONAL_DEVELOPMENT</test_4_training>
-      <test_4_confidence>HIGH|MEDIUM|LOW (only if uncertain)</test_4_confidence>
-      <test_4_reasoning>One sentence if needed</test_4_reasoning>
-      
-      <test_5_statutory_ban>NOT_APPLICABLE|PENALTIES|DEPRECIATION</test_5_statutory_ban>
-      
-      <test_6_mixed_use>NOT_APPLICABLE|APPORTIONABLE|NO_MIXED_USE</test_6_mixed_use>
-      <test_6_business_percentage>0-100 (if apportionable)</test_6_business_percentage>
-      <test_6_confidence>HIGH|MEDIUM|LOW (ALWAYS include if apportionable)</test_6_confidence>
-      <test_6_reasoning>One sentence basis for %</test_6_reasoning>
-      <test_6_documentation_needed>Brief list</test_6_documentation_needed>
-      
-      <test_7_duality>PASS|FAIL</test_7_duality>
-      <test_7_confidence>HIGH|MEDIUM|LOW (only if uncertain)</test_7_confidence>
-      <test_7_reasoning>One sentence if needed</test_7_reasoning>
-      
-      <addback_amount>0.00 or calculated amount</addback_amount>
-      <addback_reason>Explanation if addback > 0 (include test that triggered it)</addback_reason>
-    </compliance_tests>
-  </invoice>
-</batch_analysis>
+{
+  "analyses": [
+    {
+      "invoice_id": "[EXACT_INVOICE_ID]",
+      "type": "EXPENSE_CLAIM|SUPPLIER_INVOICE",
+      "status": "FULLY_DEDUCTIBLE|PARTIALLY_DEDUCTIBLE|NOT_DEDUCTIBLE|REQUIRES_REVIEW",
+      "percentage": 0-100 or null,
+      "confidence": "HIGH|MEDIUM|LOW",
+      "bim_sections": "BIM37000, BIM37600",
+      "hmrc_concern": true|false,
+      "reasoning": "Concise 1-2 sentence explanation",
+      "documentation": "Brief list of needed docs",
+      "action": "APPROVE|REQUEST_DOCUMENTATION|APPORTION|REJECT",
+      "tests": {
+        "test_1": {"result": "PASS|FAIL|DUALITY", "confidence": "HIGH|MEDIUM|LOW", "reasoning": "..."},
+        "test_2": {"result": "NOT_APPLICABLE|STAFF_ENTERTAINMENT|CLIENT_ENTERTAINMENT", "confidence": "...", "reasoning": "..."},
+        "test_3": {"result": "NOT_APPLICABLE|BUSINESS_TRAVEL|COMMUTING", "confidence": "...", "reasoning": "..."},
+        "test_4": {"result": "NOT_APPLICABLE|WORK_RELATED|PERSONAL_DEVELOPMENT", "confidence": "...", "reasoning": "..."},
+        "test_5": {"result": "NOT_APPLICABLE|PENALTIES|DEPRECIATION"},
+        "test_6": {"result": "NOT_APPLICABLE|APPORTIONABLE|NO_MIXED_USE", "business_pct": 0-100, "confidence": "...", "reasoning": "...", "docs_needed": "..."},
+        "test_7": {"result": "PASS|FAIL", "confidence": "...", "reasoning": "..."},
+        "addback_amount": "0.00",
+        "addback_reason": "..."
+      }
+    }
+  ]
+}
 
 NOTES:
-- For ALL INVOICES: Always include Test 1 (wholly & exclusively) in <compliance_tests>
-- For SUPPLIER_INVOICE: Include ONLY Test 1, mark Tests 2-7 as NOT_APPLICABLE
-- For EXPENSE_CLAIM: Complete all 7 tests, add confidence only when NOT clear-cut
-- Test 6 apportionment: ALWAYS include confidence (it's an estimate unless hard evidence provided)
-- Be honest about uncertainty - LOW confidence + documentation request is better than false certainty
-- If genuinely unclear, mark REQUIRES_REVIEW rather than guessing
+- Respond with JSON only (no markdown code blocks)
+- For SUPPLIER_INVOICE: Include only test_1 in tests object, omit tests 2-7
+- For EXPENSE_CLAIM: Include all 7 tests
+- Omit optional fields (confidence, reasoning) when not needed to save tokens
 """
     
     return prompt
@@ -444,7 +423,117 @@ def invoke_bedrock_for_analysis(prompt: str, max_retries: int = 3) -> str:
                 raise
 
 
-def parse_analysis_with_regex(xml_result: str, invoice_batch: List[Dict]) -> List[Dict]:
+def parse_analysis_from_json(json_result: str, invoice_batch: List[Dict]) -> List[Dict]:
+    """
+    Parse JSON analysis results.
+    Returns list of invoices with analysis fields added.
+    """
+    analyzed_invoices = []
+    
+    try:
+        # Clean up potential markdown code blocks
+        json_text = json_result.strip()
+        if json_text.startswith('```json'):
+            json_text = json_text.split('```json')[1]
+        if json_text.startswith('```'):
+            json_text = json_text.split('```')[1]
+        if json_text.endswith('```'):
+            json_text = json_text.rsplit('```', 1)[0]
+        json_text = json_text.strip()
+        
+        # Parse JSON
+        data = json.loads(json_text)
+        analyses = data.get('analyses', [])
+        
+        for analysis in analyses:
+            invoice_id = analysis.get('invoice_id')
+            
+            # Find corresponding invoice in batch
+            original_invoice = next((inv for inv in invoice_batch if inv.get('InvoiceId') == invoice_id), None)
+            
+            if not original_invoice:
+                print(f"[WARNING] No matching invoice for ID {invoice_id}")
+                continue
+            
+            analyzed_invoice = original_invoice.copy()
+            analyzed_invoice.update({
+                'DeductibilityStatus': analysis.get('status'),
+                'DeductibilityPercentage': analysis.get('percentage'),
+                'DeductibilityConfidence': analysis.get('confidence'),
+                'BIMSections': analysis.get('bim_sections'),
+                'HMRCConcern': analysis.get('hmrc_concern', False),
+                'DeductibilityReasoning': analysis.get('reasoning'),
+                'DocumentationRequired': analysis.get('documentation'),
+                'RecommendedAction': analysis.get('action'),
+                'AnalysisStatus': 'ANALYZED',
+                'AnalyzedAt': int(time.time()),
+                'ModelUsed': MODEL_ID
+            })
+            
+            # Parse compliance tests
+            tests = analysis.get('tests', {})
+            if tests:
+                test1 = tests.get('test_1', {})
+                analyzed_invoice.update({
+                    # Test 1
+                    'Test1_WhollyExclusively': test1.get('result'),
+                    'Test1_Confidence': test1.get('confidence'),
+                    'Test1_Reasoning': test1.get('reasoning'),
+                })
+                
+                # Tests 2-7 (only for EXPENSE_CLAIM)
+                test2 = tests.get('test_2', {})
+                if test2:
+                    analyzed_invoice['Test2_Entertainment'] = test2.get('result')
+                    analyzed_invoice['Test2_Confidence'] = test2.get('confidence')
+                    analyzed_invoice['Test2_Reasoning'] = test2.get('reasoning')
+                
+                test3 = tests.get('test_3', {})
+                if test3:
+                    analyzed_invoice['Test3_Travel'] = test3.get('result')
+                    analyzed_invoice['Test3_Confidence'] = test3.get('confidence')
+                    analyzed_invoice['Test3_Reasoning'] = test3.get('reasoning')
+                
+                test4 = tests.get('test_4', {})
+                if test4:
+                    analyzed_invoice['Test4_Training'] = test4.get('result')
+                    analyzed_invoice['Test4_Confidence'] = test4.get('confidence')
+                    analyzed_invoice['Test4_Reasoning'] = test4.get('reasoning')
+                
+                test5 = tests.get('test_5', {})
+                if test5:
+                    analyzed_invoice['Test5_StatutoryBan'] = test5.get('result')
+                
+                test6 = tests.get('test_6', {})
+                if test6:
+                    analyzed_invoice['Test6_MixedUse'] = test6.get('result')
+                    analyzed_invoice['Test6_BusinessPercentage'] = test6.get('business_pct')
+                    analyzed_invoice['Test6_Confidence'] = test6.get('confidence')
+                    analyzed_invoice['Test6_Reasoning'] = test6.get('reasoning')
+                    analyzed_invoice['Test6_DocumentationNeeded'] = test6.get('docs_needed')
+                
+                test7 = tests.get('test_7', {})
+                if test7:
+                    analyzed_invoice['Test7_Duality'] = test7.get('result')
+                    analyzed_invoice['Test7_Confidence'] = test7.get('confidence')
+                    analyzed_invoice['Test7_Reasoning'] = test7.get('reasoning')
+                
+                # Addback
+                analyzed_invoice['AddbackAmount'] = tests.get('addback_amount')
+                analyzed_invoice['AddbackReason'] = tests.get('addback_reason')
+            
+            analyzed_invoices.append(analyzed_invoice)
+        
+        print(f"[INFO] Successfully parsed {len(analyzed_invoices)} invoice analyses from JSON")
+        return analyzed_invoices
+        
+    except json.JSONDecodeError as e:
+        print(f"[ERROR] JSON parsing failed: {str(e)}")
+        print(f"[ERROR] Response text: {json_result[:500]}...")
+        return []
+    except Exception as e:
+        print(f"[ERROR] Unexpected error parsing JSON: {str(e)}")
+        return []
     """
     Fallback regex-based XML parsing.
     """
@@ -527,98 +616,6 @@ def parse_analysis_with_regex(xml_result: str, invoice_batch: List[Dict]) -> Lis
             })
         
         analyzed_invoices.append(analyzed_invoice)
-    
-    return analyzed_invoices
-
-
-def parse_analysis_from_xml(xml_result: str, invoice_batch: List[Dict]) -> List[Dict]:
-    """
-    Parse XML analysis results with proper XML parsing and regex fallback.
-    Returns list of invoices with analysis fields added.
-    """
-    import xml.etree.ElementTree as ET
-    
-    analyzed_invoices = []
-    
-    try:
-        # Try to parse as proper XML first
-        root = ET.fromstring(f"<root>{xml_result}</root>")
-        
-        for invoice_elem in root.findall('.//invoice'):
-            invoice_id = invoice_elem.get('id')
-            
-            # Find corresponding invoice in batch
-            original_invoice = next((inv for inv in invoice_batch if inv.get('InvoiceId') == invoice_id), None)
-            
-            if not original_invoice:
-                print(f"[WARNING] No matching invoice for ID {invoice_id}")
-                continue
-            
-            # Parse fields safely
-            def get_text(elem, tag, default=None):
-                child = elem.find(tag)
-                return child.text.strip() if child is not None and child.text else default
-            
-            analyzed_invoice = original_invoice.copy()
-            analyzed_invoice.update({
-                'DeductibilityStatus': get_text(invoice_elem, 'deductibility_status'),
-                'DeductibilityPercentage': get_text(invoice_elem, 'deductibility_percentage'),
-                'DeductibilityConfidence': get_text(invoice_elem, 'deductibility_confidence'),
-                'BIMSections': get_text(invoice_elem, 'bim_sections'),
-                'HMRCConcern': get_text(invoice_elem, 'hmrc_concern') == 'YES',
-                'DeductibilityReasoning': get_text(invoice_elem, 'reasoning'),
-                'DocumentationRequired': get_text(invoice_elem, 'documentation_required'),
-                'RecommendedAction': get_text(invoice_elem, 'recommended_action'),
-                'AnalysisStatus': 'ANALYZED',
-                'AnalyzedAt': int(time.time()),
-                'ModelUsed': MODEL_ID
-            })
-            
-            # Parse compliance tests for EXPENSE_CLAIM invoices
-            compliance_tests = invoice_elem.find('compliance_tests')
-            if compliance_tests is not None:
-                analyzed_invoice.update({
-                    # Test 1
-                    'Test1_WhollyExclusively': get_text(compliance_tests, 'test_1_wholly_exclusively'),
-                    'Test1_Confidence': get_text(compliance_tests, 'test_1_confidence'),
-                    'Test1_Reasoning': get_text(compliance_tests, 'test_1_reasoning'),
-                    # Test 2
-                    'Test2_Entertainment': get_text(compliance_tests, 'test_2_entertainment'),
-                    'Test2_Confidence': get_text(compliance_tests, 'test_2_confidence'),
-                    'Test2_Reasoning': get_text(compliance_tests, 'test_2_reasoning'),
-                    # Test 3
-                    'Test3_Travel': get_text(compliance_tests, 'test_3_travel'),
-                    'Test3_Confidence': get_text(compliance_tests, 'test_3_confidence'),
-                    'Test3_Reasoning': get_text(compliance_tests, 'test_3_reasoning'),
-                    # Test 4
-                    'Test4_Training': get_text(compliance_tests, 'test_4_training'),
-                    'Test4_Confidence': get_text(compliance_tests, 'test_4_confidence'),
-                    'Test4_Reasoning': get_text(compliance_tests, 'test_4_reasoning'),
-                    # Test 5
-                    'Test5_StatutoryBan': get_text(compliance_tests, 'test_5_statutory_ban'),
-                    # Test 6
-                    'Test6_MixedUse': get_text(compliance_tests, 'test_6_mixed_use'),
-                    'Test6_BusinessPercentage': get_text(compliance_tests, 'test_6_business_percentage'),
-                    'Test6_Confidence': get_text(compliance_tests, 'test_6_confidence'),
-                    'Test6_Reasoning': get_text(compliance_tests, 'test_6_reasoning'),
-                    'Test6_DocumentationNeeded': get_text(compliance_tests, 'test_6_documentation_needed'),
-                    # Test 7
-                    'Test7_Duality': get_text(compliance_tests, 'test_7_duality'),
-                    'Test7_Confidence': get_text(compliance_tests, 'test_7_confidence'),
-                    'Test7_Reasoning': get_text(compliance_tests, 'test_7_reasoning'),
-                    # Addback
-                    'AddbackAmount': get_text(compliance_tests, 'addback_amount'),
-                    'AddbackReason': get_text(compliance_tests, 'addback_reason')
-                })
-            
-            analyzed_invoices.append(analyzed_invoice)
-        
-        print(f"[INFO] Successfully parsed {len(analyzed_invoices)} invoice analyses using XML parser")
-        
-    except ET.ParseError as e:
-        print(f"[WARNING] XML parsing failed: {str(e)}, falling back to regex")
-        analyzed_invoices = parse_analysis_with_regex(xml_result, invoice_batch)
-        print(f"[INFO] Successfully parsed {len(analyzed_invoices)} invoice analyses using regex fallback")
     
     return analyzed_invoices
 
@@ -878,17 +875,17 @@ def lambda_handler(event, context):
         
         # Invoke Claude for analysis (with retry logic)
         print("[INFO] Invoking Claude for invoice analysis...")
-        xml_result = invoke_bedrock_for_analysis(prompt)
+        json_result = invoke_bedrock_for_analysis(prompt)
         
         # Parse results
-        analyzed_invoices = parse_analysis_from_xml(xml_result, invoice_batch)
+        analyzed_invoices = parse_analysis_from_json(json_result, invoice_batch)
         
-        # Identify invoices that failed to parse (lost in XML truncation)
+        # Identify invoices that failed to parse (lost in truncation)
         analyzed_ids = {inv.get('InvoiceId') for inv in analyzed_invoices}
         failed_invoices = [inv for inv in invoice_batch if inv.get('InvoiceId') not in analyzed_ids]
         
         if failed_invoices:
-            print(f"[WARNING] {len(failed_invoices)} invoices failed to parse from XML response")
+            print(f"[WARNING] {len(failed_invoices)} invoices failed to parse from JSON response")
             for failed_inv in failed_invoices:
                 invoice_id = failed_inv.get('InvoiceId')
                 print(f"[WARNING] Failed invoice: {invoice_id}")
@@ -913,7 +910,7 @@ def lambda_handler(event, context):
                         'AnalysisStatus': 'FAILED',
                         'AnalyzedAt': int(time.time()),
                         'AnalysisRetryCount': new_retry_count,
-                        'DeductibilityReasoning': f'XML parsing failed - attempt {new_retry_count}/{MAX_RETRY_ATTEMPTS}. Will retry automatically.',
+                        'DeductibilityReasoning': f'JSON parsing failed - attempt {new_retry_count}/{MAX_RETRY_ATTEMPTS}. Will retry automatically.',
                     })
             # Add failed invoices to the list so they get status updated in DynamoDB
             analyzed_invoices.extend(failed_invoices)
