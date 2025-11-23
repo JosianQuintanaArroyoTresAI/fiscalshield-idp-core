@@ -332,9 +332,9 @@ IMPORTANT: Be concise in ALL text fields to ensure complete response for all inv
 
 REQUIRED JSON FORMAT (respond with valid JSON only, no markdown):
 
-{
+{{
   "analyses": [
-    {
+    {{
       "invoice_id": "[EXACT_INVOICE_ID]",
       "type": "EXPENSE_CLAIM|SUPPLIER_INVOICE",
       "status": "FULLY_DEDUCTIBLE|PARTIALLY_DEDUCTIBLE|NOT_DEDUCTIBLE|REQUIRES_REVIEW",
@@ -345,20 +345,20 @@ REQUIRED JSON FORMAT (respond with valid JSON only, no markdown):
       "reasoning": "Concise 1-2 sentence explanation",
       "documentation": "Brief list of needed docs",
       "action": "APPROVE|REQUEST_DOCUMENTATION|APPORTION|REJECT",
-      "tests": {
-        "test_1": {"result": "PASS|FAIL|DUALITY", "confidence": "HIGH|MEDIUM|LOW", "reasoning": "..."},
-        "test_2": {"result": "NOT_APPLICABLE|STAFF_ENTERTAINMENT|CLIENT_ENTERTAINMENT", "confidence": "...", "reasoning": "..."},
-        "test_3": {"result": "NOT_APPLICABLE|BUSINESS_TRAVEL|COMMUTING", "confidence": "...", "reasoning": "..."},
-        "test_4": {"result": "NOT_APPLICABLE|WORK_RELATED|PERSONAL_DEVELOPMENT", "confidence": "...", "reasoning": "..."},
-        "test_5": {"result": "NOT_APPLICABLE|PENALTIES|DEPRECIATION"},
-        "test_6": {"result": "NOT_APPLICABLE|APPORTIONABLE|NO_MIXED_USE", "business_pct": 0-100, "confidence": "...", "reasoning": "...", "docs_needed": "..."},
-        "test_7": {"result": "PASS|FAIL", "confidence": "...", "reasoning": "..."},
+      "tests": {{
+        "test_1": {{"result": "PASS|FAIL|DUALITY", "confidence": "HIGH|MEDIUM|LOW", "reasoning": "..."}},
+        "test_2": {{"result": "NOT_APPLICABLE|STAFF_ENTERTAINMENT|CLIENT_ENTERTAINMENT", "confidence": "...", "reasoning": "..."}},
+        "test_3": {{"result": "NOT_APPLICABLE|BUSINESS_TRAVEL|COMMUTING", "confidence": "...", "reasoning": "..."}},
+        "test_4": {{"result": "NOT_APPLICABLE|WORK_RELATED|PERSONAL_DEVELOPMENT", "confidence": "...", "reasoning": "..."}},
+        "test_5": {{"result": "NOT_APPLICABLE|PENALTIES|DEPRECIATION"}},
+        "test_6": {{"result": "NOT_APPLICABLE|APPORTIONABLE|NO_MIXED_USE", "business_pct": 0-100, "confidence": "...", "reasoning": "...", "docs_needed": "..."}},
+        "test_7": {{"result": "PASS|FAIL", "confidence": "...", "reasoning": "..."}},
         "addback_amount": "0.00",
         "addback_reason": "..."
-      }
-    }
+      }}
+    }}
   ]
-}
+}}
 
 NOTES:
 - Respond with JSON only (no markdown code blocks)
@@ -534,90 +534,6 @@ def parse_analysis_from_json(json_result: str, invoice_batch: List[Dict]) -> Lis
     except Exception as e:
         print(f"[ERROR] Unexpected error parsing JSON: {str(e)}")
         return []
-    """
-    Fallback regex-based XML parsing.
-    """
-    import re
-    
-    analyzed_invoices = []
-    
-    # Extract each <invoice> block - handle attributes in opening tag
-    invoice_pattern = r'<invoice[^>]*id="([^"]+)"[^>]*>(.*?)</invoice>'
-    matches = re.finditer(invoice_pattern, xml_result, re.DOTALL)
-    
-    for match in matches:
-        invoice_id = match.group(1)
-        invoice_xml = match.group(2)
-        
-        # Find corresponding invoice in batch
-        original_invoice = next((inv for inv in invoice_batch if inv.get('InvoiceId') == invoice_id), None)
-        
-        if not original_invoice:
-            print(f"[WARNING] No matching invoice for ID {invoice_id}")
-            continue
-        
-        # Parse fields
-        def extract_field(field_name):
-            pattern = f'<{field_name}>(.*?)</{field_name}>'
-            match = re.search(pattern, invoice_xml, re.DOTALL)
-            return match.group(1).strip() if match else None
-        
-        # Add analysis results to invoice
-        analyzed_invoice = original_invoice.copy()
-        analyzed_invoice.update({
-            'DeductibilityStatus': extract_field('deductibility_status'),
-            'DeductibilityPercentage': extract_field('deductibility_percentage'),
-            'DeductibilityConfidence': extract_field('deductibility_confidence'),
-            'BIMSections': extract_field('bim_sections'),
-            'HMRCConcern': extract_field('hmrc_concern') == 'YES',
-            'DeductibilityReasoning': extract_field('reasoning'),
-            'DocumentationRequired': extract_field('documentation_required'),
-            'RecommendedAction': extract_field('recommended_action'),
-            'AnalysisStatus': 'ANALYZED',
-            'AnalyzedAt': int(time.time()),
-            'ModelUsed': MODEL_ID
-        })
-        
-        # Extract compliance test results for EXPENSE_CLAIM invoices
-        test1 = extract_field('test_1_wholly_exclusively')
-        if test1:  # If compliance tests are present
-            analyzed_invoice.update({
-                # Test 1
-                'Test1_WhollyExclusively': test1,
-                'Test1_Confidence': extract_field('test_1_confidence'),
-                'Test1_Reasoning': extract_field('test_1_reasoning'),
-                # Test 2
-                'Test2_Entertainment': extract_field('test_2_entertainment'),
-                'Test2_Confidence': extract_field('test_2_confidence'),
-                'Test2_Reasoning': extract_field('test_2_reasoning'),
-                # Test 3
-                'Test3_Travel': extract_field('test_3_travel'),
-                'Test3_Confidence': extract_field('test_3_confidence'),
-                'Test3_Reasoning': extract_field('test_3_reasoning'),
-                # Test 4
-                'Test4_Training': extract_field('test_4_training'),
-                'Test4_Confidence': extract_field('test_4_confidence'),
-                'Test4_Reasoning': extract_field('test_4_reasoning'),
-                # Test 5
-                'Test5_StatutoryBan': extract_field('test_5_statutory_ban'),
-                # Test 6
-                'Test6_MixedUse': extract_field('test_6_mixed_use'),
-                'Test6_BusinessPercentage': extract_field('test_6_business_percentage'),
-                'Test6_Confidence': extract_field('test_6_confidence'),
-                'Test6_Reasoning': extract_field('test_6_reasoning'),
-                'Test6_DocumentationNeeded': extract_field('test_6_documentation_needed'),
-                # Test 7
-                'Test7_Duality': extract_field('test_7_duality'),
-                'Test7_Confidence': extract_field('test_7_confidence'),
-                'Test7_Reasoning': extract_field('test_7_reasoning'),
-                # Addback
-                'AddbackAmount': extract_field('addback_amount'),
-                'AddbackReason': extract_field('addback_reason')
-            })
-        
-        analyzed_invoices.append(analyzed_invoice)
-    
-    return analyzed_invoices
 
 
 def validate_analysis(analyzed_invoice: Dict) -> bool:
@@ -951,13 +867,5 @@ def lambda_handler(event, context):
             'body': json.dumps({
                 'success': False,
                 'error': error_msg
-            })
-        }
-        print(f"[ERROR] Invoice categorization failed: {str(e)}")
-        return {
-            'statusCode': 500,
-            'body': json.dumps({
-                'success': False,
-                'error': str(e)
             })
         }
