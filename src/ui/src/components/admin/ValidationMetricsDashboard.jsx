@@ -135,19 +135,19 @@ const ValidationMetricsDashboard = () => {
   // Prepare table data for by-type breakdown
   const byTypeTableItems = Object.entries(metrics.byDocumentType || {}).map(([type, data]) => ({
     documentType: type,
-    total: data.total,
-    matches: data.matches,
-    mismatches: data.mismatches,
-    highConfidenceMismatches: data.highConfidenceMismatches,
-    accuracy: data.total > 0 ? ((data.matches / data.total) * 100).toFixed(1) : '0.0',
+    total: data.total || 0,
+    matches: data.matches || 0,
+    mismatches: data.mismatches || 0,
+    highConfidenceMismatches: data.highConfidenceMismatches || 0,
+    accuracy: (data.total || 0) > 0 ? (((data.matches || 0) / (data.total || 0)) * 100).toFixed(1) : '0.0',
   }));
 
   // Prepare table data for confidence calibration
   const confidenceBuckets = Object.entries(metrics.byConfidenceBucket || {}).map(([bucket, data]) => ({
     bucket,
-    total: data.total,
-    matches: data.matches,
-    accuracy: data.total > 0 ? ((data.matches / data.total) * 100).toFixed(1) : '0.0',
+    total: data.total || 0,
+    matches: data.matches || 0,
+    accuracy: (data.total || 0) > 0 ? (((data.matches || 0) / (data.total || 0)) * 100).toFixed(1) : '0.0',
   }));
 
   return (
