@@ -78,7 +78,6 @@ jobs:
               "MediumConfidenceSamplingRate=15" \
               "HighConfidenceSamplingRate=3" \
               "BatchInferenceEnabled=true" \
-              "EvaluationSchedule=cron(0 3 * * ? *)" \
               "LogLevel=INFO"
 
       - name: 📊 Deployment summary
