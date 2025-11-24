@@ -5763,6 +5763,7 @@ Resources:
                   - !GetAtt ListExtractionResultsFunction.Arn
                   - !GetAtt TriggerTransactionAnalysisFunction.Arn
                   - !GetAtt TriggerInvoiceAnalysisFunction.Arn
+                  - !GetAtt GetValidationMetricsFunction.Arn
 
   # Lambda function for Create Document resolver
   CreateDocumentResolverFunction:
