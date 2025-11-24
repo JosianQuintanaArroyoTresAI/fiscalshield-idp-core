@@ -138,7 +138,7 @@ const ValidationMetricsDashboard = () => {
     total: data.total,
     matches: data.matches,
     mismatches: data.mismatches,
-    highConfidenceMismatches: data.high_confidence_mismatches,
+    highConfidenceMismatches: data.highConfidenceMismatches,
     accuracy: data.total > 0 ? ((data.matches / data.total) * 100).toFixed(1) : '0.0',
   }));
 
