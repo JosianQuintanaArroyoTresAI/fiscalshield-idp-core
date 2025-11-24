@@ -46,26 +46,33 @@ const ValidationMetricsDashboard = () => {
   ];
 
   const fetchMetrics = async () => {
+    console.log('[ValidationMetrics] fetchMetrics called, timeRange:', timeRange);
     setLoading(true);
     setError(null);
 
     try {
+      console.log('[ValidationMetrics] Calling API.graphql...');
       const response = await API.graphql(
         graphqlOperation(getValidationMetrics, {
           timeRangeDays: parseInt(timeRange.value),
         }),
       );
 
+      console.log('[ValidationMetrics] API response:', response);
       const metricsData = response.data.getValidationMetrics;
+      console.log('[ValidationMetrics] Metrics data:', metricsData);
 
       // Parse JSON fields
       metricsData.byDocumentType = JSON.parse(metricsData.byDocumentType);
       metricsData.byConfidenceBucket = JSON.parse(metricsData.byConfidenceBucket);
 
       setMetrics(metricsData);
+      console.log('[ValidationMetrics] Metrics set successfully');
     } catch (err) {
       logger.error('Error fetching validation metrics:', err);
-      setError(err.message || 'Failed to load validation metrics');
+      console.error('Validation metrics error:', err);
+      console.error('Error details:', JSON.stringify(err, null, 2));
+      setError(err.message || err.errors?.[0]?.message || 'Failed to load validation metrics');
     } finally {
       setLoading(false);
     }
