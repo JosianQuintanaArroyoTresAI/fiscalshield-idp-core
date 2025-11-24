@@ -5697,6 +5697,7 @@ Resources:
         rules_to_suppress:
           - id: W76
             reason: "Suppressing W76: SPCM for IAM policy document is higher than 25"
+      Comment: "Updated 2025-11-24: Added GetValidationMetricsFunction permission"
     Properties:
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
