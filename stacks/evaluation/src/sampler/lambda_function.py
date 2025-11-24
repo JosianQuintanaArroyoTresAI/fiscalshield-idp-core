@@ -23,6 +23,13 @@ from decimal import Decimal
 from typing import Dict, List, Any, Optional
 from boto3.dynamodb.conditions import Key, Attr
 
+
+def decimal_default(obj):
+    """JSON serializer for Decimal objects."""
+    if isinstance(obj, Decimal):
+        return float(obj)
+    raise TypeError
+
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(os.environ.get("LOG_LEVEL", "INFO"))
@@ -240,7 +247,7 @@ def prepare_evaluation_batch(
     manifest_key = f"batch-inputs/{evaluation_id}/manifest.jsonl"
     
     # Convert to JSONL format (one JSON object per line)
-    manifest_content = "\n".join([json.dumps(item) for item in batch_manifest])
+    manifest_content = "\n".join([json.dumps(item, default=decimal_default) for item in batch_manifest])
     
     s3_client.put_object(
         Bucket=EVALUATION_BUCKET,
