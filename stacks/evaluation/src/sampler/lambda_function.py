@@ -224,11 +224,11 @@ def prepare_evaluation_batch(
     for item in all_samples:
         batch_manifest.append({
             "documentId": item["DocumentId"],
-            "sectionId": item["SectionId"],
-            "documentType": item["DocumentType"],
-            "s3Object": item["S3Object"],
+            "sectionId": item.get("SectionId", "1"),
+            "documentType": item.get("DocumentType", "INVOICE"),
+            "s3Uri": item["DocumentId"],  # DocumentId is the S3 key (e.g., users/xxx/file.pdf)
             "originalConfidence": float(item.get("ConfidenceScore", 1.0)),
-            "originalExtraction": item.get("S3Object"),  # Link to original extraction
+            "originalExtraction": item,  # Include full extraction result for comparison
             "confidenceTier": (
                 "low" if item in sampled_items["low_confidence"]
                 else "medium" if item in sampled_items["medium_confidence"]
