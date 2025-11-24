@@ -4,20 +4,48 @@ name: Deploy to Dev
 on:
   push:
     branches: [dev]
-    paths-ignore:
-      - 'stacks/data-collection/**'
-      - 'src/data_collection/**'
-      - 'tests/data_collection/**'
-      - 'docs/data-collection-*.md'
-      - 'docs/Data_Collection_Stack_Implementation_Plan.md'
-      - '.github/workflows/deploy-data-collection-*.yml'
   workflow_dispatch:  # Enable manual triggering from GitHub Actions UI
 
 jobs:
+  detect-changes:
+    name: Detect relevant changes
+    runs-on: ubuntu-latest
+    outputs:
+      core: ${{ steps.filter.outputs.core }}
+      analysis: ${{ steps.filter.outputs.analysis }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          base: ${{ github.event.before }}
+          ref: ${{ github.sha }}
+          filters: |
+            core:
+              - 'src/**'
+              - 'stacks/**'
+              - 'config/**'
+              - 'scripts/**'
+              - 'template.yaml'
+              - 'Makefile'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'pnpm-lock.yaml'
+              - 'yarn.lock'
+              - 'requirements*.txt'
+              - 'Dockerfile*'
+              - '!stacks/data-collection/**'
+              - '!stacks/evaluation/**'
+            analysis:
+              - 'stacks/analysis/**'
+
   # Deploy Analysis Stack first (if changed)
   deploy-analysis:
+    needs: detect-changes
     runs-on: ubuntu-latest
-    if: contains(github.event.head_commit.modified, 'stacks/analysis/') || contains(github.event.head_commit.added, 'stacks/analysis/')
+    if: needs.detect-changes.outputs.analysis == 'true'
     steps:
       - name: Trigger Analysis Stack deployment
         uses: actions/github-script@v7
@@ -37,8 +65,8 @@ jobs:
 
   deploy-dev:
     runs-on: ubuntu-latest
-    needs: [deploy-analysis]
-    if: always()  # Run even if Analysis Stack wasn't triggered
+    needs: [detect-changes, deploy-analysis]
+    if: needs.detect-changes.outputs.core == 'true'
     environment: dev  # 👈 Add this line to use the 'dev' environment secrets
     
     steps:
