@@ -70,16 +70,16 @@ jobs:
             --no-confirm-changeset \
             --no-fail-on-empty-changeset \
             --parameter-overrides \
-              StackName=${{ env.PRODUCTION_STACK }} \
-              EvaluationRegion=${{ env.EVALUATION_REGION }} \
-              EvaluationModelId=us.anthropic.claude-sonnet-4-20250514-v1:0 \
-              SamplingRate=5 \
-              LowConfidenceThreshold=0.7 \
-              MediumConfidenceSamplingRate=15 \
-              HighConfidenceSamplingRate=3 \
-              BatchInferenceEnabled=true \
-              EvaluationSchedule='cron(0 3 * * ? *)' \
-              LogLevel=INFO
+              "StackName=${{ env.PRODUCTION_STACK }}" \
+              "EvaluationRegion=${{ env.EVALUATION_REGION }}" \
+              "EvaluationModelId=us.anthropic.claude-sonnet-4-20250514-v1:0" \
+              "SamplingRate=5" \
+              "LowConfidenceThreshold=0.7" \
+              "MediumConfidenceSamplingRate=15" \
+              "HighConfidenceSamplingRate=3" \
+              "BatchInferenceEnabled=true" \
+              "EvaluationSchedule=cron(0 3 * * ? *)" \
+              "LogLevel=INFO"
 
       - name: 📊 Deployment summary
         if: success()
