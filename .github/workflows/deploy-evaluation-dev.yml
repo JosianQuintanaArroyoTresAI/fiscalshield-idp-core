@@ -77,7 +77,7 @@ jobs:
               MediumConfidenceSamplingRate=20 \
               HighConfidenceSamplingRate=5 \
               BatchInferenceEnabled=true \
-              EvaluationSchedule="cron(0 2 * * ? *)" \
+              EvaluationSchedule='cron(0 2 * * ? *)' \
               LogLevel=INFO
 
       - name: 📊 Deployment summary
