@@ -51,6 +51,22 @@ jobs:
             --output text
           echo "✓ Production stack found"
 
+      - name: 🔑 Capture KMS key ARN
+        run: |
+          KMS_KEY_ARN=$(aws cloudformation describe-stacks \
+            --stack-name ${{ env.PRODUCTION_STACK }} \
+            --region ${{ env.AWS_REGION }} \
+            --query 'Stacks[0].Outputs[?OutputKey==`KMSEncryptionKeyArn`].OutputValue' \
+            --output text)
+
+          if [ -z "$KMS_KEY_ARN" ] || [ "$KMS_KEY_ARN" = "None" ]; then
+            echo "Unable to resolve KMSEncryptionKeyArn output" >&2
+            exit 1
+          fi
+
+          echo "Resolved KMS key ARN: $KMS_KEY_ARN"
+          echo "KMS_KEY_ARN=$KMS_KEY_ARN" >> $GITHUB_ENV
+
       - name: 🔨 Build evaluation stack
         working-directory: stacks/evaluation
         run: |
@@ -68,6 +84,7 @@ jobs:
             --no-fail-on-empty-changeset \
             --parameter-overrides \
               "StackName=${{ env.PRODUCTION_STACK }}" \
+              "ExtractionResultsKmsKeyArn=${KMS_KEY_ARN}" \
               "EvaluationRegion=${{ env.EVALUATION_REGION }}" \
               "EvaluationModelId=us.anthropic.claude-sonnet-4-20250514-v1:0" \
               "SamplingRate=10" \
