@@ -317,6 +317,19 @@ Resources:
                   - bedrock:StopModelInvocationJob
                 Resource: "*"
               
+              # Pass BedrockBatchRole to Bedrock service for batch inference
+              - !If
+                - UseBatchInference
+                - Effect: Allow
+                  Action:
+                    - iam:PassRole
+                  Resource:
+                    - !GetAtt BedrockBatchRole.Arn
+                  Condition:
+                    StringEquals:
+                      "iam:PassedToService": "bedrock.amazonaws.com"
+                - !Ref AWS::NoValue
+              
               # SSM for discovering table names
               - Effect: Allow
                 Action:
