@@ -474,6 +474,33 @@ const DocumentList = () => {
           },
           width: 110,
         },
+        {
+          id: 'taxAnalysis',
+          header: 'Tax Analysis',
+          cell: (item) => {
+            if (!item.analysisStatus || item.analysisStatus === 'PENDING') {
+              return (
+                <Box color="text-status-inactive" variant="small">
+                  —
+                </Box>
+              );
+            }
+
+            return (
+              <Button
+                variant="inline-icon"
+                iconName="view-full"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedInvoice(item);
+                }}
+              >
+                View Details
+              </Button>
+            );
+          },
+          width: 130,
+        },
       ]}
       items={invoiceItems}
       loading={isLoadingInvoices}
