@@ -25,6 +25,7 @@ import GenAIIDPTopNavigation from '../genai-idp-top-navigation';
 import { fetchExtractionResults, formatInvoiceData, DOCUMENT_TYPES } from '../../services/extractionService';
 import { TRIGGER_INVOICE_ANALYSIS } from '../../graphql/mutations/triggerInvoiceAnalysis';
 import useUserAuthState from '../../hooks/use-user-auth-state';
+import InvoiceDetailDrawer from './InvoiceDetailDrawer';
 
 import '@awsui/global-styles/index.css';
 
@@ -39,6 +40,7 @@ const InvoiceInsights = () => {
   const [loadingInvoices, setLoadingInvoices] = useState(false);
   const [isAnalysisRunning, setIsAnalysisRunning] = useState(false);
   const [error, setError] = useState(null);
+  const [selectedInvoice, setSelectedInvoice] = useState(null);
 
   useEffect(() => {
     // Redirect if no company selected
