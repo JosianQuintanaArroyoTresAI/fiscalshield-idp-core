@@ -113,6 +113,42 @@ JSON (no markdown):
     return prompt
 
 
+def calculate_hmrc_risk(invoice: Dict) -> str:
+    """
+    Programmatic HMRC risk calculation based on deductibility and test results.
+    Returns: HIGH, MEDIUM, or LOW
+    """
+    deductibility_status = invoice.get('DeductibilityStatus', '')
+    deductibility_pct = invoice.get('DeductibilityPercentage')
+    
+    # HIGH RISK triggers
+    high_risk_triggers = [
+        deductibility_status == 'NOT_DEDUCTIBLE',
+        invoice.get('Test7_Duality') == 'FAIL',  # Dual purpose - personal element
+        invoice.get('Test2_Entertainment') == 'CLIENT_ENTERTAINMENT',  # Banned
+        invoice.get('Test5_StatutoryBan') in ['PENALTIES', 'FINES'],  # Statutory ban
+    ]
+    
+    if any(high_risk_triggers):
+        return 'HIGH'
+    
+    # MEDIUM RISK triggers
+    medium_risk_triggers = [
+        deductibility_status == 'PARTIALLY_DEDUCTIBLE',
+        deductibility_status == 'REQUIRES_REVIEW',
+        invoice.get('Test1_WhollyExclusively') == 'FAIL',
+        invoice.get('Test3_Travel') == 'COMMUTING',  # Not allowed
+        invoice.get('Test6_MixedUse') == 'APPORTIONABLE',  # Needs careful split
+        deductibility_pct and deductibility_pct < 100 and deductibility_pct > 0,
+    ]
+    
+    if any(medium_risk_triggers):
+        return 'MEDIUM'
+    
+    # LOW RISK - fully deductible with clean tests
+    return 'LOW'
+
+
 def create_stage2_deep_testing_prompt(invoice_batch: List[Dict], company_context: Dict = None) -> str:
     """
     STAGE 2: Deep compliance testing - only for invoices needing detailed analysis.
@@ -359,6 +395,9 @@ def parse_stage2_deep_testing(json_result: str, invoice_batch: List[Dict]) -> Li
                     # Addback
                     analyzed_invoice['AddbackAmount'] = tests.get('addback_amount')
                 
+                # Calculate HMRC risk programmatically based on test results
+                analyzed_invoice['HMRCRisk'] = calculate_hmrc_risk(analyzed_invoice)
+                
                 analyzed_invoices.append(analyzed_invoice)
                 
             except Exception as invoice_error:
@@ -443,6 +482,11 @@ def update_invoices_in_dynamodb(invoices: List[Dict], stage: str):
                 update_expr += ', BIMSections = :bim'
                 expr_values[':bim'] = invoice.get('BIMSections')
             
+            # Add HMRC risk (both Stage 1 and Stage 2)
+            if invoice.get('HMRCRisk'):
+                update_expr += ', HMRCRisk = :hmrc_risk'
+                expr_values[':hmrc_risk'] = invoice.get('HMRCRisk')
+            
             # Add test results if present (Stage 2 only)
             if invoice.get('Test1_WhollyExclusively'):
                 test_fields = []
@@ -450,8 +494,8 @@ def update_invoices_in_dynamodb(invoices: List[Dict], stage: str):
                 for field_name in ['Test1_WhollyExclusively', 'Test1_Reasoning',
                                    'Test2_Entertainment', 'Test3_Travel', 'Test4_Training',
                                    'Test5_StatutoryBan', 'Test6_MixedUse', 'Test6_BusinessPercentage',
-                                   'Test7_Duality', 'AddbackAmount']:
-                    if invoice.get(field_name):
+                                   'Test7_Duality', 'AddbackAmount', 'HMRCRisk']:
+                    if invoice.get(field_name) is not None:
                         test_fields.append(f'{field_name} = :{field_name}')
                         expr_values[f':{field_name}'] = invoice.get(field_name)
                 
@@ -509,6 +553,17 @@ def lambda_handler(event, context):
         if not classified_invoices:
             print("[ERROR] Stage 1 failed - no invoices classified")
             return {'statusCode': 500, 'body': json.dumps({'error': 'Stage 1 classification failed'})}
+        
+        # Calculate basic HMRC risk for Stage 1 invoices (before deep testing)
+        for invoice in classified_invoices:
+            if not invoice.get('NeedsDeepTesting', False):
+                # Simple risk for supplier invoices that skip deep testing
+                if invoice.get('DeductibilityStatus') == 'NOT_DEDUCTIBLE':
+                    invoice['HMRCRisk'] = 'HIGH'
+                elif invoice.get('DeductibilityStatus') == 'REQUIRES_REVIEW':
+                    invoice['HMRCRisk'] = 'MEDIUM'
+                else:
+                    invoice['HMRCRisk'] = 'LOW'
         
         # Update DynamoDB after Stage 1
         print(f"[STAGE1] Updating DynamoDB with {len(classified_invoices)} classified invoices...")
