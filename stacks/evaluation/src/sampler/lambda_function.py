@@ -23,6 +23,13 @@ from decimal import Decimal
 from typing import Dict, List, Any, Optional
 from boto3.dynamodb.conditions import Key, Attr
 
+
+def decimal_default(obj):
+    """JSON serializer for Decimal objects."""
+    if isinstance(obj, Decimal):
+        return float(obj)
+    raise TypeError
+
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(os.environ.get("LOG_LEVEL", "INFO"))
@@ -224,11 +231,11 @@ def prepare_evaluation_batch(
     for item in all_samples:
         batch_manifest.append({
             "documentId": item["DocumentId"],
-            "sectionId": item["SectionId"],
-            "documentType": item["DocumentType"],
-            "s3Object": item["S3Object"],
+            "sectionId": item.get("SectionId", "1"),
+            "documentType": item.get("DocumentType", "INVOICE"),
+            "s3Uri": item["DocumentId"],  # DocumentId is the S3 key (e.g., users/xxx/file.pdf)
             "originalConfidence": float(item.get("ConfidenceScore", 1.0)),
-            "originalExtraction": item.get("S3Object"),  # Link to original extraction
+            "originalExtraction": item,  # Include full extraction result for comparison
             "confidenceTier": (
                 "low" if item in sampled_items["low_confidence"]
                 else "medium" if item in sampled_items["medium_confidence"]
@@ -240,7 +247,7 @@ def prepare_evaluation_batch(
     manifest_key = f"batch-inputs/{evaluation_id}/manifest.jsonl"
     
     # Convert to JSONL format (one JSON object per line)
-    manifest_content = "\n".join([json.dumps(item) for item in batch_manifest])
+    manifest_content = "\n".join([json.dumps(item, default=decimal_default) for item in batch_manifest])
     
     s3_client.put_object(
         Bucket=EVALUATION_BUCKET,

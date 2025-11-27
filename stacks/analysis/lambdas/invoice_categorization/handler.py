@@ -113,6 +113,42 @@ JSON (no markdown):
     return prompt
 
 
+def calculate_hmrc_risk(invoice: Dict) -> str:
+    """
+    Programmatic HMRC risk calculation based on deductibility and test results.
+    Returns: HIGH, MEDIUM, or LOW
+    """
+    deductibility_status = invoice.get('DeductibilityStatus', '')
+    deductibility_pct = invoice.get('DeductibilityPercentage')
+    
+    # HIGH RISK triggers
+    high_risk_triggers = [
+        deductibility_status == 'NOT_DEDUCTIBLE',
+        invoice.get('Test7_Duality') == 'FAIL',  # Dual purpose - personal element
+        invoice.get('Test2_Entertainment') == 'CLIENT_ENTERTAINMENT',  # Banned
+        invoice.get('Test5_StatutoryBan') in ['PENALTIES', 'FINES'],  # Statutory ban
+    ]
+    
+    if any(high_risk_triggers):
+        return 'HIGH'
+    
+    # MEDIUM RISK triggers
+    medium_risk_triggers = [
+        deductibility_status == 'PARTIALLY_DEDUCTIBLE',
+        deductibility_status == 'REQUIRES_REVIEW',
+        invoice.get('Test1_WhollyExclusively') == 'FAIL',
+        invoice.get('Test3_Travel') == 'COMMUTING',  # Not allowed
+        invoice.get('Test6_MixedUse') == 'APPORTIONABLE',  # Needs careful split
+        deductibility_pct and deductibility_pct < 100 and deductibility_pct > 0,
+    ]
+    
+    if any(medium_risk_triggers):
+        return 'MEDIUM'
+    
+    # LOW RISK - fully deductible with clean tests
+    return 'LOW'
+
+
 def create_stage2_deep_testing_prompt(invoice_batch: List[Dict], company_context: Dict = None) -> str:
     """
     STAGE 2: Deep compliance testing - only for invoices needing detailed analysis.
@@ -154,10 +190,14 @@ INVOICES:
 {invoices_text}
 
 For each invoice, apply compliance tests and determine:
-- Final deductibility status
+- Final deductibility status and confidence level (HIGH/MEDIUM/LOW)
 - Percentage (0-100 or null)
-- Test results (PASS/FAIL, specific outcomes)
-- Addback amount if any
+- Recommended action (APPROVE, APPORTION, REQUEST_DOCUMENTATION, REJECT)
+- Documentation required (if any)
+- HMRC concern flag (true/false)
+- Test results with reasoning/confidence for applicable tests
+- Addback amount plus reason if any
+- Include "reasoning" and "confidence" ONLY when test is applicable (not NOT_APPLICABLE)
 
 JSON (no markdown):
 {{
@@ -166,17 +206,22 @@ JSON (no markdown):
       "invoice_id": "[ID]",
       "status": "FULLY_DEDUCTIBLE|PARTIALLY_DEDUCTIBLE|NOT_DEDUCTIBLE|REQUIRES_REVIEW",
       "percentage": 0-100|null,
-      "reasoning": "Brief",
+            "confidence": "HIGH|MEDIUM|LOW",
+            "reasoning": "Brief",
+            "recommended_action": "APPROVE|APPORTION|REQUEST_DOCUMENTATION|REJECT",
+            "documentation_required": "... or null",
+            "hmrc_concern": true|false,
       "bim_sections": "BIM37000",
       "tests": {{
-        "test_1": {{"result": "PASS|FAIL", "reasoning": "..."}},
-        "test_2": {{"result": "NOT_APPLICABLE|STAFF_ENTERTAINMENT|CLIENT_ENTERTAINMENT"}},
-        "test_3": {{"result": "NOT_APPLICABLE|BUSINESS_TRAVEL|COMMUTING"}},
-        "test_4": {{"result": "NOT_APPLICABLE|WORK_RELATED|PERSONAL_DEVELOPMENT"}},
-        "test_5": {{"result": "NOT_APPLICABLE|PENALTIES|DEPRECIATION"}},
-        "test_6": {{"result": "NOT_APPLICABLE|APPORTIONABLE|NO_MIXED_USE", "business_pct": 0-100}},
-        "test_7": {{"result": "PASS|FAIL"}},
-        "addback_amount": "0.00"
+        "test_1": {{"result": "PASS|FAIL", "reasoning": "...", "confidence": "HIGH|MEDIUM|LOW"}},
+        "test_2": {{"result": "NOT_APPLICABLE|STAFF_ENTERTAINMENT|CLIENT_ENTERTAINMENT", "reasoning": "if applicable", "confidence": "if applicable"}},
+        "test_3": {{"result": "NOT_APPLICABLE|BUSINESS_TRAVEL|COMMUTING", "reasoning": "if applicable", "confidence": "if applicable"}},
+        "test_4": {{"result": "NOT_APPLICABLE|WORK_RELATED|PERSONAL_DEVELOPMENT", "reasoning": "if applicable", "confidence": "if applicable"}},
+        "test_5": {{"result": "NOT_APPLICABLE|PENALTIES|DEPRECIATION", "reasoning": "if applicable", "confidence": "if applicable"}},
+                "test_6": {"result": "NOT_APPLICABLE|APPORTIONABLE|NO_MIXED_USE", "business_pct": 0-100, "reasoning": "if applicable", "confidence": "if applicable", "documentation_needed": "... or null"},
+        "test_7": {{"result": "PASS|FAIL", "reasoning": "...", "confidence": "HIGH|MEDIUM|LOW"}},
+                "addback_amount": "0.00",
+                "addback_reason": "... or null"
       }}
     }}
   ]
@@ -321,7 +366,11 @@ def parse_stage2_deep_testing(json_result: str, invoice_batch: List[Dict]) -> Li
                     'DeductibilityStatus': analysis.get('status'),
                     'DeductibilityPercentage': analysis.get('percentage'),
                     'DeductibilityReasoning': analysis.get('reasoning'),
+                    'DeductibilityConfidence': analysis.get('confidence'),
                     'BIMSections': analysis.get('bim_sections'),
+                    'HMRCConcern': analysis.get('hmrc_concern', False),
+                    'RecommendedAction': analysis.get('recommended_action'),
+                    'DocumentationRequired': analysis.get('documentation_required'),
                     'AnalysisStatus': 'ANALYZED',
                     'AnalyzedAt': int(time.time()),
                     'ModelUsed': MODEL_ID,
@@ -330,12 +379,17 @@ def parse_stage2_deep_testing(json_result: str, invoice_batch: List[Dict]) -> Li
                 
                 # Parse compliance tests
                 tests = analysis.get('tests', {})
+                print(f"[STAGE2] Invoice {analysis.get('invoice_id', 'unknown')[:50]}: has_tests={bool(tests)}, test_keys={list(tests.keys()) if tests else 'none'}")
+                
                 if tests:
                     test1 = tests.get('test_1', {})
                     analyzed_invoice.update({
                         'Test1_WhollyExclusively': test1.get('result'),
                         'Test1_Reasoning': test1.get('reasoning'),
+                        'Test1_Confidence': test1.get('confidence'),
                     })
+                    
+                    print(f"[STAGE2] Invoice {analysis.get('invoice_id', 'unknown')[:50]}: Test1={test1.get('result')}, has_reasoning={bool(test1.get('reasoning'))}, has_confidence={bool(test1.get('confidence'))}")
                     
                     # Tests 2-7 (for EXPENSE_CLAIM)
                     for test_num in range(2, 8):
@@ -344,20 +398,37 @@ def parse_stage2_deep_testing(json_result: str, invoice_batch: List[Dict]) -> Li
                         if test_data:
                             if test_num == 2:
                                 analyzed_invoice['Test2_Entertainment'] = test_data.get('result')
+                                analyzed_invoice['Test2_Reasoning'] = test_data.get('reasoning')
+                                analyzed_invoice['Test2_Confidence'] = test_data.get('confidence')
                             elif test_num == 3:
                                 analyzed_invoice['Test3_Travel'] = test_data.get('result')
+                                analyzed_invoice['Test3_Reasoning'] = test_data.get('reasoning')
+                                analyzed_invoice['Test3_Confidence'] = test_data.get('confidence')
                             elif test_num == 4:
                                 analyzed_invoice['Test4_Training'] = test_data.get('result')
+                                analyzed_invoice['Test4_Reasoning'] = test_data.get('reasoning')
+                                analyzed_invoice['Test4_Confidence'] = test_data.get('confidence')
                             elif test_num == 5:
                                 analyzed_invoice['Test5_StatutoryBan'] = test_data.get('result')
+                                analyzed_invoice['Test5_Reasoning'] = test_data.get('reasoning')
+                                analyzed_invoice['Test5_Confidence'] = test_data.get('confidence')
                             elif test_num == 6:
                                 analyzed_invoice['Test6_MixedUse'] = test_data.get('result')
                                 analyzed_invoice['Test6_BusinessPercentage'] = test_data.get('business_pct')
+                                analyzed_invoice['Test6_Reasoning'] = test_data.get('reasoning')
+                                analyzed_invoice['Test6_Confidence'] = test_data.get('confidence')
+                                analyzed_invoice['Test6_DocumentationNeeded'] = test_data.get('documentation_needed')
                             elif test_num == 7:
                                 analyzed_invoice['Test7_Duality'] = test_data.get('result')
+                                analyzed_invoice['Test7_Reasoning'] = test_data.get('reasoning')
+                                analyzed_invoice['Test7_Confidence'] = test_data.get('confidence')
                     
                     # Addback
                     analyzed_invoice['AddbackAmount'] = tests.get('addback_amount')
+                    analyzed_invoice['AddbackReason'] = tests.get('addback_reason')
+                
+                # Calculate HMRC risk programmatically based on test results
+                analyzed_invoice['HMRCRisk'] = calculate_hmrc_risk(analyzed_invoice)
                 
                 analyzed_invoices.append(analyzed_invoice)
                 
@@ -439,19 +510,44 @@ def update_invoices_in_dynamodb(invoices: List[Dict], stage: str):
                 update_expr += ', DeductibilityReasoning = :reasoning'
                 expr_values[':reasoning'] = invoice.get('DeductibilityReasoning')
             
+            if invoice.get('DeductibilityConfidence'):
+                update_expr += ', DeductibilityConfidence = :deduct_conf'
+                expr_values[':deduct_conf'] = invoice.get('DeductibilityConfidence')
+            
             if invoice.get('BIMSections'):
                 update_expr += ', BIMSections = :bim'
                 expr_values[':bim'] = invoice.get('BIMSections')
             
-            # Add test results if present (Stage 2 only)
+            if invoice.get('DocumentationRequired') is not None:
+                update_expr += ', DocumentationRequired = :docs_required'
+                expr_values[':docs_required'] = invoice.get('DocumentationRequired')
+            
+            if invoice.get('RecommendedAction'):
+                update_expr += ', RecommendedAction = :recommended_action'
+                expr_values[':recommended_action'] = invoice.get('RecommendedAction')
+            
+            if invoice.get('HMRCConcern') is not None:
+                update_expr += ', HMRCConcern = :hmrc_concern_flag'
+                expr_values[':hmrc_concern_flag'] = invoice.get('HMRCConcern')
+            
+            # Add HMRC risk if not in test fields
+            if invoice.get('HMRCRisk') and not invoice.get('Test1_WhollyExclusively'):
+                update_expr += ', HMRCRisk = :hmrc_risk'
+                expr_values[':hmrc_risk'] = invoice.get('HMRCRisk')
+            
+            # Add test results if present (Stage 2 only - includes HMRCRisk)
             if invoice.get('Test1_WhollyExclusively'):
                 test_fields = []
                 
-                for field_name in ['Test1_WhollyExclusively', 'Test1_Reasoning',
-                                   'Test2_Entertainment', 'Test3_Travel', 'Test4_Training',
-                                   'Test5_StatutoryBan', 'Test6_MixedUse', 'Test6_BusinessPercentage',
-                                   'Test7_Duality', 'AddbackAmount']:
-                    if invoice.get(field_name):
+                for field_name in ['Test1_WhollyExclusively', 'Test1_Reasoning', 'Test1_Confidence',
+                                   'Test2_Entertainment', 'Test2_Reasoning', 'Test2_Confidence',
+                                   'Test3_Travel', 'Test3_Reasoning', 'Test3_Confidence',
+                                   'Test4_Training', 'Test4_Reasoning', 'Test4_Confidence',
+                                   'Test5_StatutoryBan', 'Test5_Reasoning', 'Test5_Confidence',
+                                   'Test6_MixedUse', 'Test6_BusinessPercentage', 'Test6_Reasoning', 'Test6_Confidence', 'Test6_DocumentationNeeded',
+                                   'Test7_Duality', 'Test7_Reasoning', 'Test7_Confidence',
+                                   'AddbackAmount', 'AddbackReason', 'HMRCRisk']:
+                    if invoice.get(field_name) is not None:
                         test_fields.append(f'{field_name} = :{field_name}')
                         expr_values[f':{field_name}'] = invoice.get(field_name)
                 
@@ -509,6 +605,17 @@ def lambda_handler(event, context):
         if not classified_invoices:
             print("[ERROR] Stage 1 failed - no invoices classified")
             return {'statusCode': 500, 'body': json.dumps({'error': 'Stage 1 classification failed'})}
+        
+        # Calculate basic HMRC risk for Stage 1 invoices (before deep testing)
+        for invoice in classified_invoices:
+            if not invoice.get('NeedsDeepTesting', False):
+                # Simple risk for supplier invoices that skip deep testing
+                if invoice.get('DeductibilityStatus') == 'NOT_DEDUCTIBLE':
+                    invoice['HMRCRisk'] = 'HIGH'
+                elif invoice.get('DeductibilityStatus') == 'REQUIRES_REVIEW':
+                    invoice['HMRCRisk'] = 'MEDIUM'
+                else:
+                    invoice['HMRCRisk'] = 'LOW'
         
         # Update DynamoDB after Stage 1
         print(f"[STAGE1] Updating DynamoDB with {len(classified_invoices)} classified invoices...")

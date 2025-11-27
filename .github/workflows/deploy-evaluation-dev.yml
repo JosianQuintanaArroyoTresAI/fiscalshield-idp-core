@@ -5,8 +5,6 @@ on:
   push:
     branches:
       - dev
-    paths:
-      - 'stacks/evaluation/**'
   workflow_dispatch:
 
 env:
@@ -53,6 +51,22 @@ jobs:
             --output text
           echo "✓ Production stack found"
 
+      - name: 🔑 Capture KMS key ARN
+        run: |
+          KMS_KEY_ARN=$(aws cloudformation describe-stacks \
+            --stack-name ${{ env.PRODUCTION_STACK }} \
+            --region ${{ env.AWS_REGION }} \
+            --query 'Stacks[0].Outputs[?OutputKey==`KMSEncryptionKeyArn`].OutputValue' \
+            --output text)
+
+          if [ -z "$KMS_KEY_ARN" ] || [ "$KMS_KEY_ARN" = "None" ]; then
+            echo "Unable to resolve KMSEncryptionKeyArn output" >&2
+            exit 1
+          fi
+
+          echo "Resolved KMS key ARN: $KMS_KEY_ARN"
+          echo "KMS_KEY_ARN=$KMS_KEY_ARN" >> $GITHUB_ENV
+
       - name: 🔨 Build evaluation stack
         working-directory: stacks/evaluation
         run: |
@@ -65,19 +79,20 @@ jobs:
             --stack-name ${{ env.STACK_NAME }} \
             --region ${{ env.AWS_REGION }} \
             --capabilities CAPABILITY_NAMED_IAM \
+            --resolve-s3 \
             --no-confirm-changeset \
             --no-fail-on-empty-changeset \
             --parameter-overrides \
-              StackName=${{ env.PRODUCTION_STACK }} \
-              EvaluationRegion=${{ env.EVALUATION_REGION }} \
-              EvaluationModelId=us.anthropic.claude-sonnet-4-20250514-v1:0 \
-              SamplingRate=10 \
-              LowConfidenceThreshold=0.7 \
-              MediumConfidenceSamplingRate=20 \
-              HighConfidenceSamplingRate=5 \
-              BatchInferenceEnabled=true \
-              EvaluationSchedule="cron(0 2 * * ? *)" \
-              LogLevel=INFO
+              "StackName=${{ env.PRODUCTION_STACK }}" \
+              "ExtractionResultsKmsKeyArn=${KMS_KEY_ARN}" \
+              "EvaluationRegion=${{ env.EVALUATION_REGION }}" \
+              "EvaluationModelId=us.anthropic.claude-sonnet-4-20250514-v1:0" \
+              "SamplingRate=10" \
+              "LowConfidenceThreshold=0.7" \
+              "MediumConfidenceSamplingRate=20" \
+              "HighConfidenceSamplingRate=5" \
+              "BatchInferenceEnabled=true" \
+              "LogLevel=INFO"
 
       - name: 📊 Deployment summary
         if: success()

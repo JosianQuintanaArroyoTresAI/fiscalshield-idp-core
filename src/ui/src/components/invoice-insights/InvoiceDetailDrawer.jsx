@@ -457,17 +457,37 @@ const InvoiceDetailDrawer = ({ invoice, visible, onDismiss }) => {
 
                 <div>
                   <Box variant="awsui-key-label">TEST 5: Statutory Ban</Box>
-                  <Badge
-                    color={
-                      rawData.Test5_StatutoryBan === 'NOT_APPLICABLE'
-                        ? 'green'
-                        : rawData.Test5_StatutoryBan === 'PENALTIES' || rawData.Test5_StatutoryBan === 'DEPRECIATION'
-                        ? 'red'
-                        : 'grey'
-                    }
-                  >
-                    {rawData.Test5_StatutoryBan?.replace(/_/g, ' ') || 'NOT APPLICABLE'}
-                  </Badge>
+                  <SpaceBetween direction="horizontal" size="xs">
+                    <Badge
+                      color={
+                        rawData.Test5_StatutoryBan === 'NOT_APPLICABLE'
+                          ? 'green'
+                          : rawData.Test5_StatutoryBan === 'PENALTIES' || rawData.Test5_StatutoryBan === 'DEPRECIATION'
+                          ? 'red'
+                          : 'grey'
+                      }
+                    >
+                      {rawData.Test5_StatutoryBan?.replace(/_/g, ' ') || 'NOT APPLICABLE'}
+                    </Badge>
+                    {rawData.Test5_Confidence && (
+                      <Badge
+                        color={
+                          rawData.Test5_Confidence === 'HIGH'
+                            ? 'green'
+                            : rawData.Test5_Confidence === 'MEDIUM'
+                            ? 'blue'
+                            : 'grey'
+                        }
+                      >
+                        {rawData.Test5_Confidence}
+                      </Badge>
+                    )}
+                  </SpaceBetween>
+                  {rawData.Test5_Reasoning && (
+                    <Box variant="small" color="text-body-secondary" padding={{ top: 'xxs' }}>
+                      {rawData.Test5_Reasoning}
+                    </Box>
+                  )}
                 </div>
               </ColumnLayout>
 

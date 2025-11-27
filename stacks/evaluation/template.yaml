@@ -12,6 +12,11 @@ Parameters:
     Type: String
     Description: Name of the main IDP stack to connect to
     Default: fiscalshield-idp-dev
+
+  ExtractionResultsKmsKeyArn:
+    Type: String
+    Description: KMS key ARN used to encrypt the main stack's ExtractionResults table
+    AllowedPattern: "^arn:aws:kms:[a-z0-9-]+:[0-9]{12}:key/[0-9A-Fa-f-]+$"
   
   EvaluationRegion:
     Type: String
@@ -245,6 +250,12 @@ Resources:
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
+              # List DynamoDB tables for discovery
+              - Effect: Allow
+                Action:
+                  - dynamodb:ListTables
+                Resource: "*"
+              
               # Read from production ExtractionResultsTable
               - Effect: Allow
                 Action:
@@ -306,6 +317,19 @@ Resources:
                   - bedrock:StopModelInvocationJob
                 Resource: "*"
               
+              # Pass BedrockBatchRole to Bedrock service for batch inference
+              - !If
+                - UseBatchInference
+                - Effect: Allow
+                  Action:
+                    - iam:PassRole
+                  Resource:
+                    - !GetAtt BedrockBatchRole.Arn
+                  Condition:
+                    StringEquals:
+                      "iam:PassedToService": "bedrock.amazonaws.com"
+                - !Ref AWS::NoValue
+              
               # SSM for discovering table names
               - Effect: Allow
                 Action:
@@ -313,6 +337,15 @@ Resources:
                   - ssm:GetParameters
                 Resource:
                   - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${StackName}/*"
+
+              # Decrypt ExtractionResults data encrypted with CMK
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                  - kms:GenerateDataKey
+                  - kms:DescribeKey
+                Resource:
+                  - !Ref ExtractionResultsKmsKeyArn
 
   BedrockBatchRole:
     Type: AWS::IAM::Role

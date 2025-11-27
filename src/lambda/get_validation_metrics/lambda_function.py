@@ -90,7 +90,7 @@ def get_validation_metrics(
     mismatches = total_validations - matches
     
     # By document type
-    by_type = defaultdict(lambda: {"total": 0, "matches": 0, "mismatches": 0, "high_confidence_mismatches": 0})
+    by_type = defaultdict(lambda: {"total": 0, "matches": 0, "mismatches": 0, "highConfidenceMismatches": 0})
     
     # By confidence bucket
     confidence_buckets = {
@@ -117,16 +117,16 @@ def get_validation_metrics(
         else:
             by_type[user_selection]["mismatches"] += 1
             if confidence > 0.90:
-                by_type[user_selection]["high_confidence_mismatches"] += 1
+                by_type[user_selection]["highConfidenceMismatches"] += 1
                 
                 # Collect recent high-confidence mismatches for review
                 high_confidence_mismatches.append({
-                    "document_id": item.get("DocumentId"),
-                    "user_selection": user_selection,
-                    "model_prediction": model_prediction,
+                    "documentId": item.get("DocumentId"),
+                    "userSelection": user_selection,
+                    "modelPrediction": model_prediction,
                     "confidence": confidence,
-                    "created_at": item.get("CreatedAt"),
-                    "validation_id": item.get("ValidationId"),
+                    "createdAt": item.get("CreatedAt"),
+                    "validationId": item.get("ValidationId"),
                     "company": item.get("CompanyName", "Unknown")
                 })
         
@@ -151,23 +151,23 @@ def get_validation_metrics(
     mismatch_rate = (mismatches / total_validations * 100) if total_validations > 0 else 0
     
     # Sort high-confidence mismatches by date (most recent first)
-    high_confidence_mismatches.sort(key=lambda x: x["created_at"], reverse=True)
+    high_confidence_mismatches.sort(key=lambda x: x["createdAt"], reverse=True)
     
     # Build response
     metrics = {
-        "time_range_days": time_range_days,
-        "total_validations": total_validations,
+        "timeRangeDays": time_range_days,
+        "totalValidations": total_validations,
         "matches": matches,
         "mismatches": mismatches,
-        "match_rate_percent": round(match_rate, 2),
-        "mismatch_rate_percent": round(mismatch_rate, 2),
-        "by_document_type": dict(by_type),
-        "by_confidence_bucket": confidence_buckets,
-        "high_confidence_mismatches": high_confidence_mismatches[:50],  # Limit to 50 most recent
+        "matchRatePercent": round(match_rate, 2),
+        "mismatchRatePercent": round(mismatch_rate, 2),
+        "byDocumentType": json.dumps(dict(by_type)),  # GraphQL AWSJSON expects string
+        "byConfidenceBucket": json.dumps(confidence_buckets),  # GraphQL AWSJSON expects string
+        "highConfidenceMismatches": high_confidence_mismatches[:50],  # Limit to 50 most recent
         "summary": {
-            "model_accuracy": f"{match_rate:.1f}%",
-            "total_documents_validated": total_validations,
-            "requires_attention": sum(1 for item in items if not item.get("ValidationMatch") and float(item.get("ModelConfidence", 0)) > 0.90),
+            "modelAccuracy": f"{match_rate:.1f}%",
+            "totalDocumentsValidated": total_validations,
+            "requiresAttention": sum(1 for item in items if not item.get("ValidationMatch") and float(item.get("ModelConfidence", 0)) > 0.90),
         }
     }
     

@@ -623,13 +623,15 @@ LEGITIMATE BUSINESS PATTERNS (typically score 4-5):
 • Professional services with proper references
 • ATM withdrawals with business justification (e.g., "petty cash for market stall")
 • Round amounts from ATMs are NORMAL and expected
-• Weekend hospitality expenses for client entertainment
+• Weekend (Saturday/Sunday) hospitality expenses for client entertainment
 • Direct debits and standing orders to established vendors
+• Weekday transactions (Monday-Friday) are normal business activity
 
 CONTEXT-DEPENDENT PATTERNS (typically score 3):
-• Weekend transactions - consider the business type:
+• Weekend transactions (Saturday/Sunday ONLY - Friday is a normal business day) - consider the business type:
   - Restaurant on Saturday might be client entertainment (legitimate)
   - Office supplies on Sunday might be unusual (investigate)
+  - Friday transactions are normal weekday business activity
 • Round number transfers - consider the context:
   - £500 to "John Smith" with no reference (suspicious)
   - £500 to "ABC Ltd - Monthly retainer" (legitimate)

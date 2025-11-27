@@ -5698,6 +5698,7 @@ Resources:
           - id: W76
             reason: "Suppressing W76: SPCM for IAM policy document is higher than 25"
     Properties:
+      Description: "AppSync service role with Lambda invoke permissions - Updated 2025-11-24"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -5763,6 +5764,7 @@ Resources:
                   - !GetAtt ListExtractionResultsFunction.Arn
                   - !GetAtt TriggerTransactionAnalysisFunction.Arn
                   - !GetAtt TriggerInvoiceAnalysisFunction.Arn
+                  - !GetAtt GetValidationMetricsFunction.Arn
 
   # Lambda function for Create Document resolver
   CreateDocumentResolverFunction:

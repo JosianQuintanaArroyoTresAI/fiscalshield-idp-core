@@ -46,26 +46,33 @@ const ValidationMetricsDashboard = () => {
   ];
 
   const fetchMetrics = async () => {
+    console.log('[ValidationMetrics] fetchMetrics called, timeRange:', timeRange);
     setLoading(true);
     setError(null);
 
     try {
+      console.log('[ValidationMetrics] Calling API.graphql...');
       const response = await API.graphql(
         graphqlOperation(getValidationMetrics, {
           timeRangeDays: parseInt(timeRange.value),
         }),
       );
 
+      console.log('[ValidationMetrics] API response:', response);
       const metricsData = response.data.getValidationMetrics;
+      console.log('[ValidationMetrics] Metrics data:', metricsData);
 
       // Parse JSON fields
       metricsData.byDocumentType = JSON.parse(metricsData.byDocumentType);
       metricsData.byConfidenceBucket = JSON.parse(metricsData.byConfidenceBucket);
 
       setMetrics(metricsData);
+      console.log('[ValidationMetrics] Metrics set successfully');
     } catch (err) {
       logger.error('Error fetching validation metrics:', err);
-      setError(err.message || 'Failed to load validation metrics');
+      console.error('Validation metrics error:', err);
+      console.error('Error details:', JSON.stringify(err, null, 2));
+      setError(err.message || err.errors?.[0]?.message || 'Failed to load validation metrics');
     } finally {
       setLoading(false);
     }
@@ -128,19 +135,19 @@ const ValidationMetricsDashboard = () => {
   // Prepare table data for by-type breakdown
   const byTypeTableItems = Object.entries(metrics.byDocumentType || {}).map(([type, data]) => ({
     documentType: type,
-    total: data.total,
-    matches: data.matches,
-    mismatches: data.mismatches,
-    highConfidenceMismatches: data.high_confidence_mismatches,
-    accuracy: data.total > 0 ? ((data.matches / data.total) * 100).toFixed(1) : '0.0',
+    total: data.total || 0,
+    matches: data.matches || 0,
+    mismatches: data.mismatches || 0,
+    highConfidenceMismatches: data.highConfidenceMismatches || 0,
+    accuracy: (data.total || 0) > 0 ? (((data.matches || 0) / (data.total || 0)) * 100).toFixed(1) : '0.0',
   }));
 
   // Prepare table data for confidence calibration
   const confidenceBuckets = Object.entries(metrics.byConfidenceBucket || {}).map(([bucket, data]) => ({
     bucket,
-    total: data.total,
-    matches: data.matches,
-    accuracy: data.total > 0 ? ((data.matches / data.total) * 100).toFixed(1) : '0.0',
+    total: data.total || 0,
+    matches: data.matches || 0,
+    accuracy: (data.total || 0) > 0 ? (((data.matches || 0) / (data.total || 0)) * 100).toFixed(1) : '0.0',
   }));
 
   return (
