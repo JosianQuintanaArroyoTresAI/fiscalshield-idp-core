@@ -367,12 +367,17 @@ def parse_stage2_deep_testing(json_result: str, invoice_batch: List[Dict]) -> Li
                 
                 # Parse compliance tests
                 tests = analysis.get('tests', {})
+                print(f"[STAGE2] Invoice {analysis.get('invoice_id', 'unknown')[:50]}: has_tests={bool(tests)}, test_keys={list(tests.keys()) if tests else 'none'}")
+                
                 if tests:
                     test1 = tests.get('test_1', {})
                     analyzed_invoice.update({
                         'Test1_WhollyExclusively': test1.get('result'),
                         'Test1_Reasoning': test1.get('reasoning'),
+                        'Test1_Confidence': test1.get('confidence'),
                     })
+                    
+                    print(f"[STAGE2] Invoice {analysis.get('invoice_id', 'unknown')[:50]}: Test1={test1.get('result')}, has_reasoning={bool(test1.get('reasoning'))}, has_confidence={bool(test1.get('confidence'))}")
                     
                     # Tests 2-7 (for EXPENSE_CLAIM)
                     for test_num in range(2, 8):
