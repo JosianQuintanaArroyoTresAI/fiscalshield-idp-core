@@ -93,9 +93,36 @@ const listExtractionResults = /* GraphQL */ `
         # Invoice Tax Deductibility Analysis
         DeductibilityStatus
         DeductibilityPercentage
+        DeductibilityConfidence
         BIMSections
         DeductibilityReasoning
         DocumentationRequired
+        RecommendedAction
+        AddbackAmount
+        AddbackReason
+        Test1_WhollyExclusively
+        Test1_Reasoning
+        Test1_Confidence
+        Test2_Entertainment
+        Test2_Reasoning
+        Test2_Confidence
+        Test3_Travel
+        Test3_Reasoning
+        Test3_Confidence
+        Test4_Training
+        Test4_Reasoning
+        Test4_Confidence
+        Test5_StatutoryBan
+        Test5_Reasoning
+        Test5_Confidence
+        Test6_MixedUse
+        Test6_BusinessPercentage
+        Test6_Reasoning
+        Test6_Confidence
+        Test6_DocumentationNeeded
+        Test7_Duality
+        Test7_Reasoning
+        Test7_Confidence
       }
       nextToken
     }
