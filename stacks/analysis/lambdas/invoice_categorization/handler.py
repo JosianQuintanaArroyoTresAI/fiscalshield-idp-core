@@ -194,6 +194,7 @@ For each invoice, apply compliance tests and determine:
 - Percentage (0-100 or null)
 - Test results (PASS/FAIL, specific outcomes)
 - Addback amount if any
+- Include "reasoning" and "confidence" ONLY when test is applicable (not NOT_APPLICABLE)
 
 JSON (no markdown):
 {{
@@ -205,13 +206,13 @@ JSON (no markdown):
       "reasoning": "Brief",
       "bim_sections": "BIM37000",
       "tests": {{
-        "test_1": {{"result": "PASS|FAIL", "reasoning": "..."}},
-        "test_2": {{"result": "NOT_APPLICABLE|STAFF_ENTERTAINMENT|CLIENT_ENTERTAINMENT"}},
-        "test_3": {{"result": "NOT_APPLICABLE|BUSINESS_TRAVEL|COMMUTING"}},
-        "test_4": {{"result": "NOT_APPLICABLE|WORK_RELATED|PERSONAL_DEVELOPMENT"}},
-        "test_5": {{"result": "NOT_APPLICABLE|PENALTIES|DEPRECIATION"}},
-        "test_6": {{"result": "NOT_APPLICABLE|APPORTIONABLE|NO_MIXED_USE", "business_pct": 0-100}},
-        "test_7": {{"result": "PASS|FAIL"}},
+        "test_1": {{"result": "PASS|FAIL", "reasoning": "...", "confidence": "HIGH|MEDIUM|LOW"}},
+        "test_2": {{"result": "NOT_APPLICABLE|STAFF_ENTERTAINMENT|CLIENT_ENTERTAINMENT", "reasoning": "if applicable", "confidence": "if applicable"}},
+        "test_3": {{"result": "NOT_APPLICABLE|BUSINESS_TRAVEL|COMMUTING", "reasoning": "if applicable", "confidence": "if applicable"}},
+        "test_4": {{"result": "NOT_APPLICABLE|WORK_RELATED|PERSONAL_DEVELOPMENT", "reasoning": "if applicable", "confidence": "if applicable"}},
+        "test_5": {{"result": "NOT_APPLICABLE|PENALTIES|DEPRECIATION", "reasoning": "if applicable", "confidence": "if applicable"}},
+        "test_6": {{"result": "NOT_APPLICABLE|APPORTIONABLE|NO_MIXED_USE", "business_pct": 0-100, "reasoning": "if applicable", "confidence": "if applicable"}},
+        "test_7": {{"result": "PASS|FAIL", "reasoning": "...", "confidence": "HIGH|MEDIUM|LOW"}},
         "addback_amount": "0.00"
       }}
     }}
@@ -380,17 +381,29 @@ def parse_stage2_deep_testing(json_result: str, invoice_batch: List[Dict]) -> Li
                         if test_data:
                             if test_num == 2:
                                 analyzed_invoice['Test2_Entertainment'] = test_data.get('result')
+                                analyzed_invoice['Test2_Reasoning'] = test_data.get('reasoning')
+                                analyzed_invoice['Test2_Confidence'] = test_data.get('confidence')
                             elif test_num == 3:
                                 analyzed_invoice['Test3_Travel'] = test_data.get('result')
+                                analyzed_invoice['Test3_Reasoning'] = test_data.get('reasoning')
+                                analyzed_invoice['Test3_Confidence'] = test_data.get('confidence')
                             elif test_num == 4:
                                 analyzed_invoice['Test4_Training'] = test_data.get('result')
+                                analyzed_invoice['Test4_Reasoning'] = test_data.get('reasoning')
+                                analyzed_invoice['Test4_Confidence'] = test_data.get('confidence')
                             elif test_num == 5:
                                 analyzed_invoice['Test5_StatutoryBan'] = test_data.get('result')
+                                analyzed_invoice['Test5_Reasoning'] = test_data.get('reasoning')
+                                analyzed_invoice['Test5_Confidence'] = test_data.get('confidence')
                             elif test_num == 6:
                                 analyzed_invoice['Test6_MixedUse'] = test_data.get('result')
                                 analyzed_invoice['Test6_BusinessPercentage'] = test_data.get('business_pct')
+                                analyzed_invoice['Test6_Reasoning'] = test_data.get('reasoning')
+                                analyzed_invoice['Test6_Confidence'] = test_data.get('confidence')
                             elif test_num == 7:
                                 analyzed_invoice['Test7_Duality'] = test_data.get('result')
+                                analyzed_invoice['Test7_Reasoning'] = test_data.get('reasoning')
+                                analyzed_invoice['Test7_Confidence'] = test_data.get('confidence')
                     
                     # Addback
                     analyzed_invoice['AddbackAmount'] = tests.get('addback_amount')
@@ -491,10 +504,14 @@ def update_invoices_in_dynamodb(invoices: List[Dict], stage: str):
             if invoice.get('Test1_WhollyExclusively'):
                 test_fields = []
                 
-                for field_name in ['Test1_WhollyExclusively', 'Test1_Reasoning',
-                                   'Test2_Entertainment', 'Test3_Travel', 'Test4_Training',
-                                   'Test5_StatutoryBan', 'Test6_MixedUse', 'Test6_BusinessPercentage',
-                                   'Test7_Duality', 'AddbackAmount', 'HMRCRisk']:
+                for field_name in ['Test1_WhollyExclusively', 'Test1_Reasoning', 'Test1_Confidence',
+                                   'Test2_Entertainment', 'Test2_Reasoning', 'Test2_Confidence',
+                                   'Test3_Travel', 'Test3_Reasoning', 'Test3_Confidence',
+                                   'Test4_Training', 'Test4_Reasoning', 'Test4_Confidence',
+                                   'Test5_StatutoryBan', 'Test5_Reasoning', 'Test5_Confidence',
+                                   'Test6_MixedUse', 'Test6_BusinessPercentage', 'Test6_Reasoning', 'Test6_Confidence',
+                                   'Test7_Duality', 'Test7_Reasoning', 'Test7_Confidence',
+                                   'AddbackAmount', 'HMRCRisk']:
                     if invoice.get(field_name) is not None:
                         test_fields.append(f'{field_name} = :{field_name}')
                         expr_values[f':{field_name}'] = invoice.get(field_name)
