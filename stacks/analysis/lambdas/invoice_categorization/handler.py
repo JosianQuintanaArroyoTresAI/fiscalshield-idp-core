@@ -495,12 +495,12 @@ def update_invoices_in_dynamodb(invoices: List[Dict], stage: str):
                 update_expr += ', BIMSections = :bim'
                 expr_values[':bim'] = invoice.get('BIMSections')
             
-            # Add HMRC risk (both Stage 1 and Stage 2)
-            if invoice.get('HMRCRisk'):
+            # Add HMRC risk if not in test fields
+            if invoice.get('HMRCRisk') and not invoice.get('Test1_WhollyExclusively'):
                 update_expr += ', HMRCRisk = :hmrc_risk'
                 expr_values[':hmrc_risk'] = invoice.get('HMRCRisk')
             
-            # Add test results if present (Stage 2 only)
+            # Add test results if present (Stage 2 only - includes HMRCRisk)
             if invoice.get('Test1_WhollyExclusively'):
                 test_fields = []
                 
