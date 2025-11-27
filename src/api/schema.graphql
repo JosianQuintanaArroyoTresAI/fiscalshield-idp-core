@@ -337,9 +337,35 @@ type ExtractionResult @aws_cognito_user_pools @aws_iam {
   # Invoice Tax Deductibility Analysis (populated by Analysis Stack)
   DeductibilityStatus: String
   DeductibilityPercentage: Int
+  DeductibilityConfidence: String
   BIMSections: String
   DeductibilityReasoning: String
   DocumentationRequired: String
+  AddbackAmount: String
+  AddbackReason: String
+  Test1_WhollyExclusively: String
+  Test1_Reasoning: String
+  Test1_Confidence: String
+  Test2_Entertainment: String
+  Test2_Reasoning: String
+  Test2_Confidence: String
+  Test3_Travel: String
+  Test3_Reasoning: String
+  Test3_Confidence: String
+  Test4_Training: String
+  Test4_Reasoning: String
+  Test4_Confidence: String
+  Test5_StatutoryBan: String
+  Test5_Reasoning: String
+  Test5_Confidence: String
+  Test6_MixedUse: String
+  Test6_BusinessPercentage: Int
+  Test6_Reasoning: String
+  Test6_Confidence: String
+  Test6_DocumentationNeeded: String
+  Test7_Duality: String
+  Test7_Reasoning: String
+  Test7_Confidence: String
 }
 
 type ExtractionResultsConnection @aws_cognito_user_pools @aws_iam {
