@@ -246,7 +246,7 @@ classification:
   
   temperature: "0.0"
   top_p: "0.1"
-  max_tokens: "16384"
+  max_tokens: "8000"
   top_k: "5"
   
   system_prompt: >-
