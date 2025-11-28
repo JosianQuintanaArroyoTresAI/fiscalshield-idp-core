@@ -232,6 +232,9 @@ classification:
   max_invoices_per_batch: 20      # Maximum invoices in one batch
   max_statements_per_batch: 1     # Bank statements: always 1 per section
   
+  # Page count validation (enforced in queue_sender Lambda)
+  max_pages: 500  # Maximum pages allowed per uploaded PDF file
+  
   image:
     target_height: ""
     target_width: ""

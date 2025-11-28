@@ -15,6 +15,7 @@ import {
   ButtonDropdown,
 } from '@awsui/components-react';
 import { API, graphqlOperation } from 'aws-amplify';
+import { PDFDocument } from 'pdf-lib';
 import uploadDocument from '../../graphql/queries/uploadDocument';
 import useSettingsContext from '../../contexts/settings';
 import { useCompany } from '../../contexts/company';
@@ -29,6 +30,9 @@ const UploadDocumentPanel = () => {
   const [documentType, setDocumentType] = useState(null); // 'invoice' or 'bank-statement'
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef(null);
+
+  // Maximum page limit for uploaded PDFs
+  const MAX_PAGES = 500;
 
   if (!settings.InputBucket) {
     return (
@@ -81,6 +85,33 @@ const UploadDocumentPanel = () => {
     fileInputRef.current?.click();
   };
 
+  const validatePdfPageCount = async (file) => {
+    // Only validate PDFs
+    if (!file.type.includes('pdf') && !file.name.toLowerCase().endsWith('.pdf')) {
+      return { valid: true };
+    }
+
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdfDoc = await PDFDocument.load(arrayBuffer);
+      const pageCount = pdfDoc.getPageCount();
+
+      if (pageCount > MAX_PAGES) {
+        return {
+          valid: false,
+          error: `File "${file.name}" has ${pageCount} pages, which exceeds the maximum limit of ${MAX_PAGES} pages. Please split the file or reduce the number of pages.`,
+        };
+      }
+
+      console.log(`✓ ${file.name}: ${pageCount} pages (within ${MAX_PAGES} page limit)`);
+      return { valid: true, pageCount };
+    } catch (err) {
+      console.error(`Failed to validate page count for ${file.name}:`, err);
+      // If we can't read the PDF, let backend validation catch it
+      return { valid: true };
+    }
+  };
+
   const uploadFiles = async () => {
     if (selectedFiles.length === 0) {
       setError('Please select at least one file to upload');
@@ -90,6 +121,16 @@ const UploadDocumentPanel = () => {
     setIsUploading(true);
     setUploadStatus([]);
     setError(null);
+
+    // Validate page counts before uploading
+    for (const file of selectedFiles) {
+      const validation = await validatePdfPageCount(file);
+      if (!validation.valid) {
+        setError(validation.error);
+        setIsUploading(false);
+        return;
+      }
+    }
 
     // Check if company is selected using the context
     if (!isCompanySelected || !activeCompany?.companyNumber) {
@@ -302,7 +343,7 @@ const UploadDocumentPanel = () => {
                     Browse Files
                   </Button>
                   <Box fontSize="body-s" color="text-body-secondary">
-                    Supports: PDF, PNG, JPG (Max 100MB per file)
+                    Supports: PDF, PNG, JPG (Max 100MB per file, 500 pages for PDFs)
                   </Box>
                 </>
               )}
