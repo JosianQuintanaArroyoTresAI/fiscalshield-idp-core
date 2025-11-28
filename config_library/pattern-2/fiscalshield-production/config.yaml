@@ -370,12 +370,37 @@ classification:
     </disambiguation-rules>
 
     <output-format>
+    ⚠️  CRITICAL: You MUST respond with ONLY valid JSON. No additional text before or after the JSON object.
+    ⚠️  Your response must START with { and END with } - nothing else!
+    ⚠️  Do NOT write explanations, comments, or markdown - ONLY the JSON object!
+    
+    Expected JSON structure:
     {
       "classification_reason": "Detailed reasoning with specific visual and textual evidence that led to this classification. List the KEY IDENTIFIERS found and explain why confidence is high/medium/low.",
       "class": "exact_document_type_from_list",
       "confidence": 0.95,
-      "document_boundary": "start or continue"
+      "document_boundary": "start"
     }
+    
+    Field requirements:
+    - "class": MUST be exactly "invoice" or "bank-statement" (lowercase, hyphen for bank statement)
+    - "confidence": Number between 0.0 and 1.0
+    - "document_boundary": MUST be exactly "start" or "continue" (lowercase)
+    - "classification_reason": Brief explanation (1-2 sentences)
+    
+    INCORRECT examples (DO NOT USE - these will cause parsing errors):
+    ❌ "Class": "Invoice" (wrong case and capitalization)
+    ❌ "class": "bank statement" (use hyphen: "bank-statement")
+    ❌ "document_boundary": "Start" (must be lowercase: "start")
+    ❌ Adding explanatory text outside the JSON object
+    ❌ Here is my analysis: {...} (no text before the JSON!)
+    ❌ ```json\n{...}\n``` (no markdown code blocks!)
+    ❌ Let me classify this page. {...} (no explanatory text!)
+    
+    CORRECT example (THIS IS EXACTLY WHAT YOU MUST RETURN):
+    ✅ {"classification_reason": "Clear invoice with invoice number INV-123, itemized charges, and VAT breakdown", "class": "invoice", "confidence": 0.95, "document_boundary": "start"}
+    
+    Remember: Your entire response must be parseable as JSON. Test mentally: can I call JSON.parse() on my response?
     </output-format>
 
     <<CACHEPOINT>>
@@ -395,9 +420,14 @@ classification:
     3. Applying <disambiguation-rules> if choosing between invoice and bank-statement
     4. Selecting ONLY from document types in <document-types>
     5. Providing confidence score based on strength of evidence
-    6. Outputting in exact JSON format specified in <output-format>
+    6. Outputting in EXACT JSON format specified in <output-format>
     
-    REMEMBER: The class field must be EXACTLY "invoice" or "bank-statement" (lowercase with hyphen).
+    CRITICAL FORMATTING RULES:
+    - Output ONLY the JSON object, nothing else
+    - Use exact lowercase values: "invoice" or "bank-statement" for class
+    - Use exact lowercase values: "start" or "continue" for document_boundary
+    - Ensure valid JSON syntax (proper quotes, commas, braces)
+    - Do NOT add explanatory text before or after the JSON
     </final-instructions>
 
 # Extraction Configuration
