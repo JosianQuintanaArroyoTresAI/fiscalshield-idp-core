@@ -68,6 +68,16 @@ const InvoiceDetailDrawer = ({ invoice, visible, onDismiss }) => {
 
   const sourceDocumentTarget = getSourceDocumentTarget();
 
+  // Construct page image URI from document URI (for snapshot view)
+  // Invoices may span multiple pages, so we'll use the first page if available
+  const pageNumber = rawData.SourcePage || rawData.PageNumber || 1;
+  let pageImageUri = null;
+  if (sourceDocumentTarget && pageNumber) {
+    // Convert s3://bucket/path/doc.pdf to s3://bucket/path/doc.pdf/pages/1/image.jpg
+    pageImageUri = `${sourceDocumentTarget}/pages/${pageNumber}/image.jpg`;
+    logger.debug(`Constructed page image URI: ${pageImageUri}`);
+  }
+
   const getSourceDocumentType = () => {
     if (!sourceDocumentTarget) return 'unknown';
     const sanitized = sourceDocumentTarget.split('?')[0];
@@ -116,7 +126,7 @@ const InvoiceDetailDrawer = ({ invoice, visible, onDismiss }) => {
       return;
     }
 
-    if (!sourceDocumentTarget) {
+    if (!pageImageUri && !sourceDocumentTarget) {
       setSourceError('No source document available for this invoice.');
       setIsSourceVisible(true);
       return;
@@ -135,7 +145,9 @@ const InvoiceDetailDrawer = ({ invoice, visible, onDismiss }) => {
         throw new Error('Missing AWS credentials for document preview.');
       }
 
-      const url = await generateS3PresignedUrl(sourceDocumentTarget, currentCredentials, {
+      // Prefer page image, fall back to full document
+      const targetUri = pageImageUri || sourceDocumentTarget;
+      const url = await generateS3PresignedUrl(targetUri, currentCredentials, {
         forceInline: true,
       });
       setSourceDocumentUrl(url);
@@ -145,6 +157,25 @@ const InvoiceDetailDrawer = ({ invoice, visible, onDismiss }) => {
       setIsSourceVisible(true);
     } finally {
       setIsSourceLoading(false);
+    }
+  };
+
+  const handleOpenFullDocument = async () => {
+    if (!sourceDocumentTarget) return;
+
+    try {
+      if (!currentCredentials) {
+        throw new Error('Missing AWS credentials');
+      }
+
+      const url = await generateS3PresignedUrl(sourceDocumentTarget, currentCredentials, {
+        forceInline: true,
+      });
+      
+      window.open(url, '_blank');
+    } catch (error) {
+      logger.error('Failed to open full document:', error);
+      setSourceError(error.message || 'Failed to open document.');
     }
   };
 
@@ -670,126 +701,106 @@ const InvoiceDetailDrawer = ({ invoice, visible, onDismiss }) => {
             </ColumnLayout>
 
             <SpaceBetween size="s" direction="vertical">
-              <Button
-                iconName={isSourceVisible ? 'close' : 'search'}
-                onClick={handleToggleSourceDocument}
-                disabled={!sourceDocumentTarget && !sourceDocumentUrl}
-                loading={isSourceLoading}
-              >
-                {isSourceVisible ? 'Hide Source Document' : 'Show Source Document'}
-              </Button>
-              {!sourceDocumentTarget && !sourceDocumentUrl && (
+              <SpaceBetween size="xs" direction="horizontal">
+                <Button
+                  iconName={isSourceVisible ? 'close' : 'search'}
+                  onClick={handleToggleSourceDocument}
+                  disabled={!pageImageUri && !sourceDocumentTarget && !sourceDocumentUrl}
+                  loading={isSourceLoading}
+                >
+                  {isSourceVisible ? 'Hide Page Image' : pageNumber ? `View Page ${pageNumber}` : 'View Source Page'}
+                </Button>
+                {sourceDocumentTarget && sourceDocumentType === 'pdf' && (
+                  <Button iconName="external" onClick={handleOpenFullDocument} variant="normal">
+                    Open Full PDF
+                  </Button>
+                )}
+              </SpaceBetween>
+              {!pageImageUri && !sourceDocumentTarget && !sourceDocumentUrl && (
                 <StatusIndicator type="info">No source document stored for this invoice.</StatusIndicator>
               )}
               {isSourceVisible && (
                 <Box textAlign="center" padding={{ top: 's' }}>
                   {isSourceLoading && <Spinner />}
                   {!isSourceLoading && sourceError && <StatusIndicator type="error">{sourceError}</StatusIndicator>}
-                  {!isSourceLoading &&
-                    !sourceError &&
-                    sourceDocumentUrl &&
-                    (sourceDocumentType === 'image' || sourceDocumentType === 'pdf') && (
-                      <Box>
-                        {!isFullScreen && (
-                          <Box
-                            onClick={() => setIsFullScreen(true)}
+                  {!isSourceLoading && !sourceError && sourceDocumentUrl && (
+                    <Box>
+                      {!isFullScreen && (
+                        <Box
+                          onClick={() => setIsFullScreen(true)}
+                          style={{
+                            cursor: 'pointer',
+                            position: 'relative',
+                            display: 'inline-block',
+                          }}
+                        >
+                          <img
+                            src={sourceDocumentUrl}
+                            alt={`Invoice page ${pageNumber || ''}`}
                             style={{
-                              cursor: 'pointer',
-                              position: 'relative',
-                              display: 'inline-block',
+                              maxWidth: '100%',
+                              maxHeight: '400px',
+                              borderRadius: '8px',
+                              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                              transition: 'transform 0.2s',
+                            }}
+                            onMouseOver={(e) => (e.currentTarget.style.transform = 'scale(1.02)')}
+                            onMouseOut={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+                          />
+                          <Box
+                            position="absolute"
+                            bottom="8px"
+                            right="8px"
+                            padding="xs"
+                            style={{
+                              background: 'rgba(0,0,0,0.7)',
+                              color: 'white',
+                              borderRadius: '4px',
+                              fontSize: '12px',
+                              padding: '4px 8px',
                             }}
                           >
-                            {sourceDocumentType === 'image' ? (
-                              <img
-                                src={sourceDocumentUrl}
-                                alt="Invoice thumbnail"
-                                style={{
-                                  maxWidth: '300px',
-                                  maxHeight: '200px',
-                                  borderRadius: '8px',
-                                  boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                                  transition: 'transform 0.2s',
-                                }}
-                                onMouseOver={(e) => (e.currentTarget.style.transform = 'scale(1.02)')}
-                                onMouseOut={(e) => (e.currentTarget.style.transform = 'scale(1)')}
-                              />
-                            ) : (
-                              <object
-                                data={sourceDocumentUrl}
-                                type="application/pdf"
-                                width="300px"
-                                height="200px"
-                                style={{
-                                  border: 'none',
-                                  borderRadius: '8px',
-                                  boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                                  pointerEvents: 'none',
-                                }}
-                              >
-                                <Box padding="m" textAlign="center" color="text-body-secondary">
-                                  PDF Preview
-                                </Box>
-                              </object>
-                            )}
-                            <Box
-                              position="absolute"
-                              bottom="8px"
-                              right="8px"
-                              padding="xs"
-                              style={{
-                                background: 'rgba(0,0,0,0.7)',
-                                color: 'white',
-                                borderRadius: '4px',
-                                fontSize: '12px',
-                                padding: '4px 8px',
-                              }}
-                            >
-                              🔍 Click to expand
-                            </Box>
+                            🔍 Click to enlarge
                           </Box>
-                        )}
+                        </Box>
+                      )}
 
-                        {isFullScreen && (
-                          <Box>
-                            <SpaceBetween size="s">
-                              <Button iconName="close" onClick={() => setIsFullScreen(false)} variant="primary">
-                                Close Full View
-                              </Button>
-                              {sourceDocumentType === 'image' ? (
-                                <img
-                                  src={sourceDocumentUrl}
-                                  alt="Invoice source"
-                                  style={{
-                                    maxWidth: '100%',
-                                    maxHeight: '800px',
-                                    borderRadius: '8px',
-                                    boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-                                  }}
-                                />
-                              ) : (
-                                <object
-                                  data={sourceDocumentUrl}
-                                  type="application/pdf"
-                                  width="100%"
-                                  height="800px"
-                                  style={{
-                                    border: 'none',
-                                    borderRadius: '8px',
-                                    boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-                                  }}
-                                >
-                                  <p>
-                                    This browser cannot display the PDF inline.{' '}
-                                    <a href={sourceDocumentUrl} target="_blank" rel="noreferrer">
-                                      Download the file
-                                    </a>{' '}
-                                    instead.
-                                  </p>
-                                </object>
-                              )}
-                            </SpaceBetween>
-                          </Box>
-                        )}
+                      {isFullScreen && (
+                        <Box>
+                          <SpaceBetween size="s">
+                            <Button iconName="close" onClick={() => setIsFullScreen(false)} variant="primary">
+                              Close
+                            </Button>
+                            <img
+                              src={sourceDocumentUrl}
+                              alt={`Invoice page ${pageNumber || ''}`}
+                              style={{
+                                maxWidth: '100%',
+                                height: 'auto',
+                                borderRadius: '8px',
+                                boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+                              }}
+                            />
+                          </SpaceBetween>
+                        </Box>
+                      )}
+
+                      <Box padding={{ top: 's' }} textAlign="center">
+                        <Box variant="small" color="text-body-secondary">
+                          {isFullScreen
+                            ? 'Full size view'
+                            : pageNumber
+                            ? `Page ${pageNumber} snapshot • Click to enlarge`
+                            : 'Click to enlarge'}
+                        </Box>
+                      </Box>
+                    </Box>
+                  )}
+                  {!isSourceLoading && !sourceError && !sourceDocumentUrl && (
+                    <StatusIndicator type="info">No preview available.</StatusIndicator>
+                  )}
+                </Box>
+              )}
 
                         <Box padding={{ top: 's' }} textAlign="center">
                           <Box variant="small" color="text-body-secondary">
