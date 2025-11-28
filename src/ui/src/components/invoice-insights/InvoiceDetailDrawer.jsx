@@ -323,8 +323,8 @@ const InvoiceDetailDrawer = ({ invoice, visible, onDismiss }) => {
                       rawData.DeductibilityConfidence === 'HIGH'
                         ? 'green'
                         : rawData.DeductibilityConfidence === 'MEDIUM'
-                          ? 'blue'
-                          : 'grey'
+                        ? 'blue'
+                        : 'grey'
                     }
                   >
                     {rawData.DeductibilityConfidence || 'N/A'}
@@ -414,8 +414,8 @@ const InvoiceDetailDrawer = ({ invoice, visible, onDismiss }) => {
                         rawData.Test1_WhollyExclusively === 'PASS'
                           ? 'green'
                           : rawData.Test1_WhollyExclusively === 'FAIL'
-                            ? 'red'
-                            : 'grey'
+                          ? 'red'
+                          : 'grey'
                       }
                     >
                       {rawData.Test1_WhollyExclusively || 'N/A'}
@@ -426,8 +426,8 @@ const InvoiceDetailDrawer = ({ invoice, visible, onDismiss }) => {
                           rawData.Test1_Confidence === 'HIGH'
                             ? 'green'
                             : rawData.Test1_Confidence === 'MEDIUM'
-                              ? 'blue'
-                              : 'grey'
+                            ? 'blue'
+                            : 'grey'
                         }
                       >
                         {rawData.Test1_Confidence}
@@ -449,8 +449,8 @@ const InvoiceDetailDrawer = ({ invoice, visible, onDismiss }) => {
                         rawData.Test2_Entertainment === 'STAFF_ENTERTAINMENT'
                           ? 'green'
                           : rawData.Test2_Entertainment === 'CLIENT_ENTERTAINMENT'
-                            ? 'red'
-                            : 'grey'
+                          ? 'red'
+                          : 'grey'
                       }
                     >
                       {rawData.Test2_Entertainment?.replace(/_/g, ' ') || 'NOT APPLICABLE'}
@@ -461,8 +461,8 @@ const InvoiceDetailDrawer = ({ invoice, visible, onDismiss }) => {
                           rawData.Test2_Confidence === 'HIGH'
                             ? 'green'
                             : rawData.Test2_Confidence === 'MEDIUM'
-                              ? 'blue'
-                              : 'grey'
+                            ? 'blue'
+                            : 'grey'
                         }
                       >
                         {rawData.Test2_Confidence}
@@ -484,8 +484,8 @@ const InvoiceDetailDrawer = ({ invoice, visible, onDismiss }) => {
                         rawData.Test3_Travel === 'BUSINESS_TRAVEL'
                           ? 'green'
                           : rawData.Test3_Travel === 'COMMUTING'
-                            ? 'red'
-                            : 'grey'
+                          ? 'red'
+                          : 'grey'
                       }
                     >
                       {rawData.Test3_Travel?.replace(/_/g, ' ') || 'NOT APPLICABLE'}
@@ -496,8 +496,8 @@ const InvoiceDetailDrawer = ({ invoice, visible, onDismiss }) => {
                           rawData.Test3_Confidence === 'HIGH'
                             ? 'green'
                             : rawData.Test3_Confidence === 'MEDIUM'
-                              ? 'blue'
-                              : 'grey'
+                            ? 'blue'
+                            : 'grey'
                         }
                       >
                         {rawData.Test3_Confidence}
@@ -519,8 +519,8 @@ const InvoiceDetailDrawer = ({ invoice, visible, onDismiss }) => {
                         rawData.Test4_Training === 'WORK_RELATED'
                           ? 'green'
                           : rawData.Test4_Training === 'PERSONAL_DEVELOPMENT'
-                            ? 'blue'
-                            : 'grey'
+                          ? 'blue'
+                          : 'grey'
                       }
                     >
                       {rawData.Test4_Training?.replace(/_/g, ' ') || 'NOT APPLICABLE'}
@@ -531,8 +531,8 @@ const InvoiceDetailDrawer = ({ invoice, visible, onDismiss }) => {
                           rawData.Test4_Confidence === 'HIGH'
                             ? 'green'
                             : rawData.Test4_Confidence === 'MEDIUM'
-                              ? 'blue'
-                              : 'grey'
+                            ? 'blue'
+                            : 'grey'
                         }
                       >
                         {rawData.Test4_Confidence}
@@ -554,8 +554,8 @@ const InvoiceDetailDrawer = ({ invoice, visible, onDismiss }) => {
                         rawData.Test5_StatutoryBan === 'NOT_APPLICABLE'
                           ? 'green'
                           : rawData.Test5_StatutoryBan === 'PENALTIES' || rawData.Test5_StatutoryBan === 'DEPRECIATION'
-                            ? 'red'
-                            : 'grey'
+                          ? 'red'
+                          : 'grey'
                       }
                     >
                       {rawData.Test5_StatutoryBan?.replace(/_/g, ' ') || 'NOT APPLICABLE'}
@@ -566,8 +566,8 @@ const InvoiceDetailDrawer = ({ invoice, visible, onDismiss }) => {
                           rawData.Test5_Confidence === 'HIGH'
                             ? 'green'
                             : rawData.Test5_Confidence === 'MEDIUM'
-                              ? 'blue'
-                              : 'grey'
+                            ? 'blue'
+                            : 'grey'
                         }
                       >
                         {rawData.Test5_Confidence}
@@ -598,8 +598,8 @@ const InvoiceDetailDrawer = ({ invoice, visible, onDismiss }) => {
                               rawData.Test6_Confidence === 'HIGH'
                                 ? 'green'
                                 : rawData.Test6_Confidence === 'MEDIUM'
-                                  ? 'blue'
-                                  : 'grey'
+                                ? 'blue'
+                                : 'grey'
                             }
                           >
                             Confidence: {rawData.Test6_Confidence}
@@ -652,8 +652,8 @@ const InvoiceDetailDrawer = ({ invoice, visible, onDismiss }) => {
                         rawData.Test7_Confidence === 'HIGH'
                           ? 'green'
                           : rawData.Test7_Confidence === 'MEDIUM'
-                            ? 'blue'
-                            : 'grey'
+                          ? 'blue'
+                          : 'grey'
                       }
                     >
                       {rawData.Test7_Confidence}
@@ -861,8 +861,8 @@ const InvoiceDetailDrawer = ({ invoice, visible, onDismiss }) => {
                           {isFullScreen
                             ? 'Full size view'
                             : pageNumber
-                              ? `Page ${pageNumber} snapshot • Click to enlarge`
-                              : 'Click to enlarge'}
+                            ? `Page ${pageNumber} snapshot • Click to enlarge`
+                            : 'Click to enlarge'}
                         </Box>
                       </Box>
                     </Box>
