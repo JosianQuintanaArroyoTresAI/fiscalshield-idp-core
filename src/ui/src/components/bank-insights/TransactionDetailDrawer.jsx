@@ -67,9 +67,15 @@ const TransactionDetailDrawer = ({ transaction, visible, onDismiss }) => {
   const pageNumber = rawData.SourcePage || transaction.sourcePage;
   let pageImageUri = null;
   if (sourceDocumentTarget && pageNumber) {
-    // Convert s3://bucket/path/doc.pdf to s3://bucket/path/doc.pdf/pages/1/image.jpg
+    // Page images are stored in S3 at: bucket/path/doc.pdf/pages/N/image.jpg
     pageImageUri = `${sourceDocumentTarget}/pages/${pageNumber}/image.jpg`;
-    logger.debug(`Constructed page image URI: ${pageImageUri}`);
+    logger.info(`[SOURCE DOC] Page image URI: ${pageImageUri}`);
+    logger.info(`[SOURCE DOC] Source document: ${sourceDocumentTarget}`);
+    logger.info(`[SOURCE DOC] Page number: ${pageNumber}`);
+  } else {
+    logger.warn(
+      `[SOURCE DOC] Cannot construct page image - sourceDocumentTarget: ${sourceDocumentTarget}, pageNumber: ${pageNumber}`,
+    );
   }
 
   const getSourceDocumentType = () => {
@@ -152,20 +158,31 @@ const TransactionDetailDrawer = ({ transaction, visible, onDismiss }) => {
   };
 
   const handleOpenFullDocument = async () => {
-    if (!sourceDocumentTarget) return;
+    if (!sourceDocumentTarget) {
+      logger.warn('[SOURCE DOC] No source document target available');
+      return;
+    }
 
     try {
       if (!currentCredentials) {
         throw new Error('Missing AWS credentials');
       }
 
+      logger.info(`[SOURCE DOC] Opening full PDF: ${sourceDocumentTarget}`);
+
       const url = await generateS3PresignedUrl(sourceDocumentTarget, currentCredentials, {
         forceInline: true,
       });
 
-      window.open(url, '_blank');
+      logger.info(`[SOURCE DOC] Opening PDF in new tab`);
+      const newWindow = window.open(url, '_blank');
+
+      if (!newWindow) {
+        logger.warn('[SOURCE DOC] Popup blocked by browser');
+        setSourceError('Popup blocked. Please allow popups for this site.');
+      }
     } catch (error) {
-      logger.error('Failed to open full document:', error);
+      logger.error('[SOURCE DOC] Failed to open full document:', error);
       setSourceError(error.message || 'Failed to open document.');
     }
   };
@@ -446,9 +463,14 @@ const TransactionDetailDrawer = ({ transaction, visible, onDismiss }) => {
                 {isSourceVisible ? 'Hide Page Image' : pageNumber ? `View Page ${pageNumber}` : 'View Source Page'}
               </Button>
               {sourceDocumentTarget && sourceDocumentType === 'pdf' && (
-                <Button iconName="external" onClick={handleOpenFullDocument} variant="normal">
-                  Open Full PDF
-                </Button>
+                <>
+                  <Button iconName="external" onClick={handleOpenFullDocument} variant="normal">
+                    View PDF in Browser
+                  </Button>
+                  <Button iconName="download" onClick={handleDownloadDocument} variant="normal">
+                    Download PDF
+                  </Button>
+                </>
               )}
             </SpaceBetween>
             {!pageImageUri && !sourceDocumentTarget && !sourceDocumentUrl && (
@@ -473,6 +495,12 @@ const TransactionDetailDrawer = ({ transaction, visible, onDismiss }) => {
                         <img
                           src={sourceDocumentUrl}
                           alt={`Bank statement page ${pageNumber || ''}`}
+                          crossOrigin="anonymous"
+                          onError={(e) => {
+                            logger.error(`[SOURCE DOC] Image failed to load: ${sourceDocumentUrl}`);
+                            setSourceError('Failed to load page image. The file may not exist or is inaccessible.');
+                          }}
+                          onLoad={() => logger.info(`[SOURCE DOC] Image loaded successfully`)}
                           style={{
                             maxWidth: '100%',
                             maxHeight: '400px',
