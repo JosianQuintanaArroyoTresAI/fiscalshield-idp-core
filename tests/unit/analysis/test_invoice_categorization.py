@@ -15,19 +15,29 @@ import pytest
 import sys
 import json
 import time
+import importlib.util
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 from decimal import Decimal
 
-# Add invoice categorization handler to path
-CATEGORIZATION_PATH = Path(__file__).parent.parent.parent.parent / 'stacks' / 'analysis' / 'lambdas' / 'invoice_categorization'
-sys.path.insert(0, str(CATEGORIZATION_PATH))
+# Mock AWS services BEFORE importing handler (boto3 not available in test environment)
+mock_boto3 = MagicMock()
+mock_dynamodb = MagicMock()
+mock_bedrock = MagicMock()
+mock_boto3.resource.return_value = mock_dynamodb
+mock_boto3.client.return_value = mock_bedrock
+sys.modules['boto3'] = mock_boto3
 
-from handler import (
-    parse_stage1_classification,
-    parse_stage2_deep_testing,
-    MODEL_ID
-)
+# Load invoice categorization handler explicitly to avoid module name collision
+HANDLER_PATH = Path(__file__).parent.parent.parent.parent / 'stacks' / 'analysis' / 'lambdas' / 'invoice_categorization' / 'handler.py'
+spec = importlib.util.spec_from_file_location("invoice_categorization_handler", HANDLER_PATH)
+invoice_handler = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(invoice_handler)
+
+# Extract the functions we need to test
+parse_stage1_classification = invoice_handler.parse_stage1_classification
+parse_stage2_deep_testing = invoice_handler.parse_stage2_deep_testing
+MODEL_ID = invoice_handler.MODEL_ID
 
 
 # =============================================================================
