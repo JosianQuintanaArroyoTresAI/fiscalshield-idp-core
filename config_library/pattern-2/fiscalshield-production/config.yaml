@@ -324,20 +324,33 @@ classification:
        This flag determines whether a page starts a NEW document or continues the previous one.
        Accurate boundary detection enables optimal parallel processing.
        
-       For INVOICES - Set "start" when you see:
-       ✓ NEW "Invoice Number:" or "Invoice #XXX" (different from previous page)
-       ✓ NEW "Bill To:" or "To:" section (new customer/recipient)
-       ✓ Company logo/letterhead at TOP of page (new supplier)
-       ✓ Fresh invoice header: "INVOICE", "TAX INVOICE", "RECEIPT"
-       ✓ New invoice date (not continuation of previous invoice)
-       ✓ Page appears immediately after "AMOUNT DUE", "TOTAL DUE", or "Thank you" footer
+       ⚠️ CRITICAL RULE: When classifying EACH PAGE INDEPENDENTLY, you must determine if this page
+       starts a NEW invoice or continues the PREVIOUS invoice. Look for continuation signals!
        
-       For INVOICES - Set "continue" when you see:
-       ✓ Line items table continuation (no header)
-       ✓ "Continued from page X" or "Page 2 of 3"
-       ✓ Mid-table content (Description, Qty, Price columns but no new invoice header)
-       ✓ Terms & conditions continuation
-       ✓ Same invoice number as previous page
+       For INVOICES - Set "continue" when you see ANY of these signals:
+       ✓ **NO invoice header/title** at top of page (no "INVOICE", "TAX INVOICE", "RECEIPT")
+       ✓ **NO "Bill To:" or "To:" section** (new invoices always have recipient details)
+       ✓ **NO company logo/letterhead** at top (continuation pages are plain)
+       ✓ **Mid-table content** - Description/Qty/Price columns continuing from previous page
+       ✓ **Page number indicators**: "Page 2 of 3", "Continued from page X", "Page 2"
+       ✓ **Terms & conditions** at bottom (usually last page of invoice)
+       ✓ **Footer text only** - payment instructions, disclaimers, thank you notes
+       ✓ **Same invoice number visible** as previous page (if you can infer context)
+       
+       For INVOICES - Set "start" ONLY when you see CLEAR SIGNALS of a NEW invoice:
+       ✓ NEW "Invoice Number:" or "Invoice #XXX" in header area
+       ✓ NEW "Bill To:" or "To:" section (indicates new customer/recipient)
+       ✓ Company logo/letterhead at TOP of page (fresh invoice header)
+       ✓ Fresh invoice header text: "INVOICE", "TAX INVOICE", "RECEIPT" at top
+       ✓ New invoice date in header area (not buried in footer)
+       ✓ Line items table starting from beginning (not mid-table continuation)
+       
+       **DEFAULT BEHAVIOR - CRITICAL**:
+       - If page has NO clear invoice header/logo/recipient → prefer "continue"
+       - If page looks like middle of a table → definitely "continue"
+       - If page has footer/terms only → definitely "continue"
+       - Only use "start" when you see CLEAR NEW INVOICE SIGNALS
+       - **When uncertain, prefer "continue" to avoid splitting multi-page invoices**
        
        For BANK STATEMENTS - Set "start" when you see:
        ✓ Bank logo and statement header
@@ -348,10 +361,7 @@ classification:
        ✓ Transaction list continuation
        ✓ Same account number, continued transaction table
        
-       CRITICAL RULES:
-       - When in doubt between "start" and "continue", prefer "start" for invoices
-       - Each invoice should begin with "start", even if invoices are consecutive
-       - "continue" should ONLY be used for multi-page invoices, not between different invoices
+       **REMEMBER**: You see ONE page at a time. Look for absence of invoice header signals!
     
     6. CRITICAL: Only use document types explicitly listed in <document-types> section above
     </classification-instructions>
