@@ -7,6 +7,180 @@
 
 ---
 
+## ACTUAL PIPELINE (Current State)
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ Step 1: Document Upload → S3                                        │
+├─────────────────────────────────────────────────────────────────────┤
+│ User uploads PDF to S3 bucket                                       │
+│ → Triggers Step Functions workflow execution                        │
+└─────────────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────────────┐
+│ Step 2: OCR Lambda (OCRFunction)                                    │
+├─────────────────────────────────────────────────────────────────────┤
+│ File: patterns/pattern-2/src/ocr_function/index.py                 │
+│                                                                      │
+│ Input: PDF file from S3                                             │
+│ Process:                                                             │
+│   1. Converts PDF to images (one per page)                          │
+│   2. Calls AWS Textract OR Amazon Nova (configurable)               │
+│   3. Extracts text from each page                                   │
+│   4. Stores per-page results:                                       │
+│      - page.image_uri → S3 (PNG image)                              │
+│      - page.raw_text_uri → S3 (text file per page)                  │
+│      - page.parsed_text_uri → S3 (structured text per page)         │
+│                                                                      │
+│ Output: Document object with pages[] populated                      │
+│   - document.pages = {                                              │
+│       "1": {image_uri, raw_text_uri, parsed_text_uri},             │
+│       "2": {image_uri, raw_text_uri, parsed_text_uri},             │
+│       ...                                                            │
+│     }                                                                │
+│   - NO sections created yet                                         │
+│   - NO classification done yet                                      │
+└─────────────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────────────┐
+│ Step 3: Classification Lambda (ClassificationFunction)              │
+├─────────────────────────────────────────────────────────────────────┤
+│ File: patterns/pattern-2/src/classification_function/index.py      │
+│                                                                      │
+│ Input: Document with OCR text (pages populated)                     │
+│ Process:                                                             │
+│   1. Parallel page classification (20 workers via ThreadPoolExecutor)│
+│      For each page:                                                  │
+│        - Load page.raw_text_uri from S3                             │
+│        - Load page.image_uri from S3                                │
+│        - Call Bedrock LLM to classify:                              │
+│          → page.classification = "invoice" | "bank-statement" | etc.│
+│          → page.confidence = 0.95                                   │
+│          → page.metadata['document_boundary'] = "start" | "continue"│
+│                                                                      │
+│   2. Group pages into sections based on document_boundary:           │
+│      Algorithm (in service.py line 506-544):                        │
+│        current_section_pages = []                                   │
+│        for page in sorted_pages:                                    │
+│            boundary = page.metadata['document_boundary']            │
+│            if boundary == "start":                                  │
+│                # New section starts!                                │
+│                sections.append(Section(pages=current_section_pages))│
+│                current_section_pages = [page]                       │
+│            else:  # boundary == "continue"                          │
+│                current_section_pages.append(page)                   │
+│                                                                      │
+│      Example with 10 invoices (20 pages):                           │
+│        - Page 1: boundary="start" → Section 1 starts               │
+│        - Page 2: boundary="continue" → Section 1 continues          │
+│        - Page 3: boundary="start" → Section 2 starts               │
+│        - Page 4: boundary="start" → Section 3 starts               │
+│        ...                                                           │
+│        Result: 10 sections created (one per invoice)                │
+│                                                                      │
+│   3. (Optional) Structure analysis for complex sections:            │
+│      - Only runs if section has MANY pages (e.g., 50+)             │
+│      - Loads pages for that section into memory                     │
+│      - Detects sub-boundaries within section                        │
+│      - Stores in section.attributes['boundaries']                   │
+│                                                                      │
+│ Output: Document object with sections[] populated                   │
+│   - document.sections = [                                           │
+│       Section(id="1", classification="invoice", page_ids=[1,2]),   │
+│       Section(id="2", classification="invoice", page_ids=[3]),     │
+│       Section(id="3", classification="invoice", page_ids=[4,5,6]), │
+│       ...                                                            │
+│     ]                                                                │
+│   - ✅ Multiple sections already created based on document_boundary!│
+│   - ⚠️ BUT: Only if LLM sets boundary="start" correctly            │
+└─────────────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────────────┐
+│ Step 4: Step Functions Map State (ProcessSections)                  │
+├─────────────────────────────────────────────────────────────────────┤
+│ File: patterns/pattern-3/statemachine/workflow.asl.json            │
+│                                                                      │
+│ Type: "Map"                                                          │
+│ ItemsPath: "$.ClassificationResult.document.sections"              │
+│ MaxConcurrency: 10                                                   │
+│                                                                      │
+│ Iterates over document.sections array:                              │
+│   For each section:                                                  │
+│     - Invokes ExtractionFunction Lambda                             │
+│     - Passes: {                                                      │
+│         section_id: "1",                                            │
+│         document: <full_document_object>                            │
+│       }                                                              │
+│                                                                      │
+│ Example with 10 invoices (20 pages):                                │
+│   DEV (working): 5 sections → 5 Lambda invocations (parallel!)     │
+│   PROD (bug): 1 section → 1 Lambda invocation (timeout!)           │
+│                                                                      │
+│ ⚠️ THE BUG: LLM in production doesn't set document_boundary="start"│
+│    correctly, so all pages get grouped into ONE section!            │
+└─────────────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────────────┐
+│ Step 5: Extraction Lambda (ExtractionFunction OR InvoiceExtraction) │
+├─────────────────────────────────────────────────────────────────────┤
+│ Files:                                                               │
+│  - patterns/pattern-2/src/extraction_function/index.py (generic)    │
+│  - patterns/pattern-2/lambdas/invoice_extraction/... (specialized)  │
+│                                                                      │
+│ Input: {section_id: "1", document: {...}}                          │
+│ Process:                                                             │
+│   1. Extract section from document.sections by section_id           │
+│   2. Load text for pages in section.page_ids:                       │
+│      section_text = ""                                              │
+│      for page_id in section.page_ids:                               │
+│          page_text = load_from_s3(page.raw_text_uri)                │
+│          section_text += f"\n[PAGE:{page_id}]\n{page_text}"        │
+│                                                                      │
+│   3. (Current) Chunking logic:                                      │
+│      if USE_CHUNKED_EXTRACTION and len(section_text) > 60000:      │
+│          chunks = create_semantic_chunks(section_text)              │
+│          for chunk in chunks:                                       │
+│              invoices += extract_from_chunk(chunk)                  │
+│          deduplicate_invoices(invoices)                             │
+│      else:                                                           │
+│          prompt = template.format(section_text=section_text)        │
+│          xml = invoke_bedrock(prompt)  ← BATCH EXTRACTION!         │
+│          invoices = parse_xml(xml)                                  │
+│                                                                      │
+│   4. Write extracted invoices to DynamoDB (ExtractionResultsTable)  │
+│                                                                      │
+│ Output: {section_id: "1", invoices_extracted: 10}                  │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## KEY INSIGHT: The Batching Happens in Bedrock Prompt!
+
+**You're right!** The extraction lambda processes **multiple invoices in ONE Bedrock call** by sending the full section text to the LLM, which then extracts ALL invoices and returns them as an XML array:
+
+```xml
+<invoices>
+  <invoice>
+    <invoice_number>INV-001</invoice_number>
+    <supplier_name>ABC Ltd</supplier_name>
+    ...
+  </invoice>
+  <invoice>
+    <invoice_number>INV-002</invoice_number>
+    <supplier_name>XYZ Corp</supplier_name>
+    ...
+  </invoice>
+  ...
+</invoices>
+```
+
+This is **cost-efficient** because:
+- 1 Bedrock API call extracts 10 invoices
+- vs. 10 separate API calls if done individually
+
+---
+
 ## Problem Statement
 
 **Current Issues with 100+ Invoice Documents:**
