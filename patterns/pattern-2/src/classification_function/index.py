@@ -16,6 +16,7 @@ from idp_common.models import Document, Status
 from idp_common.docs_service import create_document_service
 from idp_common.utils import calculate_lambda_metering, merge_metering_data
 from idp_common.classification.structure_analysis import enhance_classification_with_structure_analysis
+from idp_common.classification.smart_batcher import SmartBatcher
 
 # Configuration will be loaded in handler function
 region = os.environ["AWS_REGION"]
@@ -133,7 +134,53 @@ def handler(event, context):
     # Classify the document - the service will update the Document directly
     document = service.classify_document(document)
     
-    # NEW: Store classification metadata for drift detection
+    # NEW: Apply smart batching to create optimally-sized sections
+    # This groups pages into cost-efficient batches for parallel extraction
+    enable_smart_batching = config.get("classification", {}).get("enable_smart_batching", True)
+    
+    if enable_smart_batching:
+        logger.info("🔧 Smart batching enabled - creating optimized sections")
+        
+        # Get batch size configuration
+        target_pages = int(os.environ.get('BATCH_TARGET_PAGES', 
+                                          config.get("classification", {}).get("target_pages_per_batch", 10)))
+        max_pages = int(os.environ.get('BATCH_MAX_PAGES',
+                                       config.get("classification", {}).get("max_pages_per_batch", 30)))
+        max_invoices = int(os.environ.get('BATCH_MAX_INVOICES',
+                                          config.get("classification", {}).get("max_invoices_per_batch", 20)))
+        
+        # Initialize smart batcher
+        batcher = SmartBatcher(
+            target_pages_per_batch=target_pages,
+            max_pages_per_batch=max_pages,
+            max_invoices_per_batch=max_invoices,
+            max_statements_per_batch=1  # Bank statements: 1 per section
+        )
+        
+        # Replace sections with optimized batches
+        original_section_count = len(document.sections)
+        document.sections = batcher.create_optimized_sections(
+            pages=document.pages,
+            document_type=user_hint
+        )
+        
+        logger.info(
+            f"✅ Smart batching complete: {original_section_count} original sections → "
+            f"{len(document.sections)} optimized sections"
+        )
+        
+        # Log batch details
+        for section in document.sections:
+            invoice_count = section.attributes.get('invoice_count', 0) if section.attributes else 0
+            page_count = section.attributes.get('page_count', len(section.page_ids)) if section.attributes else len(section.page_ids)
+            logger.info(
+                f"  Section {section.section_id}: {section.classification}, "
+                f"{invoice_count} invoices, {page_count} pages"
+            )
+    else:
+        logger.info("ℹ️  Smart batching disabled - using default section grouping")
+    
+    # Store classification metadata for drift detection
     if not document.metadata:
         document.metadata = {}
     

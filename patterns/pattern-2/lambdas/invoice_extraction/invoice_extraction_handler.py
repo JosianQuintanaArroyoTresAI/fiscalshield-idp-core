@@ -4,6 +4,32 @@
 """
 Invoice Extraction Lambda
 Processes invoice sections and writes individual invoice records to DynamoDB
+
+ARCHITECTURE (Post-SmartBatcher):
+=============================
+1. OCR Lambda: Converts PDF pages to text (Textract/Nova)
+2. Classification Lambda: 
+   - Parallel page classification (Claude 3 Haiku, 20 workers)
+   - SmartBatcher groups pages into optimal sections (10 pages/batch, complete invoices only)
+   - Each section = 3-5 invoices typically, max 30 pages
+3. Step Functions Map: Parallelizes extraction (MaxConcurrency: 10)
+4. THIS Lambda (Extraction): 
+   - Loads section text (already batched optimally)
+   - Single Bedrock call per section (batch extraction - cost-efficient!)
+   - Parses multiple invoices from response
+   - Writes to DynamoDB
+
+KEY DESIGN DECISIONS:
+- SmartBatcher ensures sections contain ONLY complete invoices
+- No overlap between sections → no deduplication needed
+- Batch extraction: Extract multiple invoices in 1 API call (lower cost)
+- Parallel processing: Step Functions Map handles concurrency
+- Simple extraction flow: Load text → Bedrock → Parse → Write
+
+DEPRECATED: ChunkedInvoiceExtractor (kept for backward compatibility)
+- Was used when classification couldn't batch properly
+- Now SmartBatcher handles batching in classification stage
+- Only enable USE_CHUNKED_EXTRACTION for edge cases (100+ invoices in one file)
 """
 
 import json
@@ -753,10 +779,19 @@ if not BEDROCK_MODEL_CHAIN:
     raise ValueError("At least one Bedrock model must be configured via BEDROCK_MODEL_ID")
 
 # Chunking configuration (Phase 3)
+# NOTE: With SmartBatcher in classification, sections now contain optimal batches of complete invoices
+# - Typical batch: 10 pages (~3-5 invoices)
+# - Max batch: 30 pages (safety limit)
+# - Each section = 1 Bedrock API call (cost-efficient batch extraction)
+# 
+# CHUNKED_EXTRACTION is now DEPRECATED for most use cases:
+# - SmartBatcher in classification already creates optimal batches
+# - Only enable if you have sections with 100+ invoices (edge case)
+# - Default: false (let SmartBatcher handle batching)
 USE_CHUNKED_EXTRACTION = os.environ.get('USE_CHUNKED_EXTRACTION', 'false').lower() == 'true'
-CHUNK_SIZE = int(os.environ.get('CHUNK_SIZE', '60000'))  # Optimized: ~15k tokens (vs 15k chars = 3.75k tokens)
-OVERLAP_SIZE = int(os.environ.get('OVERLAP_SIZE', '5000'))  # Covers 3-page invoices with minimal duplicates
-USE_SEMANTIC_CHUNKING = os.environ.get('USE_SEMANTIC_CHUNKING', 'true').lower() == 'true'  # Invoice boundary detection
+CHUNK_SIZE = int(os.environ.get('CHUNK_SIZE', '60000'))  # Legacy: ~15k tokens (only used if chunking enabled)
+OVERLAP_SIZE = int(os.environ.get('OVERLAP_SIZE', '5000'))  # Legacy: Covers 3-page invoices
+USE_SEMANTIC_CHUNKING = os.environ.get('USE_SEMANTIC_CHUNKING', 'true').lower() == 'true'  # Legacy: Invoice boundary detection
 USE_PROMPT_CACHING = os.environ.get('USE_PROMPT_CACHING', 'true').lower() == 'true'  # 60-70% cost savings
 
 # Initialize AWS clients

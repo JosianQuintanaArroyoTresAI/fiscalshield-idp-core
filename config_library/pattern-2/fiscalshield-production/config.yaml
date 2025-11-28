@@ -224,6 +224,14 @@ classification:
   trust_user_hint: false  # Run LLM classification even with user hints to collect validation metrics
   validate_hint_on_mismatch: true
   
+  # Smart Batching Configuration
+  # Groups classified pages into optimally-sized sections for cost-efficient parallel extraction
+  enable_smart_batching: true
+  target_pages_per_batch: 10      # Ideal pages per section (flexible to include complete invoices)
+  max_pages_per_batch: 30         # Hard limit to prevent timeouts
+  max_invoices_per_batch: 20      # Maximum invoices in one batch
+  max_statements_per_batch: 1     # Bank statements: always 1 per section
+  
   image:
     target_height: ""
     target_width: ""
@@ -309,9 +317,38 @@ classification:
        MEDIUM (0.70-0.89): Most features match, minor ambiguity or missing secondary features
        LOW (0.0-0.69): Limited features, conflicting signals, or poor image quality
     
-    5. DOCUMENT BOUNDARY:
-       - "start": First page of new document (has header, logo, document number)
-       - "continue": Continuation page (lacks header, shows "Page 2 of 3", continues from previous)
+    5. DOCUMENT BOUNDARY (CRITICAL FOR ACCURATE BATCHING):
+       This flag determines whether a page starts a NEW document or continues the previous one.
+       Accurate boundary detection enables optimal parallel processing.
+       
+       For INVOICES - Set "start" when you see:
+       ✓ NEW "Invoice Number:" or "Invoice #XXX" (different from previous page)
+       ✓ NEW "Bill To:" or "To:" section (new customer/recipient)
+       ✓ Company logo/letterhead at TOP of page (new supplier)
+       ✓ Fresh invoice header: "INVOICE", "TAX INVOICE", "RECEIPT"
+       ✓ New invoice date (not continuation of previous invoice)
+       ✓ Page appears immediately after "AMOUNT DUE", "TOTAL DUE", or "Thank you" footer
+       
+       For INVOICES - Set "continue" when you see:
+       ✓ Line items table continuation (no header)
+       ✓ "Continued from page X" or "Page 2 of 3"
+       ✓ Mid-table content (Description, Qty, Price columns but no new invoice header)
+       ✓ Terms & conditions continuation
+       ✓ Same invoice number as previous page
+       
+       For BANK STATEMENTS - Set "start" when you see:
+       ✓ Bank logo and statement header
+       ✓ "Statement Period: DD/MM/YYYY - DD/MM/YYYY"
+       ✓ New account number or statement date range
+       
+       For BANK STATEMENTS - Set "continue" when you see:
+       ✓ Transaction list continuation
+       ✓ Same account number, continued transaction table
+       
+       CRITICAL RULES:
+       - When in doubt between "start" and "continue", prefer "start" for invoices
+       - Each invoice should begin with "start", even if invoices are consecutive
+       - "continue" should ONLY be used for multi-page invoices, not between different invoices
     
     6. CRITICAL: Only use document types explicitly listed in <document-types> section above
     </classification-instructions>
