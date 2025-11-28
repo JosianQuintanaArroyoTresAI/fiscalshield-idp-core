@@ -169,6 +169,24 @@ def handler(event, context):
             f"{len(document.sections)} optimized sections"
         )
         
+        # Calculate total expected invoice count for validation
+        total_expected_invoices = sum(
+            section.attributes.get('invoice_count', 0) if section.attributes else 0
+            for section in document.sections
+            if section.classification == 'invoice'
+        )
+        
+        # Store in document metadata for validation in ProcessResults
+        if not document.metadata:
+            document.metadata = {}
+        document.metadata['expected_invoice_count'] = total_expected_invoices
+        document.metadata['batching_strategy'] = 'smart'
+        
+        logger.info(
+            f"📊 Expected invoice count: {total_expected_invoices} invoices across "
+            f"{len([s for s in document.sections if s.classification == 'invoice'])} sections"
+        )
+        
         # Log batch details
         for section in document.sections:
             invoice_count = section.attributes.get('invoice_count', 0) if section.attributes else 0

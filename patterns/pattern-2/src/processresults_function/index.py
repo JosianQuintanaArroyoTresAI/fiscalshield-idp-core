@@ -487,8 +487,12 @@ def handler(event, context):
     # Clear sections list to rebuild from extraction results
     document.sections = []
     validation_errors = []
-    validation_errors = []
     hitl_triggered = False
+    
+    # Initialize invoice count tracking for validation
+    expected_invoice_count = document.metadata.get('expected_invoice_count', 0) if document.metadata else 0
+    total_invoices_extracted = 0
+    section_invoice_counts = []  # Track per-section: (section_id, expected, extracted)
 
     # Combine all section results
     for i, result in enumerate(extraction_results):
@@ -502,6 +506,24 @@ def handler(event, context):
                 section = section_document.sections[0]
                 logger.info(f"section: {section}")
                 document.sections.append(section)
+                
+                # Track invoice counts for validation
+                if section.classification == 'invoice':
+                    section_expected = section.attributes.get('invoice_count', 0) if section.attributes else 0
+                    section_extracted = result.get('invoices_extracted', 0)
+                    total_invoices_extracted += section_extracted
+                    
+                    section_invoice_counts.append({
+                        'section_id': section.section_id,
+                        'expected': section_expected,
+                        'extracted': section_extracted,
+                        'match': section_expected == section_extracted
+                    })
+                    
+                    logger.info(
+                        f"📊 Section {section.section_id}: Expected {section_expected} invoices, "
+                        f"extracted {section_extracted} invoices {'✅' if section_expected == section_extracted else '⚠️ MISMATCH'}"
+                    )
 
                 # Check if A2I should be triggered for this section
                 if enable_hitl == "true" and section.confidence_threshold_alerts:
@@ -594,6 +616,64 @@ def handler(event, context):
         if page.raw_text_uri:
             create_metadata_file(page.raw_text_uri, page.classification, "page")
 
+    # ============================================================================
+    # INVOICE COUNT VALIDATION (Critical - ensures no invoices are lost)
+    # ============================================================================
+    if expected_invoice_count > 0:
+        logger.info("="*80)
+        logger.info("📊 INVOICE COUNT VALIDATION")
+        logger.info("="*80)
+        logger.info(f"Expected invoices (from classification): {expected_invoice_count}")
+        logger.info(f"Extracted invoices (from extraction):    {total_invoices_extracted}")
+        
+        # Detailed per-section breakdown
+        logger.info("\nPer-section breakdown:")
+        for section_info in section_invoice_counts:
+            status_icon = "✅" if section_info['match'] else "❌"
+            logger.info(
+                f"  {status_icon} Section {section_info['section_id']}: "
+                f"Expected {section_info['expected']}, Extracted {section_info['extracted']}"
+            )
+        
+        # Overall validation
+        if expected_invoice_count == total_invoices_extracted:
+            logger.info("\n✅ VALIDATION PASSED: All expected invoices were extracted")
+        else:
+            difference = abs(expected_invoice_count - total_invoices_extracted)
+            if total_invoices_extracted < expected_invoice_count:
+                logger.error(
+                    f"\n❌ VALIDATION FAILED: Missing {difference} invoices! "
+                    f"Expected {expected_invoice_count}, but only extracted {total_invoices_extracted}"
+                )
+                validation_errors.append(
+                    f"Invoice count mismatch: Expected {expected_invoice_count} invoices, "
+                    f"but only extracted {total_invoices_extracted}. Missing {difference} invoices!"
+                )
+            else:
+                logger.warning(
+                    f"\n⚠️  VALIDATION WARNING: Extracted {difference} more invoices than expected! "
+                    f"Expected {expected_invoice_count}, but extracted {total_invoices_extracted}. "
+                    f"This may indicate duplicate extraction."
+                )
+                # Log as warning but don't fail - could be legitimate duplicates in source doc
+                logger.warning(
+                    "Note: Extra invoices may be duplicates in the original document. "
+                    "Review extraction results to confirm."
+                )
+        
+        # Store validation results in document metadata
+        if not document.metadata:
+            document.metadata = {}
+        document.metadata['validation'] = {
+            'expected_invoice_count': expected_invoice_count,
+            'extracted_invoice_count': total_invoices_extracted,
+            'validation_passed': expected_invoice_count == total_invoices_extracted,
+            'missing_invoices': max(0, expected_invoice_count - total_invoices_extracted),
+            'extra_invoices': max(0, total_invoices_extracted - expected_invoice_count),
+            'section_details': section_invoice_counts
+        }
+        logger.info("="*80)
+    
     # Update document status based on HITL requirement
     if hitl_triggered:
         # Set status to HITL_IN_PROGRESS when HITL is triggered
