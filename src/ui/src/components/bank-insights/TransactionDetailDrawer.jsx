@@ -162,7 +162,7 @@ const TransactionDetailDrawer = ({ transaction, visible, onDismiss }) => {
       const url = await generateS3PresignedUrl(sourceDocumentTarget, currentCredentials, {
         forceInline: true,
       });
-      
+
       window.open(url, '_blank');
     } catch (error) {
       logger.error('Failed to open full document:', error);
@@ -527,8 +527,8 @@ const TransactionDetailDrawer = ({ transaction, visible, onDismiss }) => {
                         {isFullScreen
                           ? 'Full size view'
                           : pageNumber
-                          ? `Page ${pageNumber} snapshot • Click to enlarge`
-                          : 'Click to enlarge'}
+                            ? `Page ${pageNumber} snapshot • Click to enlarge`
+                            : 'Click to enlarge'}
                       </Box>
                     </Box>
                   </Box>
