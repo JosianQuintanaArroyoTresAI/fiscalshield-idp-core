@@ -45,6 +45,30 @@ const InvoiceDetailDrawer = ({ invoice, visible, onDismiss }) => {
   const rawData = invoice.rawData || {};
   const isAnalyzed = invoice.analysisStatus === 'ANALYZED';
 
+  // Debug logging for troubleshooting
+  console.log('[INVOICE DRAWER DEBUG] Invoice data:', {
+    invoiceType: invoice.invoiceType,
+    analysisStatus: invoice.analysisStatus,
+    isAnalyzed,
+    hasBIMSections: !!rawData.BIMSections,
+    hasTest1: !!rawData.Test1_WhollyExclusively,
+    hasAddbackAmount: !!rawData.AddbackAmount,
+    BIMSections: rawData.BIMSections,
+    Test1_WhollyExclusively: rawData.Test1_WhollyExclusively,
+    AddbackAmount: rawData.AddbackAmount,
+    DeductibilityStatus: rawData.DeductibilityStatus,
+    allTestFields: {
+      Test1: rawData.Test1_WhollyExclusively,
+      Test2: rawData.Test2_Entertainment,
+      Test3: rawData.Test3_Travel,
+      Test4: rawData.Test4_Training,
+      Test5: rawData.Test5_StatutoryBan,
+      Test6: rawData.Test6_MixedUse,
+      Test7: rawData.Test7_Duality,
+    }
+  });
+  console.log('[INVOICE DRAWER DEBUG] Full rawData keys:', Object.keys(rawData));
+
   // Construct proper S3 URI from the invoice data
   const getSourceDocumentTarget = () => {
     let target = invoice.s3Uri || rawData.S3Uri;
