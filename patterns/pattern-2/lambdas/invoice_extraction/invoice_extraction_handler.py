@@ -2555,17 +2555,16 @@ def lambda_handler(event, context):
         prompt_template = get_invoice_extraction_prompt()
         
         # PHASE 4: Choose extraction strategy
-        # Priority: Pre-computed boundaries > Section size > Standard extraction
-        if USE_CHUNKED_EXTRACTION and (pre_computed_boundaries or len(section_text) > CHUNK_SIZE):
-            if pre_computed_boundaries:
-                log_with_timestamp(
-                    f"✅ Using PRE-COMPUTED boundaries ({len(pre_computed_boundaries)} invoices)"
-                )
-            else:
-                log_with_timestamp(
-                    f"🔄 Section text ({len(section_text)} chars) exceeds chunk size ({CHUNK_SIZE})"
-                )
-            log_with_timestamp("   Using CHUNKED extraction strategy...")
+        # Priority: Section size check > Batch extraction (default)
+        # Only use chunking if text exceeds size limit (fallback for oversized sections)
+        section_size = len(section_text)
+        
+        if USE_CHUNKED_EXTRACTION and section_size > CHUNK_SIZE:
+            # Text too large - use chunked extraction as fallback
+            log_with_timestamp(
+                f"⚠️  Section text ({section_size} chars) exceeds chunk size ({CHUNK_SIZE})"
+            )
+            log_with_timestamp("   Using CHUNKED extraction strategy (fallback for large sections)...")
             
             result = process_section_with_chunking(
                 section_text=section_text,
@@ -2573,21 +2572,23 @@ def lambda_handler(event, context):
                 document_id=document_id,
                 section_id=section_id,
                 user_id=user_id,
-                pre_computed_boundaries=pre_computed_boundaries  # PHASE 4: Pass boundaries from classification
+                pre_computed_boundaries=pre_computed_boundaries  # Use boundaries if available
             )
             
             invoices = result['invoices']
             all_chunks_complete = result['all_chunks_complete']
         else:
-            # Original non-chunked flow (default/fallback)
-            if USE_CHUNKED_EXTRACTION:
+            # BATCH EXTRACTION (DEFAULT): Extract all invoices in section with 1 Bedrock call
+            if pre_computed_boundaries:
                 log_with_timestamp(
-                    f"ℹ️  Section text ({len(section_text)} chars) fits in single chunk"
+                    f"✅ Using BATCH extraction for {len(pre_computed_boundaries)} invoices "
+                    f"({section_size} chars, within {CHUNK_SIZE} limit)"
                 )
-                log_with_timestamp("   Using standard extraction (no chunking needed)")
             else:
-                log_with_timestamp("ℹ️  Chunked extraction DISABLED (USE_CHUNKED_EXTRACTION=false)")
-                log_with_timestamp("   Using standard extraction")
+                log_with_timestamp(
+                    f"ℹ️  Section text ({section_size} chars) fits in single extraction"
+                )
+            log_with_timestamp("   Using standard batch extraction (1 Bedrock call per section)")
             
             prompt = prompt_template.format(section_text=section_text)
             
