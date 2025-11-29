@@ -162,6 +162,11 @@ class LLMBoundaryDetector:
             
             # Extract response text from converse API format
             response = response_with_metering["response"]
+            
+            # Debug: Log the response structure
+            logger.info(f"🔍 DEBUG: Response keys: {response.keys()}")
+            logger.info(f"🔍 DEBUG: Full response structure: {json.dumps(response, default=str)[:1000]}")
+            
             response_text = response["output"]["message"]["content"][0]["text"]
             
             # Log token usage
