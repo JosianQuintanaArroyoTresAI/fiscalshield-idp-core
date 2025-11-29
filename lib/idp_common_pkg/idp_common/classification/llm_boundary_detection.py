@@ -179,7 +179,17 @@ class LLMBoundaryDetector:
             )
             
             response_body = json.loads(response['body'].read())
+            
+            # Debug: Log response structure
+            logger.info(f"🔍 Response body keys: {list(response_body.keys())}")
+            logger.info(f"🔍 Content type: {type(response_body.get('content'))}")
+            if 'content' in response_body:
+                logger.info(f"🔍 Content length: {len(response_body['content'])}")
+                if len(response_body['content']) > 0:
+                    logger.info(f"🔍 First content item keys: {list(response_body['content'][0].keys())}")
+            
             response_text = response_body['content'][0]['text']
+            logger.info(f"📄 LLM response text (first 500 chars): {response_text[:500]}")
             
             # Log token usage
             if 'usage' in response_body:
