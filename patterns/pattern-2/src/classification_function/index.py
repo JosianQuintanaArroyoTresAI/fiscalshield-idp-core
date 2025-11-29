@@ -376,81 +376,81 @@ def handler(event, context):
     t1 = time.time()
     logger.info(f"Time taken for classification: {t1-t0:.2f} seconds")
 
-    # NEW: Add structure analysis for invoice sections
-    # This detects invoice boundaries and provides optimization metadata for extraction
+    # NEW: LLM-based boundary detection for invoice sections
+    # Uses Claude Sonnet 3.5 to intelligently detect invoice boundaries
     try:
-        chunk_size = int(os.environ.get('CHUNK_SIZE', '60000'))
-        overlap_size = int(os.environ.get('OVERLAP_SIZE', '5000'))
+        # Get configuration for boundary detection
+        enable_llm_boundaries = config.get("classification", {}).get("enable_llm_boundary_detection", True)
+        boundary_model_id = config.get("classification", {}).get("boundary_detection_model", 
+                                                                  "anthropic.claude-3-5-sonnet-20241022-v2:0")
+        use_caching = config.get("classification", {}).get("use_prompt_caching", True)
         
-        for section in document.sections:
-            if section.classification.lower() == 'invoice':
-                logger.info(f"🔍 Analyzing structure for invoice section {section.section_id}")
-                
-                # Get section text (combine all pages in section)
-                section_text = ""
-                for page_id in section.page_ids:
-                    if page_id in document.pages:
-                        page = document.pages[page_id]
-                        # Check for parsed_text_uri (Nova OCR) or raw_text_uri (Textract)
-                        text_uri = getattr(page, 'parsed_text_uri', None) or getattr(page, 'raw_text_uri', None)
-                        if text_uri:
-                            try:
-                                from idp_common import s3
-                                page_text = s3.get_text_content(text_uri)
-                                section_text += f"\n[PAGE:{page_id}]\n{page_text}"
-                            except Exception as e:
-                                logger.warning(f"Failed to load text for page {page_id}: {e}")
-                
-                if section_text:
-                    logger.info(f"Section text length: {len(section_text)} chars")
+        if not enable_llm_boundaries:
+            logger.info("⏭️  LLM boundary detection disabled in config")
+        else:
+            logger.info(f"🔍 LLM boundary detection enabled (model: {boundary_model_id})")
+            
+            # Import LLM boundary detector
+            from idp_common.classification.llm_boundary_detection import (
+                LLMBoundaryDetector,
+                get_section_text
+            )
+            
+            # Initialize detector
+            detector = LLMBoundaryDetector(
+                region=region,
+                model_id=boundary_model_id,
+                use_caching=use_caching
+            )
+            
+            # Process each invoice section
+            for section in document.sections:
+                if section.classification.lower() == 'invoice':
+                    logger.info(f"🔍 Detecting boundaries for invoice section {section.section_id}")
                     
-                    # Initialize attributes dict if not exists
-                    if not section.attributes:
-                        section.attributes = {}
+                    # Get section text (combine all pages with PAGE markers)
+                    section_text = get_section_text(section, document.pages)
                     
-                    # Run boundary detection using PAGE markers (PRIMARY strategy)
-                    try:
-                        from idp_common.classification.structure_analysis import InvoiceBoundaryDetector
+                    if section_text:
+                        logger.info(f"📄 Section text length: {len(section_text)} chars")
                         
-                        detector = InvoiceBoundaryDetector(
-                            chunk_size=chunk_size,
-                            overlap_size=overlap_size
-                        )
+                        # Initialize attributes dict if not exists
+                        if not section.attributes:
+                            section.attributes = {}
                         
-                        # Try PAGE-marker-based detection first (most reliable)
-                        boundaries = detector.detect_boundaries_page_based(section_text)
-                        
-                        if boundaries:
-                            logger.info(f"✅ PAGE-marker strategy succeeded: {len(boundaries)} boundaries detected")
-                            section.attributes['boundaries'] = boundaries
-                            section.attributes['boundary_strategy'] = 'page_markers'
-                        else:
-                            logger.info(f"⚠️ PAGE-marker strategy found no boundaries, extraction will use overlap chunking")
-                            section.attributes['boundary_strategy'] = 'none'
-                        
-                        # Add metadata for extraction Lambda
-                        section.attributes['structure_hint'] = {
-                            'section_text_length': len(section_text),
-                            'chunk_size': chunk_size,
-                            'overlap_size': overlap_size,
-                            'boundaries_detected': len(boundaries) if boundaries else 0
-                        }
-                        
-                        logger.info(
-                            f"✅ Added boundaries to section {section.section_id} "
-                            f"({len(boundaries) if boundaries else 0} invoices detected)"
-                        )
-                    except Exception as e:
-                        logger.warning(f"Boundary detection failed: {e}, extraction will use overlap chunking")
-                        section.attributes['boundary_strategy'] = 'error'
-                        section.attributes['structure_hint'] = {
-                            'section_text_length': len(section_text),
-                            'chunk_size': chunk_size,
-                            'overlap_size': overlap_size,
-                            'error': str(e)
-                        }
-                else:
-                    logger.warning(f"No text found for invoice section {section.section_id}")
+                        # Run LLM boundary detection
+                        try:
+                            boundaries = detector.detect_invoice_boundaries(
+                                section_text=section_text,
+                                section_pages=section.page_ids
+                            )
+                            
+                            # Validate boundaries
+                            if boundaries and detector.validate_boundaries(boundaries, section_text):
+                                # Store validated boundaries
+                                section.attributes['boundaries'] = boundaries
+                                section.attributes['boundary_strategy'] = 'llm_detected'
+                                section.attributes['invoice_count'] = len(boundaries)
+                                section.attributes['boundary_model'] = boundary_model_id
+                                
+                                logger.info(
+                                    f"✅ Detected {len(boundaries)} invoices in section {section.section_id}"
+                                )
+                            else:
+                                # Validation failed or no boundaries - mark for chunked extraction
+                                logger.warning(
+                                    f"⚠️ Boundary detection/validation failed for section {section.section_id}"
+                                )
+                                section.attributes['boundary_strategy'] = 'validation_failed'
+                                section.attributes['invoice_count'] = 0
+                                
+                        except Exception as e:
+                            logger.error(f"❌ Error in LLM boundary detection: {str(e)}")
+                            section.attributes['boundary_strategy'] = 'error'
+                            section.attributes['error'] = str(e)
+                    else:
+                        logger.warning(f"No text found for invoice section {section.section_id}")
+                        section.attributes['boundary_strategy'] = 'no_text'
     
     except Exception as e:
         logger.warning(f"Structure analysis enhancement failed (non-critical): {e}")

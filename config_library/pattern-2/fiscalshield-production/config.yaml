@@ -232,6 +232,13 @@ classification:
   max_invoices_per_batch: 20      # Maximum invoices in one batch
   max_statements_per_batch: 1     # Bank statements: always 1 per section
   
+  # LLM Boundary Detection Configuration
+  # Uses Claude to intelligently detect document boundaries within sections
+  # This replaces regex-based chunking with semantic understanding
+  enable_llm_boundary_detection: true
+  boundary_detection_model: "anthropic.claude-3-5-sonnet-20241022-v2:0"  # Sonnet 3.5 for accuracy
+  use_prompt_caching: true  # Cache prompts to reduce cost (90% savings on repeat calls)
+  
   # Page count validation (enforced in queue_sender Lambda)
   max_pages: 500  # Maximum pages allowed per uploaded PDF file
   
