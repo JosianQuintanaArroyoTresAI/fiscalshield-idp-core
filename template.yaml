@@ -1205,9 +1205,12 @@ Resources:
               - "x-amz-date"
               - "Authorization"
               - "x-amz-security-token"
+              - "*"
             AllowedMethods:
+              - GET
               - PUT
               - POST
+              - HEAD
             AllowedOrigins:
               - !Sub "https://${CloudFrontDistribution.DomainName}"
               # For local development only
@@ -1215,6 +1218,8 @@ Resources:
             ExposedHeaders:
               - "ETag"
               - "x-amz-server-side-encryption"
+              - "Content-Length"
+              - "Content-Type"
             MaxAge: 3000
       BucketEncryption:
         ServerSideEncryptionConfiguration:
@@ -1272,9 +1277,12 @@ Resources:
               - "x-amz-date"
               - "Authorization"
               - "x-amz-security-token"
+              - "*"
             AllowedMethods:
+              - GET
               - PUT
               - POST
+              - HEAD
             AllowedOrigins:
               - !Sub "https://${CloudFrontDistribution.DomainName}"
               # For local development only
@@ -1282,6 +1290,8 @@ Resources:
             ExposedHeaders:
               - "ETag"
               - "x-amz-server-side-encryption"
+              - "Content-Length"
+              - "Content-Type"
             MaxAge: 3000
       BucketEncryption:
         ServerSideEncryptionConfiguration:
@@ -1339,9 +1349,12 @@ Resources:
               - "x-amz-date"
               - "Authorization"
               - "x-amz-security-token"
+              - "*"
             AllowedMethods:
+              - GET
               - PUT
               - POST
+              - HEAD
             AllowedOrigins:
               - !Sub "https://${CloudFrontDistribution.DomainName}"
               # For local development only
@@ -1349,6 +1362,8 @@ Resources:
             ExposedHeaders:
               - "ETag"
               - "x-amz-server-side-encryption"
+              - "Content-Length"
+              - "Content-Type"
             MaxAge: 3000
       BucketEncryption:
         ServerSideEncryptionConfiguration:
@@ -1449,9 +1464,12 @@ Resources:
               - "x-amz-date"
               - "Authorization"
               - "x-amz-security-token"
+              - "*"
             AllowedMethods:
+              - GET
               - PUT
               - POST
+              - HEAD
             AllowedOrigins:
               - !Sub "https://${CloudFrontDistribution.DomainName}"
               # For local development only
@@ -1459,6 +1477,8 @@ Resources:
             ExposedHeaders:
               - "ETag"
               - "x-amz-server-side-encryption"
+              - "Content-Length"
+              - "Content-Type"
             MaxAge: 3000
       BucketEncryption:
         ServerSideEncryptionConfiguration:
@@ -1514,9 +1534,12 @@ Resources:
               - "x-amz-date"
               - "Authorization"
               - "x-amz-security-token"
+              - "*"
             AllowedMethods:
+              - GET
               - PUT
               - POST
+              - HEAD
             AllowedOrigins:
               - !Sub "https://${CloudFrontDistribution.DomainName}"
               # For local development only
@@ -1524,6 +1547,8 @@ Resources:
             ExposedHeaders:
               - "ETag"
               - "x-amz-server-side-encryption"
+              - "Content-Length"
+              - "Content-Type"
             MaxAge: 3000
       BucketEncryption:
         ServerSideEncryptionConfiguration:
