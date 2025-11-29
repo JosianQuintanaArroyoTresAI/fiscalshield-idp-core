@@ -210,9 +210,14 @@ class LLMBoundaryDetector:
             
             # Remove markdown code blocks if present
             if cleaned_response.startswith('```json'):
-                cleaned_response = cleaned_response.split('```json')[1].split('```')[0].strip()
+                cleaned_response = cleaned_response.split('```json', 1)[1]
+                cleaned_response = cleaned_response.rsplit('```', 1)[0].strip()
             elif cleaned_response.startswith('```'):
-                cleaned_response = cleaned_response.split('```')[1].split('```')[0].strip()
+                cleaned_response = cleaned_response.split('```', 1)[1]
+                cleaned_response = cleaned_response.rsplit('```', 1)[0].strip()
+            
+            # Additional cleanup - remove any leading/trailing whitespace and control characters
+            cleaned_response = cleaned_response.strip()
             
             # Parse JSON
             boundaries = json.loads(cleaned_response)
@@ -225,10 +230,29 @@ class LLMBoundaryDetector:
             
         except json.JSONDecodeError as e:
             logger.error(f"❌ Failed to parse LLM response as JSON: {str(e)}")
-            logger.error(f"Response was: {response_text[:500]}")
+            logger.error(f"Response preview (first 500 chars): {response_text[:500]}")
+            logger.error(f"Response preview (last 500 chars): {response_text[-500:]}")
+            
+            # Try to extract JSON array from response if it's embedded in text
+            try:
+                # Look for JSON array pattern
+                import re
+                json_match = re.search(r'\[\s*\{.*\}\s*\]', response_text, re.DOTALL)
+                if json_match:
+                    logger.info("Attempting to extract JSON array from response text")
+                    extracted_json = json_match.group(0)
+                    boundaries = json.loads(extracted_json)
+                    if isinstance(boundaries, list):
+                        logger.info("✅ Successfully extracted JSON array from response")
+                        return boundaries
+            except Exception as extraction_error:
+                logger.error(f"Failed to extract JSON from response: {str(extraction_error)}")
+            
             return []
+            
         except Exception as e:
             logger.error(f"❌ Error parsing response: {str(e)}")
+            logger.error(f"Response text type: {type(response_text)}")
             return []
     
     def validate_boundaries(
