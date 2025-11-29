@@ -8,9 +8,9 @@ Replaces regex-based semantic chunking with intelligent boundary identification
 
 import json
 import logging
-import boto3
 from typing import List, Dict, Any, Optional
 from botocore.exceptions import ClientError
+from idp_common.bedrock.client import BedrockClient
 
 logger = logging.getLogger(__name__)
 
@@ -104,12 +104,12 @@ class LLMBoundaryDetector:
         Args:
             region: AWS region for Bedrock
             model_id: Bedrock model ID (default: Sonnet 3.5 for best accuracy)
-            use_caching: Enable prompt caching to reduce costs
+            use_caching: Enable prompt caching to reduce costs (not supported with inference profiles)
         """
         self.region = region
         self.model_id = model_id
         self.use_caching = use_caching
-        self.bedrock_runtime = boto3.client('bedrock-runtime', region_name=region)
+        self.bedrock_client = BedrockClient(region=region)
         
     def detect_invoice_boundaries(
         self,
@@ -138,75 +138,41 @@ class LLMBoundaryDetector:
                 )
                 section_text = section_text[:max_input_chars]
             
-            # Build request with prompt caching
-            if self.use_caching:
-                body = {
-                    "anthropic_version": "bedrock-2023-05-31",
-                    "max_tokens": max_tokens,
-                    "system": [
-                        {
-                            "type": "text",
-                            "text": BOUNDARY_DETECTION_PROMPT.split("{section_text}")[0],
-                            "cache_control": {"type": "ephemeral"}  # Cache the instructions
-                        }
-                    ],
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": section_text
-                        }
-                    ]
-                }
-            else:
-                # No caching
-                prompt = BOUNDARY_DETECTION_PROMPT.format(section_text=section_text)
-                body = {
-                    "anthropic_version": "bedrock-2023-05-31",
-                    "max_tokens": max_tokens,
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": prompt
-                        }
-                    ]
-                }
+            # Build prompt with section text
+            prompt = BOUNDARY_DETECTION_PROMPT.format(section_text=section_text)
             
-            # Invoke Bedrock
+            logger.info(f"📄 Section text length: {len(section_text)} chars")
+            
+            # Prepare content for bedrock client
+            content = [{"text": prompt}]
+            
+            # System prompt
+            system_prompt = "You are an expert at analyzing document structure and identifying precise boundaries between invoices in a multi-invoice document."
+            
+            # Invoke Bedrock using the shared client
             logger.info(f"🔍 Invoking {self.model_id} for boundary detection...")
-            response = self.bedrock_runtime.invoke_model(
-                modelId=self.model_id,
-                body=json.dumps(body)
+            response_with_metering = self.bedrock_client.invoke_model(
+                model_id=self.model_id,
+                system_prompt=system_prompt,
+                content=content,
+                temperature=0.0,
+                max_tokens=max_tokens,
+                context="BoundaryDetection"
             )
             
-            response_body = json.loads(response['body'].read())
-            
-            # Debug: Log response structure
-            logger.info(f"🔍 Response body keys: {list(response_body.keys())}")
-            logger.info(f"🔍 Content type: {type(response_body.get('content'))}")
-            if 'content' in response_body:
-                logger.info(f"🔍 Content length: {len(response_body['content'])}")
-                if len(response_body['content']) > 0:
-                    logger.info(f"🔍 First content item keys: {list(response_body['content'][0].keys())}")
-            
-            response_text = response_body['content'][0]['text']
-            logger.info(f"📄 LLM response text (first 500 chars): {response_text[:500]}")
+            # Extract response text from converse API format
+            response = response_with_metering["response"]
+            response_text = response["output"]["message"]["content"][0]["text"]
             
             # Log token usage
-            if 'usage' in response_body:
-                usage = response_body['usage']
-                input_tokens = usage.get('input_tokens', 0)
-                output_tokens = usage.get('output_tokens', 0)
-                cache_read = usage.get('cache_read_input_tokens', 0)
-                cache_creation = usage.get('cache_creation_input_tokens', 0)
+            if 'usage' in response:
+                usage = response['usage']
+                input_tokens = usage.get('inputTokens', 0)
+                output_tokens = usage.get('outputTokens', 0)
                 
                 logger.info(
                     f"📊 Token usage: {input_tokens} input, {output_tokens} output"
                 )
-                
-                if cache_read > 0 or cache_creation > 0:
-                    logger.info(
-                        f"💰 Cache: {cache_read} read, {cache_creation} created"
-                    )
             
             # Parse JSON response (handle potential markdown wrapping)
             boundaries = self._parse_json_response(response_text)
