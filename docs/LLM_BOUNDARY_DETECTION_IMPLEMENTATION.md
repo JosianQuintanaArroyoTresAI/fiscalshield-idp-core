@@ -111,10 +111,10 @@ aws logs tail /aws/lambda/classification-lambda --follow
 
 **Look for these log messages:**
 ```
-🔍 LLM boundary detection enabled (model: anthropic.claude-3-5-sonnet-20241022-v2:0)
+🔍 LLM boundary detection enabled (model: arn:aws:bedrock:eu-central-1:864899848062:inference-profile/eu.anthropic.claude-3-5-sonnet-20240620-v1:0)
 🔍 Detecting boundaries for invoice section 1
 📄 Section text length: 15234 chars
-🔍 Invoking anthropic.claude-3-5-sonnet-20241022-v2:0 for boundary detection...
+🔍 Invoking arn:aws:bedrock:eu-central-1:864899848062:inference-profile/eu.anthropic.claude-3-5-sonnet-20240620-v1:0 for boundary detection...
 📊 Token usage: 3500 input, 250 output
 💰 Cache: 3150 read, 350 created
 ✅ LLM detected 3 invoice boundaries
@@ -161,7 +161,7 @@ aws dynamodb get-item \
         ],
         "boundary_strategy": "llm_detected",
         "invoice_count": 2,
-        "boundary_model": "anthropic.claude-3-5-sonnet-20241022-v2:0"
+        "boundary_model": "arn:aws:bedrock:eu-central-1:864899848062:inference-profile/eu.anthropic.claude-3-5-sonnet-20240620-v1:0"
       }
     }
   ]
@@ -196,8 +196,8 @@ classification:
   # Fast and cheap (for testing)
   boundary_detection_model: "anthropic.claude-3-haiku-20240307-v1:0"
   
-  # Recommended: Best balance of accuracy and cost
-  boundary_detection_model: "anthropic.claude-3-5-sonnet-20241022-v2:0"
+  # Recommended: EU inference profile for Sonnet 3.5 (best accuracy/cost balance)
+  boundary_detection_model: "arn:aws:bedrock:eu-central-1:864899848062:inference-profile/eu.anthropic.claude-3-5-sonnet-20240620-v1:0"
   
   # Most accurate (for complex documents)
   boundary_detection_model: "anthropic.claude-3-7-sonnet-20250219-v1:0"
@@ -212,6 +212,8 @@ classification:
   
   # Enable prompt caching (recommended)
   use_prompt_caching: true  # false to disable caching
+
+> **Note:** Prompt caching is only applied when invoking a direct model ID that supports cache points. Bedrock inference profiles currently ignore cache hints, so set this to `false` if you exclusively use inference profiles.
 ```
 
 ### Validation Thresholds

@@ -17,6 +17,7 @@ from idp_common.docs_service import create_document_service
 from idp_common.utils import calculate_lambda_metering, merge_metering_data
 from idp_common.classification.structure_analysis import enhance_classification_with_structure_analysis
 from idp_common.classification.smart_batcher import SmartBatcher
+from idp_common.classification.llm_boundary_detection import DEFAULT_BOUNDARY_MODEL_ID
 
 # Configuration will be loaded in handler function
 region = os.environ["AWS_REGION"]
@@ -381,8 +382,9 @@ def handler(event, context):
     try:
         # Get configuration for boundary detection
         enable_llm_boundaries = config.get("classification", {}).get("enable_llm_boundary_detection", True)
-        boundary_model_id = config.get("classification", {}).get("boundary_detection_model", 
-                                                                  "anthropic.claude-3-5-sonnet-20241022-v2:0")
+        boundary_model_id = config.get("classification", {}).get(
+            "boundary_detection_model", DEFAULT_BOUNDARY_MODEL_ID
+        )
         use_caching = config.get("classification", {}).get("use_prompt_caching", True)
         
         if not enable_llm_boundaries:

@@ -14,75 +14,75 @@ from idp_common.bedrock.client import BedrockClient
 
 logger = logging.getLogger(__name__)
 
+# Default inference profile for boundary detection (EU cross-region)
+DEFAULT_BOUNDARY_MODEL_ID = (
+    "arn:aws:bedrock:eu-central-1:864899848062:inference-profile/"
+    "eu.anthropic.claude-3-5-sonnet-20240620-v1:0"
+)
 
-BOUNDARY_DETECTION_PROMPT = """You are analyzing a section of text that contains one or more invoices.
 
-Your task: Identify the EXACT character positions where each invoice starts and ends.
+BOUNDARY_DETECTION_PROMPT = """You are reviewing OCR text that may include multiple invoices separated by [PAGE:x] markers.
 
-## What defines invoice boundaries:
+<<CACHEPOINT>>
+Your mission: deliver precise, gap-free boundaries so downstream extraction can process each invoice independently.
 
-**Invoice STARTS with:**
-- "Invoice Number:" or "Invoice No:" label
-- Company letterhead (company name in header)
-- "To:" or "Bill To:" customer details
-- "Tax Invoice" heading
-- Date and invoice reference at top
+<<CACHEPOINT>>
+### What counts as an invoice boundary
+**Reliable START signals**
+- Company header, logo, or registered address block
+- Labels such as "Invoice", "Tax Invoice", "Invoice No", "Invoice Number"
+- Customer section ("Bill To", "Sold To", "Ship To")
+- Early metadata (issue date, PO, account number)
 
-**Invoice ENDS with:**
-- "AMOUNT DUE" or "Total GBP/USD/EUR" with amount
-- "Thank you for your business"
-- Payment terms or due date
-- "This is not a tax invoice" disclaimer
-- Clear page break before next invoice
-- Footer with company registration details
+**Reliable END signals**
+- Summary tables ("Amount Due", "Balance", "Total" with currency)
+- Payment instructions, bank details, remittance info
+- Terms/disclaimers ("Thank you", "Payment due", "This is not a tax invoice")
+- Footers with registration or VAT info
+- A clear blank gap or new header before the next invoice
 
-## Instructions:
+When start/end cues conflict, prefer the option that maximizes total coverage without overlapping ranges.
 
-1. Scan the ENTIRE text from start to finish
-2. For each invoice found, record:
-   - Exact start character position
-   - Exact end character position  
-   - Confidence level (high/medium/low)
-   - Page numbers it spans
-   - What text marks the start
-   - What text marks the end
+<<CACHEPOINT>>
+### Required workflow
+1. Skim every page marker sequentially; note where context switches.
+2. Propose provisional boundaries using the cues above and any strong separators (blank lines, page headers, separator characters).
+3. Validate coverage: combined length of all boundaries must be ≥92% of the provided text unless you confidently return an empty list.
+4. Reject partial or low-signal fragments (set confidence "low" only when unavoidable and explain via indicators).
+5. Ensure `end_char` of invoice *i* is strictly less than `start_char` of invoice *i+1*.
 
-3. Return a JSON array with this structure:
+<<CACHEPOINT>>
+### Output contract (JSON ONLY)
+Return a JSON array ordered by document flow. Each object MUST include:
+- `id`: sequential integer starting at 1.
+- `start_char` and `end_char`: 0-indexed offsets referencing the provided text.
+- `page_numbers`: list of page integers covered.
+- `confidence`: `high`, `medium`, or `low`.
+- `start_indicator` / `end_indicator`: short snippets (≤120 chars) explaining what anchored the decision.
 
+Example:
 [
-  {
-    "id": 1,
-    "start_char": 0,
-    "end_char": 2847,
-    "confidence": "high",
-    "page_numbers": [1, 2],
-    "start_indicator": "Invoice Number: INV-60778",
-    "end_indicator": "AMOUNT DUE £296.74"
-  },
-  {
-    "id": 2,
-    "start_char": 2848,
-    "end_char": 5690,
-    "confidence": "high", 
-    "page_numbers": [3],
-    "start_indicator": "Invoice Number: INV-60779",
-    "end_indicator": "Thank you for your business"
-  }
+    {
+        "id": 1,
+        "start_char": 0,
+        "end_char": 2847,
+        "confidence": "high",
+        "page_numbers": [1, 2],
+        "start_indicator": "Invoice Number: INV-60778",
+        "end_indicator": "AMOUNT DUE £296.74"
+    }
 ]
 
-## Important rules:
+Rules:
+- Return `[]` when no valid invoice is present; otherwise cover the document with <250 character gaps when feasible.
+- Do not emit markdown, prose, backticks, or comments—JSON only.
+- Bounds must lie within `[0, len(text))`.
 
-- Boundaries MUST NOT overlap (end_char of invoice N < start_char of invoice N+1)
-- Each invoice should be COMPLETE (has header AND footer)
-- If an invoice appears incomplete, set confidence to "low"
-- Character positions are 0-indexed
-- Return ONLY the JSON array, no markdown formatting
-
-## Text to analyze:
-
+<<CACHEPOINT>>
+### Text to analyze
 {section_text}
 
-Remember: Return ONLY valid JSON, no explanation or markdown.
+Return ONLY the JSON array—no explanation.
 """
 
 
@@ -95,7 +95,7 @@ class LLMBoundaryDetector:
     def __init__(
         self,
         region: str = "us-east-1",
-        model_id: str = "anthropic.claude-3-5-sonnet-20241022-v2:0",
+        model_id: str = DEFAULT_BOUNDARY_MODEL_ID,
         use_caching: bool = True
     ):
         """
@@ -138,8 +138,8 @@ class LLMBoundaryDetector:
                 )
                 section_text = section_text[:max_input_chars]
             
-            # Build prompt with section text
-            prompt = BOUNDARY_DETECTION_PROMPT.format(section_text=section_text)
+            # Build prompt with section text without triggering str.format brace parsing
+            prompt = BOUNDARY_DETECTION_PROMPT.replace("{section_text}", section_text)
             
             logger.info(f"📄 Section text length: {len(section_text)} chars")
             
@@ -219,9 +219,12 @@ class LLMBoundaryDetector:
             # Additional cleanup - remove any leading/trailing whitespace and control characters
             cleaned_response = cleaned_response.strip()
             
-            # Remove newlines within JSON keys/values that break parsing
-            # Claude sometimes returns JSON with newlines in unexpected places
-            cleaned_response = cleaned_response.replace('\n', ' ')
+            # Remove newline / carriage-return / tab characters that break JSON parsing
+            cleaned_response = (
+                cleaned_response.replace('\r', ' ')
+                .replace('\n', ' ')
+                .replace('\t', ' ')
+            )
             
             # Parse JSON
             boundaries = json.loads(cleaned_response)

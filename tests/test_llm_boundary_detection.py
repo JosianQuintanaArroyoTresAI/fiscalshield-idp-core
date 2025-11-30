@@ -19,7 +19,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'lib', 'idp_com
 
 from idp_common.classification.llm_boundary_detection import (
     LLMBoundaryDetector,
-    get_section_text
+    get_section_text,
+    DEFAULT_BOUNDARY_MODEL_ID,
 )
 
 
@@ -74,7 +75,7 @@ class TestLLMBoundaryDetector:
         """Test detector initialization with different configurations"""
         # Default initialization
         detector = LLMBoundaryDetector()
-        assert detector.model_id == "anthropic.claude-3-5-sonnet-20241022-v2:0"
+        assert detector.model_id == DEFAULT_BOUNDARY_MODEL_ID
         assert detector.use_caching is True
         
         # Custom initialization
