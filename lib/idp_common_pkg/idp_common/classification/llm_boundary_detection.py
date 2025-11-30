@@ -219,6 +219,10 @@ class LLMBoundaryDetector:
             # Additional cleanup - remove any leading/trailing whitespace and control characters
             cleaned_response = cleaned_response.strip()
             
+            # Remove newlines within JSON keys/values that break parsing
+            # Claude sometimes returns JSON with newlines in unexpected places
+            cleaned_response = cleaned_response.replace('\n', ' ')
+            
             # Parse JSON
             boundaries = json.loads(cleaned_response)
             

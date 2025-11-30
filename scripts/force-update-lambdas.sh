@@ -57,6 +57,12 @@ echo ""
 # Format: "LogicalResourceId:StackName:SAM_BUILD_PATH"
 # If StackName is omitted, uses default STACK_NAME
 # SAM_BUILD_PATH is the path to the SAM-built Lambda function directory
+#
+# ⚠️  WARNING: Pattern 2 functions use Docker images built by CodeBuild/ECR.
+#     This script CANNOT update containerized Lambdas - they must be updated
+#     via CloudFormation stack deployment which triggers CodeBuild to rebuild
+#     the Docker image. Only ZIP-based Lambda functions can be force-updated.
+#
 ALL_FUNCTIONS=(
     "UploadResolverFunction::.aws-sam/build/UploadResolverFunction"
     "QueueSender::.aws-sam/build/QueueSender"

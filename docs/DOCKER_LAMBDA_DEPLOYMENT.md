@@ -1,4 +1,23 @@
-# Docker Lambda Deployment Guide
+# Docker Lambda Deployment Guide - CRITICAL REFERENCE
+
+> **⚠️ READ THIS FIRST**: If Pattern 2 Lambdas aren't reflecting code changes, the issue is almost ALWAYS the deployment flow, not the code itself.
+
+## Quick Fix for "My Code Changes Aren't Deploying"
+
+```bash
+# Stop everything and run this:
+cd /home/josian/git/fiscalshield-idp-core
+source activate-env.sh
+python publish.py fiscalshield-templates fiscalshield/dev eu-central-1 --clean-build --lint off
+./deploy-pattern2-dev.sh
+
+# Wait 15-20 minutes. That's it.
+```
+
+**DO NOT:**
+- ❌ Manually trigger CodeBuild (it uses stale S3 source)
+- ❌ Use force-update-lambdas.sh (doesn't work for Docker Lambdas)
+- ❌ Assume git push triggers deployment (it doesn't)
 
 ## Understanding the Deployment Flow
 
@@ -73,30 +92,38 @@ CodeLocation: !Sub "arn:${AWS::Partition}:s3:::${ArtifactBucket}/${ArtifactPrefi
 
 ## Correct Deployment Workflows
 
-### Option 1: Full Deployment (Recommended)
+### Option 1: Full Deployment (THE ONLY RELIABLE METHOD)
 
 **When to use:** After any code changes to Pattern 2 functions or `idp_common`
 
 ```bash
 cd /home/josian/git/fiscalshield-idp-core
+source activate-env.sh
 
-# Commit your changes first
-git add -A
-git commit -m "Your commit message"
-git push origin dev
+# Step 1: Publish artifacts to S3 (CRITICAL - includes lib changes)
+python publish.py fiscalshield-templates fiscalshield/dev eu-central-1 --clean-build --lint off
 
-# Run full deployment
+# Step 2: Deploy the stack
 ./deploy-pattern2-dev.sh
+
+# Step 3: Wait for completion
+aws cloudformation wait stack-update-complete --stack-name fiscalshield-idp-dev --region eu-central-1
 ```
 
 **What happens:**
-1. CloudFormation packages code
-2. Uploads fresh source ZIP to S3 (with new content hash)
-3. Triggers CodeBuild with new source
-4. Builds Docker images
-5. Updates Lambda to use new images
+1. `publish.py` calculates content hash from lib + pattern-2 code
+2. Creates `pattern-2-source-<NEW_HASH>.zip` with ALL current code
+3. Uploads to S3 (this is what CodeBuild will use!)
+4. CloudFormation detects new source ZIP filename
+5. Triggers CodeBuild with new source
+6. Builds Docker images with your latest code
+7. Updates Lambda to use new images
 
 **Time:** ~15-20 minutes
+
+**Critical flags:**
+- `--clean-build`: Forces new content hash (prevents caching issues)
+- `--lint off`: Bypasses lint errors (use temporarily, fix lint later)
 
 ### Option 2: Manual CodeBuild Trigger (NOT RECOMMENDED)
 
@@ -184,7 +211,7 @@ aws logs tail "/fiscalshield-idp-dev-PATTERN2STACK-12AZHXIRN6HYB/lambda/Classifi
 
 If you added `logger.info("🔍 DEBUG: ...")` and it's NOT appearing, your code isn't deployed.
 
-## Common Mistakes
+## Common Mistakes (That Cost Hours)
 
 ### ❌ Mistake 1: Git Push Without Deployment
 ```bash
@@ -193,16 +220,16 @@ git push origin dev
 # Nothing happens! Lambda still runs old code
 ```
 
-**Why:** Lambda doesn't automatically pull from Git. You need to deploy.
+**Why:** Lambda doesn't automatically pull from Git. CI/CD only runs on `main` branch in this repo.
 
 ### ❌ Mistake 2: Manual CodeBuild Trigger Before Publishing
 ```bash
 # You made code changes...
 aws codebuild start-build --project-name pattern2-docker-build
-# CodeBuild uses OLD source ZIP from S3!
+# CodeBuild uses OLD source ZIP from S3! Your changes not included!
 ```
 
-**Why:** CodeBuild builds from S3, not Git. Must run `publish.py` first.
+**Why:** CodeBuild builds from S3 source ZIP, not Git. **MUST** run `publish.py` first to upload new source.
 
 ### ❌ Mistake 3: CodeBuild Success ≠ Lambda Updated
 ```bash
@@ -210,9 +237,35 @@ aws codebuild start-build --project-name pattern2-docker-build
 # Lambda still runs old image!
 ```
 
-**Why:** Lambda doesn't automatically update to new image. Must either:
-- Run full CloudFormation deployment, OR
-- Manually update Lambda image URI
+**Why:** Lambda doesn't automatically update to new image. CloudFormation must update the function.
+
+### ❌ Mistake 4: Wrong S3 Bucket
+```bash
+python publish.py fiscalshield-dev idp eu-central-1  # Wrong bucket!
+./deploy-pattern2-dev.sh  # Uses fiscalshield-templates
+# Mismatch! Lambda gets old source from templates bucket
+```
+
+**Why:** Deploy script uses `fiscalshield-templates-eu-central-1` by default. Must publish to same bucket.
+
+### ❌ Mistake 5: Assuming force-update-lambdas.sh Works
+```bash
+./scripts/force-update-lambdas.sh ClassificationFunction
+# Does nothing for Docker Lambdas!
+```
+
+**Why:** This script only works for ZIP-based Lambdas. Docker Lambdas need full deployment.
+
+### ❌ Mistake 6: Escaping Strings Wrong in Python
+```python
+# WRONG - This matches literal "\n" string, not newlines!
+text.replace('\\n', ' ')
+
+# CORRECT - This matches actual newline characters
+text.replace('\n', ' ')
+```
+
+**Why:** In Python strings, `'\\n'` is an escaped backslash + n, not a newline character.
 
 ## Quick Reference
 
@@ -282,20 +335,95 @@ Before assuming your code is deployed, verify:
 - Check Lambda execution role has `ecr:GetAuthorizationToken`, `ecr:BatchGetImage`
 - Confirm image exists in ECR
 
-## Summary
+## Bucket Configuration Reference
 
-**The Golden Rule:** After ANY code changes to Pattern 2 functions or `idp_common`, run the full deployment:
+The system uses TWO S3 buckets, and they MUST be in sync:
 
 ```bash
+# Development bucket (where publish.py puts artifacts)
+fiscalshield-templates-eu-central-1/fiscalshield/dev/
+
+# Legacy bucket (historical, may have stale artifacts)
+fiscalshield-dev-eu-central-1/idp/
+
+# Always publish to templates bucket:
+python publish.py fiscalshield-templates fiscalshield/dev eu-central-1
+```
+
+The `deploy-pattern2-dev.sh` script uses `fiscalshield-templates` by default via:
+```bash
+BUCKET_BASENAME="${BUCKET_BASENAME:-fiscalshield-templates}"
+```
+
+## Real Example: The '\n    "id"' Bug
+
+**Problem:** Lambda throwing `❌ Error in LLM boundary detection: '\n    "id"'`
+
+**Attempted Fixes (All Failed):**
+1. ✅ Fixed code in `lib/idp_common_pkg/idp_common/classification/llm_boundary_detection.py`
+2. ✅ Committed to Git
+3. ❌ Manually triggered CodeBuild → Still failed (used old S3 source)
+4. ❌ Waited for "automatic" deployment → Never happened
+5. ❌ Tried force-update-lambdas.sh → Doesn't work for Docker Lambdas
+
+**Root Causes:**
+1. First fix used wrong escaping: `'\\n'` instead of `'\n'`
+2. Published to wrong bucket: `fiscalshield-dev` instead of `fiscalshield-templates`
+3. Didn't use `--clean-build`, so content hash didn't change
+4. CloudFormation didn't detect source changes, didn't trigger rebuild
+
+**Working Fix:**
+```bash
+# 1. Fix the actual bug (correct escaping)
+vim lib/idp_common_pkg/idp_common/classification/llm_boundary_detection.py
+# Changed: cleaned_response.replace('\\n', ' ')
+# To:      cleaned_response.replace('\n', ' ')
+
+# 2. Publish to correct bucket with forced rebuild
+source activate-env.sh
+python publish.py fiscalshield-templates fiscalshield/dev eu-central-1 --clean-build --lint off
+
+# 3. Deploy
+./deploy-pattern2-dev.sh
+
+# 4. Wait (15-20 min)
+aws cloudformation wait stack-update-complete --stack-name fiscalshield-idp-dev --region eu-central-1
+
+# 5. Verify
+aws lambda get-function \
+  --function-name fiscalshield-idp-dev-PATTER-ClassificationFunction-ou0tVZHvC4hP \
+  --region eu-central-1 \
+  --query '{Image:Code.ImageUri,Updated:Configuration.LastModified}'
+```
+
+**Result:** Image updated from `a5502335` → `e93a77dd`, error fixed.
+
+**Time cost:** ~8 hours debugging, 20 minutes actual deployment.
+
+## Summary
+
+**The Golden Rule:** After ANY code changes to Pattern 2 functions or `idp_common`:
+
+```bash
+source activate-env.sh
+python publish.py fiscalshield-templates fiscalshield/dev eu-central-1 --clean-build --lint off
 ./deploy-pattern2-dev.sh
 ```
 
-This ensures:
-1. Fresh source package created
-2. Uploaded to S3
-3. CodeBuild triggered automatically
-4. Docker images built with latest code
-5. Lambda updated to use new images
-6. Everything stays in sync
+**That's it. Stop trying shortcuts. They don't work.**
 
-Manual shortcuts only work if you understand the full flow and can verify each step.
+This ensures:
+1. ✅ Fresh source package created with new content hash
+2. ✅ Uploaded to CORRECT S3 bucket
+3. ✅ CloudFormation detects change
+4. ✅ CodeBuild triggered automatically with NEW source
+5. ✅ Docker images built with latest code
+6. ✅ Lambda updated to use new images
+7. ✅ Everything stays in sync
+
+**Remember:** 
+- The source ZIP in S3 is the source of truth for CodeBuild
+- Git commits alone don't trigger anything
+- Manual CodeBuild triggers use whatever's in S3 (probably stale)
+- `--clean-build` forces new content hash (prevents caching bugs)
+- Deployment takes 15-20 min - just wait, don't try to optimize

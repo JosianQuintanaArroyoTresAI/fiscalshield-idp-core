@@ -19,10 +19,9 @@ TEMPLATE_URL="https://${S3_BUCKET}.s3.${REGION}.amazonaws.com/${TEMPLATE_KEY}"
 ADMIN_EMAIL="${ADMIN_EMAIL:-josian@protonmail.com}"
 
 # Pattern 2 Configuration Options:
-# - default
-# - few_shot_example_with_multimodal_page_classification
-# - medical_records_summarization
-PATTERN2_CONFIG="${PATTERN2_CONFIG:-default}"
+# - lending-package-sample
+# - bank-statement-sample
+PATTERN2_CONFIG="${PATTERN2_CONFIG:-lending-package-sample}"
 
 echo "Deployment Configuration:"
 echo "  Stack Name: $STACK_NAME"

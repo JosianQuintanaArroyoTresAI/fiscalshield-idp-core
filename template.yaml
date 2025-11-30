@@ -120,8 +120,8 @@ Parameters:
     AllowedValues:
       - "lending-package-sample"
       - "bank-statement-sample"
-      - "default"
       # Removed: rvl-cdip-package-sample (academic research config, not for financial documents)
+      # Removed: "default" (not a valid config preset - use lending-package-sample instead)
     Description: >-
       Select the configuration preset for Pattern 2. Use 'lending-package-sample' for financial documents (invoices, bank statements). See https://github.com/aws-samples/sample-genai-idp/blob/main/config_library/README.md. Note: Custom configuration overrides the selected pattern configuration when provided.
 

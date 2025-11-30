@@ -1,0 +1,1 @@
+../../docs/DOCKER_LAMBDA_DEPLOYMENT.md

@@ -1,795 +1,403 @@
 timestamp,message
-1764450007568,"[INFO]	2025-11-29T21:00:07.568Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Classifying page 26 with Bedrock
-"
-1764450007705,"[WARNING]	2025-11-29T21:00:07.705Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Removed <<CACHEPOINT>> tags for unsupported model: arn:aws:bedrock:eu-central-1:864899848062:inference-profile/eu.amazon.nova-pro-v1:0. CachePoint is only supported for: eu.anthropic.claude-3-7-sonnet-20250219-v1:0, eu.anthropic.claude-sonnet-4-20250514-v1:0, eu.anthropic.claude-sonnet-4-5-20250929-v1:0, eu.amazon.nova-lite-v1:0, eu.amazon.nova-pro-v1:0
-"
-1764450007707,"[INFO]	2025-11-29T21:00:07.706Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Bedrock request attempt 1/7:
-"
-1764450007707,"[INFO]	2025-11-29T21:00:07.707Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	  - model: arn:aws:bedrock:eu-central-1:864899848062:inference-profile/eu.amazon.nova-pro-v1:0
-"
-1764450007707,"[INFO]	2025-11-29T21:00:07.707Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	  - inferenceConfig: {'topP': 0.1, 'maxTokens': 8000}
-"
-1764450007707,"[INFO]	2025-11-29T21:00:07.707Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	  - system: [{'text': 'You are a multimodal document classification expert specializing in UK financial and commercial documents. Your task is to classify documents into predefined categories with HIGH CONFIDENCE based on visual layout, textual content, and distinctive features. You MUST provide a confidence score from 0.0 to 1.0 reflecting the strength of classification evidence. Your output must be valid JSON according to the requested format.
-<variables> <document-ocr-data>: OCR-extracted text content providing textual information for classification <document-image>: Visual representation showing layout, formatting, logos, and structure <document-types>: Valid document types you must classify into - ONLY use types from this list </variables>'}]
-"
-1764450007707,"[INFO]	2025-11-29T21:00:07.707Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	  - messages: [{'role': 'user', 'content': [{'text': '<task-description> Analyze the provided document using both visual layout and textual content to determine its document type with high confidence. Decide if this page starts a new document (""start"") or continues the previous document (""continue""). </task-description>
-<document-types> invoice  \t[ A commercial invoice or expense claim document issued by a supplier, vendor, or individual to request payment for goods or services purchased.
-KEY IDENTIFIERS: - Header text: ""Invoice"", ""Tax Invoice"", ""VAT Invoice"", ""Proforma Invoice"", ""Credit Note"", ""Receipt"" - Supplier/vendor details at top (company name, address, VAT/tax registration number) - Line items table with columns: description, quantity, unit price, amount - Financial calculations: subtotal, VAT/GST breakdown (often 20%% in UK), total amount - Invoice metadata: invoice number, invoice date, due date - Payment terms and bank details for wire transfer - May include purchase order number, customer reference
-DISTINGUISHING FEATURES: - Itemized charges showing WHAT was purchased (products/services) - Amounts OWED (not paid) - this is a request for payment - Business-to-business OR individual-to-business format - VAT invoice number format (e.g., ""INV-2024-001"", ""#12345"") - May show ""PAID"" stamp or payment status if settled
-INCLUDES SUBTYPES: - Supplier invoices (formal business invoices with VAT registration) - Expense claims/receipts (individual purchases, simpler format, from shops/restaurants) - Credit notes (negative invoices for refunds/adjustments) ]
-bank-statement  \t[ A financial statement issued by a bank or financial institution documenting account activity and transactions over a specific time period.
-KEY IDENTIFIERS: - Bank logo and institution name (e.g., Barclays, HSBC, Lloyds, NatWest, Metro Bank) - Account holder name and address - Account number (often partially masked: ****1234) - Sort code (UK: XX-XX-XX format) - Statement period with clear start and end dates - Opening balance and closing balance - Chronological transaction list with dates
-TRANSACTION TABLE COLUMNS: - Date (transaction date) - Description (merchant name, payment reference, transaction type) - Money OUT (debits, payments, withdrawals) - Money IN (credits, deposits, transfers received) - Running balance (account balance after each transaction)
-DISTINGUISHING FEATURES: - Shows money flowing IN and OUT of an account (not requesting payment) - Transaction history format (NOT itemized sales) - Statement period dates (e.g., ""01 Oct 2024 - 31 Oct 2024"") - Transaction types: DD (Direct Debit), SO (Standing Order), POS (Point of Sale), BACS, CHAPS, ATM - Interest charges, bank fees, overdraft information may be included - NOT an invoice - this is account activity documentation
-TRANSACTION TYPES COMMONLY SEEN: - Direct Debits (regular bills: utilities, subscriptions) - Standing Orders (regular transfers) - Card payments (POS, contactless, chip & PIN) - Bank transfers (BACS, CHAPS, Faster Payments) - ATM withdrawals - Salary deposits - Interest earned/charged ] </document-types>
-<classification-examples> Example 1 - Invoice Classification: Visual evidence: Header text ""TAX INVOICE"", company logo at top, table with columns (Description, Qty, Unit Price, Amount) Textual evidence: ""Invoice Number: INV-2024-12345"", ""Invoice Date: 15/11/2024"", itemized list showing ""Office Chairs x 5 @ £120.00"", financial calculation showing ""Subtotal: £600.00"", ""VAT 20%: £120.00"", ""Total Due: £720.00"", ""Payment Terms: Net 30 days"" Classification: ""invoice"" Confidence: 0.98 Reasoning: Clear invoice structure with all distinctive features - invoice number, supplier details, itemized charges, VAT breakdown, payment terms. High confidence due to multiple matching identifiers. Document Boundary: start
-Example 2 - Bank Statement Classification: Visual evidence: Bank logo (Barclays), professional letterhead, transaction table layout with date/description/amount columns Textual evidence: ""Barclays Bank PLC"", ""Statement Period: 01/10/2024 - 31/10/2024"", ""Account: ****1234"", ""Sort Code: 20-00-00"", ""Opening Balance: £5,420.50"", transaction list including ""15 Oct DD - Electric Company £85.00"", ""18 Oct POS - Tesco Superstore £42.15"", ""25 Oct BACS Credit - Salary £2,800.00"", ""Closing Balance: £8,093.35"" Classification: ""bank-statement"" Confidence: 0.99 Reasoning: Unmistakable bank statement format - bank header, statement period, account details, chronological transactions with debits/credits, running balance. All key identifiers present. Document Boundary: start
-Example 3 - Expense Receipt (Invoice subtype): Visual evidence: Simple receipt format from retail store, POS terminal print style Textual evidence: ""Tesco Express"", ""Receipt #: 1234"", ""Date: 15/11/2024"", list of grocery items with prices, ""Total: £35.42"", ""Card Payment"" Classification: ""invoice"" Confidence: 0.85 Reasoning: Classifying as ""invoice"" because it shows itemized purchases with amounts. This is a receipt/expense claim document (invoice subtype). Confidence slightly lower than formal B2B invoices due to simpler format, but still clearly requesting/documenting payment for goods. Document Boundary: start </classification-examples>
-<classification-instructions> Follow these steps to achieve HIGH CONFIDENCE classification:
-1. VISUAL ANALYSIS:
-   - Examine logos, headers, letterheads (bank logos vs company logos)
-   - Analyze document structure (transaction table vs itemized invoice)
-   - Check for distinctive formatting (statement period vs invoice number)
-
-2. TEXTUAL ANALYSIS:
-   - Identify key terminology (""Invoice"", ""Statement"", ""Account"", ""VAT"", ""Sort Code"")
-   - Look for distinctive metadata (invoice number format vs account number format)
-   - Analyze transaction/line item patterns (money IN/OUT vs items purchased)
-
-3. FEATURE MATCHING:
-   - Count how many KEY IDENTIFIERS match each document type
-   - More matches = higher confidence
-   - Look for DISTINGUISHING FEATURES that definitively rule in/out types
-
-4. CONFIDENCE ASSESSMENT:
-   HIGH (0.90-1.0): Multiple distinctive features clearly match ONE type, no ambiguity
-   MEDIUM (0.70-0.89): Most features match, minor ambiguity or missing secondary features
-   LOW (0.0-0.69): Limited features, conflicting signals, or poor image quality
-
-5. DOCUMENT BOUNDARY (CRITICAL FOR ACCURATE BATCHING):
-   This flag determines whether a page starts a NEW document or continues the previous one.
-   Accurate boundary detection enables optimal parallel processing.
-   
-   ⚠️ CRITICAL RULE: When classifying EACH PAGE INDEPENDENTLY, you must determine if this page
-   starts a NEW invoice or continues the PREVIOUS invoice. Look for continuation signals!
-   
-   For INVOICES - Set ""continue"" when you see ANY of these signals:
-   ✓ **NO invoice header/title** at top of page (no ""INVOICE"", ""TAX INVOICE"", ""RECEIPT"")
-   ✓ **NO ""Bill To:"" or ""To:"" section** (new invoices always have recipient details)
-   ✓ **NO company logo/letterhead** at top (continuation pages are plain)
-   ✓ **Mid-table content** - Description/Qty/Price columns continuing from previous page
-   ✓ **Page number indicators**: ""Page 2 of 3"", ""Continued from page X"", ""Page 2""
-   ✓ **Terms & conditions** at bottom (usually last page of invoice)
-   ✓ **Footer text only** - payment instructions, disclaimers, thank you notes
-   ✓ **Same invoice number visible** as previous page (if you can infer context)
-   
-   For INVOICES - Set ""start"" ONLY when you see CLEAR SIGNALS of a NEW invoice:
-   ✓ NEW ""Invoice Number:"" or ""Invoice #XXX"" in header area
-   ✓ NEW ""Bill To:"" or ""To:"" section (indicates new customer/recipient)
-   ✓ Company logo/letterhead at TOP of page (fresh invoice header)
-   ✓ Fresh invoice header text: ""INVOICE"", ""TAX INVOICE"", ""RECEIPT"" at top
-   ✓ New invoice date in header area (not buried in footer)
-   ✓ Line items table starting from beginning (not mid-table continuation)
-   
-   **DEFAULT BEHAVIOR - CRITICAL**:
-   - If page has NO clear invoice header/logo/recipient → prefer ""continue""
-   - If page looks like middle of a table → definitely ""continue""
-   - If page has footer/terms only → definitely ""continue""
-   - Only use ""start"" when you see CLEAR NEW INVOICE SIGNALS
-   - **When uncertain, prefer ""continue"" to avoid splitting multi-page invoices**
-   
-   For BANK STATEMENTS - Set ""start"" when you see:
-   ✓ Bank logo and statement header
-   ✓ ""Statement Period: DD/MM/YYYY - DD/MM/YYYY""
-   ✓ New account number or statement date range
-   
-   For BANK STATEMENTS - Set ""continue"" when you see:
-   ✓ Transaction list continuation
-   ✓ Same account number, continued transaction table
-   
-   **REMEMBER**: You see ONE page at a time. Look for absence of invoice header signals!
-
-6. CRITICAL: Only use document types explicitly listed in <document-types> section above </classification-instructions>
-<disambiguation-rules> Invoice vs Bank Statement confusion points: - Invoice: Shows WHAT was purchased (line items) and money OWED - Bank Statement: Shows WHERE money went/came from (transactions) and account ACTIVITY - Invoice: Has supplier details, invoice number, payment terms - Bank Statement: Has bank logo, account number, statement period - Invoice: Requests payment or documents a purchase - Bank Statement: Documents account history over time
-If uncertain, check: - Does it have an invoice number? → Likely invoice - Does it have an account number and statement period? → Likely bank-statement - Does it show ""Total Due"" or ""Amount Owed""? → Likely invoice - Does it show ""Opening Balance"" and ""Closing Balance""? → Likely bank-statement </disambiguation-rules>
-<output-format> ⚠️  CRITICAL: You MUST respond with ONLY valid JSON. No additional text before or after the JSON object. ⚠️  Your response must START with { and END with } - nothing else! ⚠️  Do NOT write explanations, comments, or markdown - ONLY the JSON object!
-Expected JSON structure: {
-  ""classification_reason"": ""Detailed reasoning with specific visual and textual evidence that led to this classification. List the KEY IDENTIFIERS found and explain why confidence is high/medium/low."",
-  ""class"": ""exact_document_type_from_list"",
-  ""confidence"": 0.95,
-  ""document_boundary"": ""start""
-}
-Field requirements: - ""class"": MUST be exactly ""invoice"" or ""bank-statement"" (lowercase, hyphen for bank statement) - ""confidence"": Number between 0.0 and 1.0 - ""document_boundary"": MUST be exactly ""start"" or ""continue"" (lowercase) - ""classification_reason"": Brief explanation (1-2 sentences)
-INCORRECT examples (DO NOT USE - these will cause parsing errors): ❌ ""Class"": ""Invoice"" (wrong case and capitalization) ❌ ""class"": ""bank statement"" (use hyphen: ""bank-statement"") ❌ ""document_boundary"": ""Start"" (must be lowercase: ""start"") ❌ Adding explanatory text outside the JSON object ❌ Here is my analysis: {...} (no text before the JSON!) ❌ ```json\
-{...}\
-``` (no markdown code blocks!) ❌ Let me classify this page. {...} (no explanatory text!)
-CORRECT example (THIS IS EXACTLY WHAT YOU MUST RETURN): ✅ {""classification_reason"": ""Clear invoice with invoice number INV-123, itemized charges, and VAT breakdown"", ""class"": ""invoice"", ""confidence"": 0.95, ""document_boundary"": ""start""}
-Remember: Your entire response must be parseable as JSON. Test mentally: can I call JSON.parse() on my response? </output-format>
-
-<document-ocr-data> To: Newsteer Limited 12a Fleet Business Park Sandy Lane Church Crookham Fleet Hampshire GU52 8BF UNITED KINGDOM Invoice Date 20 Feb 2024 Reference Number Expense Claims Alastair Crowdy Description Quantity Unit Price VAT Amount GBP White Haus - Drinks BS/SD 1.00 25.10 Exempt 25.10 Subtotal 25.10 TOTAL GBP 25.10 Less Amount Paid 25.10 AMOUNT DUE 0.00 DUE DATE 22 Apr 2024 This is not a tax invoice </document-ocr-data>
-<document-image> '}, {'image': '[image_data]'}, {'text': ' </document-image>
-<final-instructions> Analyze the document above by: 1. Applying the <classification-instructions> to examine visual and textual features 2. Using <classification-examples> as reference patterns 3. Applying <disambiguation-rules> if choosing between invoice and bank-statement 4. Selecting ONLY from document types in <document-types> 5. Providing confidence score based on strength of evidence 6. Outputting in EXACT JSON format specified in <output-format>
-CRITICAL FORMATTING RULES: - Output ONLY the JSON object, nothing else - Use exact lowercase values: ""invoice"" or ""bank-statement"" for class - Use exact lowercase values: ""start"" or ""continue"" for document_boundary - Ensure valid JSON syntax (proper quotes, commas, braces) - Do NOT add explanatory text before or after the JSON </final-instructions>'}]}]
-"
-1764450007707,"[INFO]	2025-11-29T21:00:07.707Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	  - additionalModelRequestFields: {'inferenceConfig': {'topK': 5}}
-"
-1764450007751,"[INFO]	2025-11-29T21:00:07.751Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Time taken for classification of page 15: 2.65 seconds
-"
-1764450007752,"[WARNING]	2025-11-29T21:00:07.752Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Structured data extraction will only work for JSON.
-"
-1764450007752,"[WARNING]	2025-11-29T21:00:07.752Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Format detection will only work for JSON.
-"
-1764450007753,"[INFO]	2025-11-29T21:00:07.753Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Parsed classification response as json: {'classification_reason': 'The document contains a clear invoice header, recipient details, itemized charges, and financial calculations typical of an invoice. It includes an invoice date, reference number, and amount due, confirming it as an invoice.', 'class': 'invoice', 'confidence': 0.98, 'document_boundary': 'start'}
-"
-1764450007753,"[INFO]	2025-11-29T21:00:07.753Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Page 15 classified as invoice
-"
-1764450007797,"[INFO]	2025-11-29T21:00:07.797Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Time taken for classification of page 2: 2.69 seconds
-"
-1764450007798,"[WARNING]	2025-11-29T21:00:07.798Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Structured data extraction will only work for JSON.
-"
-1764450007798,"[WARNING]	2025-11-29T21:00:07.798Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Format detection will only work for JSON.
-"
-1764450007798,"[INFO]	2025-11-29T21:00:07.798Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Parsed classification response as json: {'classification_reason': ""The document contains a clear invoice structure with a recipient section, invoice date, reference number, itemized charges, and total amount due. It also includes a due date and a note stating 'This is not a tax invoice', which aligns with the characteristics of an expense claim."", 'class': 'invoice', 'confidence': 0.95, 'document_boundary': 'start'}
-"
-1764450007798,"[INFO]	2025-11-29T21:00:07.798Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Page 2 classified as invoice
-"
-1764450007847,"[WARNING]	2025-11-29T21:00:07.847Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Removed <<CACHEPOINT>> tags for unsupported model: arn:aws:bedrock:eu-central-1:864899848062:inference-profile/eu.amazon.nova-pro-v1:0. CachePoint is only supported for: eu.anthropic.claude-3-7-sonnet-20250219-v1:0, eu.anthropic.claude-sonnet-4-20250514-v1:0, eu.anthropic.claude-sonnet-4-5-20250929-v1:0, eu.amazon.nova-lite-v1:0, eu.amazon.nova-pro-v1:0
-"
-1764450007848,"[INFO]	2025-11-29T21:00:07.848Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Bedrock request attempt 1/7:
-"
-1764450007848,"[INFO]	2025-11-29T21:00:07.848Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	  - model: arn:aws:bedrock:eu-central-1:864899848062:inference-profile/eu.amazon.nova-pro-v1:0
-"
-1764450007848,"[INFO]	2025-11-29T21:00:07.848Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	  - inferenceConfig: {'topP': 0.1, 'maxTokens': 8000}
-"
-1764450007848,"[INFO]	2025-11-29T21:00:07.848Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	  - system: [{'text': 'You are a multimodal document classification expert specializing in UK financial and commercial documents. Your task is to classify documents into predefined categories with HIGH CONFIDENCE based on visual layout, textual content, and distinctive features. You MUST provide a confidence score from 0.0 to 1.0 reflecting the strength of classification evidence. Your output must be valid JSON according to the requested format.
-<variables> <document-ocr-data>: OCR-extracted text content providing textual information for classification <document-image>: Visual representation showing layout, formatting, logos, and structure <document-types>: Valid document types you must classify into - ONLY use types from this list </variables>'}]
-"
-1764450007849,"[INFO]	2025-11-29T21:00:07.849Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	  - messages: [{'role': 'user', 'content': [{'text': '<task-description> Analyze the provided document using both visual layout and textual content to determine its document type with high confidence. Decide if this page starts a new document (""start"") or continues the previous document (""continue""). </task-description>
-<document-types> invoice  \t[ A commercial invoice or expense claim document issued by a supplier, vendor, or individual to request payment for goods or services purchased.
-KEY IDENTIFIERS: - Header text: ""Invoice"", ""Tax Invoice"", ""VAT Invoice"", ""Proforma Invoice"", ""Credit Note"", ""Receipt"" - Supplier/vendor details at top (company name, address, VAT/tax registration number) - Line items table with columns: description, quantity, unit price, amount - Financial calculations: subtotal, VAT/GST breakdown (often 20%% in UK), total amount - Invoice metadata: invoice number, invoice date, due date - Payment terms and bank details for wire transfer - May include purchase order number, customer reference
-DISTINGUISHING FEATURES: - Itemized charges showing WHAT was purchased (products/services) - Amounts OWED (not paid) - this is a request for payment - Business-to-business OR individual-to-business format - VAT invoice number format (e.g., ""INV-2024-001"", ""#12345"") - May show ""PAID"" stamp or payment status if settled
-INCLUDES SUBTYPES: - Supplier invoices (formal business invoices with VAT registration) - Expense claims/receipts (individual purchases, simpler format, from shops/restaurants) - Credit notes (negative invoices for refunds/adjustments) ]
-bank-statement  \t[ A financial statement issued by a bank or financial institution documenting account activity and transactions over a specific time period.
-KEY IDENTIFIERS: - Bank logo and institution name (e.g., Barclays, HSBC, Lloyds, NatWest, Metro Bank) - Account holder name and address - Account number (often partially masked: ****1234) - Sort code (UK: XX-XX-XX format) - Statement period with clear start and end dates - Opening balance and closing balance - Chronological transaction list with dates
-TRANSACTION TABLE COLUMNS: - Date (transaction date) - Description (merchant name, payment reference, transaction type) - Money OUT (debits, payments, withdrawals) - Money IN (credits, deposits, transfers received) - Running balance (account balance after each transaction)
-DISTINGUISHING FEATURES: - Shows money flowing IN and OUT of an account (not requesting payment) - Transaction history format (NOT itemized sales) - Statement period dates (e.g., ""01 Oct 2024 - 31 Oct 2024"") - Transaction types: DD (Direct Debit), SO (Standing Order), POS (Point of Sale), BACS, CHAPS, ATM - Interest charges, bank fees, overdraft information may be included - NOT an invoice - this is account activity documentation
-TRANSACTION TYPES COMMONLY SEEN: - Direct Debits (regular bills: utilities, subscriptions) - Standing Orders (regular transfers) - Card payments (POS, contactless, chip & PIN) - Bank transfers (BACS, CHAPS, Faster Payments) - ATM withdrawals - Salary deposits - Interest earned/charged ] </document-types>
-<classification-examples> Example 1 - Invoice Classification: Visual evidence: Header text ""TAX INVOICE"", company logo at top, table with columns (Description, Qty, Unit Price, Amount) Textual evidence: ""Invoice Number: INV-2024-12345"", ""Invoice Date: 15/11/2024"", itemized list showing ""Office Chairs x 5 @ £120.00"", financial calculation showing ""Subtotal: £600.00"", ""VAT 20%: £120.00"", ""Total Due: £720.00"", ""Payment Terms: Net 30 days"" Classification: ""invoice"" Confidence: 0.98 Reasoning: Clear invoice structure with all distinctive features - invoice number, supplier details, itemized charges, VAT breakdown, payment terms. High confidence due to multiple matching identifiers. Document Boundary: start
-Example 2 - Bank Statement Classification: Visual evidence: Bank logo (Barclays), professional letterhead, transaction table layout with date/description/amount columns Textual evidence: ""Barclays Bank PLC"", ""Statement Period: 01/10/2024 - 31/10/2024"", ""Account: ****1234"", ""Sort Code: 20-00-00"", ""Opening Balance: £5,420.50"", transaction list including ""15 Oct DD - Electric Company £85.00"", ""18 Oct POS - Tesco Superstore £42.15"", ""25 Oct BACS Credit - Salary £2,800.00"", ""Closing Balance: £8,093.35"" Classification: ""bank-statement"" Confidence: 0.99 Reasoning: Unmistakable bank statement format - bank header, statement period, account details, chronological transactions with debits/credits, running balance. All key identifiers present. Document Boundary: start
-Example 3 - Expense Receipt (Invoice subtype): Visual evidence: Simple receipt format from retail store, POS terminal print style Textual evidence: ""Tesco Express"", ""Receipt #: 1234"", ""Date: 15/11/2024"", list of grocery items with prices, ""Total: £35.42"", ""Card Payment"" Classification: ""invoice"" Confidence: 0.85 Reasoning: Classifying as ""invoice"" because it shows itemized purchases with amounts. This is a receipt/expense claim document (invoice subtype). Confidence slightly lower than formal B2B invoices due to simpler format, but still clearly requesting/documenting payment for goods. Document Boundary: start </classification-examples>
-<classification-instructions> Follow these steps to achieve HIGH CONFIDENCE classification:
-1. VISUAL ANALYSIS:
-   - Examine logos, headers, letterheads (bank logos vs company logos)
-   - Analyze document structure (transaction table vs itemized invoice)
-   - Check for distinctive formatting (statement period vs invoice number)
-
-2. TEXTUAL ANALYSIS:
-   - Identify key terminology (""Invoice"", ""Statement"", ""Account"", ""VAT"", ""Sort Code"")
-   - Look for distinctive metadata (invoice number format vs account number format)
-   - Analyze transaction/line item patterns (money IN/OUT vs items purchased)
-
-3. FEATURE MATCHING:
-   - Count how many KEY IDENTIFIERS match each document type
-   - More matches = higher confidence
-   - Look for DISTINGUISHING FEATURES that definitively rule in/out types
-
-4. CONFIDENCE ASSESSMENT:
-   HIGH (0.90-1.0): Multiple distinctive features clearly match ONE type, no ambiguity
-   MEDIUM (0.70-0.89): Most features match, minor ambiguity or missing secondary features
-   LOW (0.0-0.69): Limited features, conflicting signals, or poor image quality
-
-5. DOCUMENT BOUNDARY (CRITICAL FOR ACCURATE BATCHING):
-   This flag determines whether a page starts a NEW document or continues the previous one.
-   Accurate boundary detection enables optimal parallel processing.
-   
-   ⚠️ CRITICAL RULE: When classifying EACH PAGE INDEPENDENTLY, you must determine if this page
-   starts a NEW invoice or continues the PREVIOUS invoice. Look for continuation signals!
-   
-   For INVOICES - Set ""continue"" when you see ANY of these signals:
-   ✓ **NO invoice header/title** at top of page (no ""INVOICE"", ""TAX INVOICE"", ""RECEIPT"")
-   ✓ **NO ""Bill To:"" or ""To:"" section** (new invoices always have recipient details)
-   ✓ **NO company logo/letterhead** at top (continuation pages are plain)
-   ✓ **Mid-table content** - Description/Qty/Price columns continuing from previous page
-   ✓ **Page number indicators**: ""Page 2 of 3"", ""Continued from page X"", ""Page 2""
-   ✓ **Terms & conditions** at bottom (usually last page of invoice)
-   ✓ **Footer text only** - payment instructions, disclaimers, thank you notes
-   ✓ **Same invoice number visible** as previous page (if you can infer context)
-   
-   For INVOICES - Set ""start"" ONLY when you see CLEAR SIGNALS of a NEW invoice:
-   ✓ NEW ""Invoice Number:"" or ""Invoice #XXX"" in header area
-   ✓ NEW ""Bill To:"" or ""To:"" section (indicates new customer/recipient)
-   ✓ Company logo/letterhead at TOP of page (fresh invoice header)
-   ✓ Fresh invoice header text: ""INVOICE"", ""TAX INVOICE"", ""RECEIPT"" at top
-   ✓ New invoice date in header area (not buried in footer)
-   ✓ Line items table starting from beginning (not mid-table continuation)
-   
-   **DEFAULT BEHAVIOR - CRITICAL**:
-   - If page has NO clear invoice header/logo/recipient → prefer ""continue""
-   - If page looks like middle of a table → definitely ""continue""
-   - If page has footer/terms only → definitely ""continue""
-   - Only use ""start"" when you see CLEAR NEW INVOICE SIGNALS
-   - **When uncertain, prefer ""continue"" to avoid splitting multi-page invoices**
-   
-   For BANK STATEMENTS - Set ""start"" when you see:
-   ✓ Bank logo and statement header
-   ✓ ""Statement Period: DD/MM/YYYY - DD/MM/YYYY""
-   ✓ New account number or statement date range
-   
-   For BANK STATEMENTS - Set ""continue"" when you see:
-   ✓ Transaction list continuation
-   ✓ Same account number, continued transaction table
-   
-   **REMEMBER**: You see ONE page at a time. Look for absence of invoice header signals!
-
-6. CRITICAL: Only use document types explicitly listed in <document-types> section above </classification-instructions>
-<disambiguation-rules> Invoice vs Bank Statement confusion points: - Invoice: Shows WHAT was purchased (line items) and money OWED - Bank Statement: Shows WHERE money went/came from (transactions) and account ACTIVITY - Invoice: Has supplier details, invoice number, payment terms - Bank Statement: Has bank logo, account number, statement period - Invoice: Requests payment or documents a purchase - Bank Statement: Documents account history over time
-If uncertain, check: - Does it have an invoice number? → Likely invoice - Does it have an account number and statement period? → Likely bank-statement - Does it show ""Total Due"" or ""Amount Owed""? → Likely invoice - Does it show ""Opening Balance"" and ""Closing Balance""? → Likely bank-statement </disambiguation-rules>
-<output-format> ⚠️  CRITICAL: You MUST respond with ONLY valid JSON. No additional text before or after the JSON object. ⚠️  Your response must START with { and END with } - nothing else! ⚠️  Do NOT write explanations, comments, or markdown - ONLY the JSON object!
-Expected JSON structure: {
-  ""classification_reason"": ""Detailed reasoning with specific visual and textual evidence that led to this classification. List the KEY IDENTIFIERS found and explain why confidence is high/medium/low."",
-  ""class"": ""exact_document_type_from_list"",
-  ""confidence"": 0.95,
-  ""document_boundary"": ""start""
-}
-Field requirements: - ""class"": MUST be exactly ""invoice"" or ""bank-statement"" (lowercase, hyphen for bank statement) - ""confidence"": Number between 0.0 and 1.0 - ""document_boundary"": MUST be exactly ""start"" or ""continue"" (lowercase) - ""classification_reason"": Brief explanation (1-2 sentences)
-INCORRECT examples (DO NOT USE - these will cause parsing errors): ❌ ""Class"": ""Invoice"" (wrong case and capitalization) ❌ ""class"": ""bank statement"" (use hyphen: ""bank-statement"") ❌ ""document_boundary"": ""Start"" (must be lowercase: ""start"") ❌ Adding explanatory text outside the JSON object ❌ Here is my analysis: {...} (no text before the JSON!) ❌ ```json\
-{...}\
-``` (no markdown code blocks!) ❌ Let me classify this page. {...} (no explanatory text!)
-CORRECT example (THIS IS EXACTLY WHAT YOU MUST RETURN): ✅ {""classification_reason"": ""Clear invoice with invoice number INV-123, itemized charges, and VAT breakdown"", ""class"": ""invoice"", ""confidence"": 0.95, ""document_boundary"": ""start""}
-Remember: Your entire response must be parseable as JSON. Test mentally: can I call JSON.parse() on my response? </output-format>
-
-<document-ocr-data> To: Newsteer Limited 12a Fleet Business Park Sandy Lane Church Crookham Fleet Hampshire GU52 8BF UNITED KINGDOM Invoice Date 16 Feb 2024 Reference Number Expense Claims David Slatter (daveslatter1987@gmail.co m) Description Quantity Unit Price VAT Amount GBP Transport for London - Travel To/From 1.00 6.20 No VAT 6.20 Meetings Subtotal 6.20 TOTAL GBP 6.20 Less Amount Paid 6.20 AMOUNT DUE 0.00 DUE DATE 22 Apr 2024 This is not a tax invoice </document-ocr-data>
-<document-image> '}, {'image': '[image_data]'}, {'text': ' </document-image>
-<final-instructions> Analyze the document above by: 1. Applying the <classification-instructions> to examine visual and textual features 2. Using <classification-examples> as reference patterns 3. Applying <disambiguation-rules> if choosing between invoice and bank-statement 4. Selecting ONLY from document types in <document-types> 5. Providing confidence score based on strength of evidence 6. Outputting in EXACT JSON format specified in <output-format>
-CRITICAL FORMATTING RULES: - Output ONLY the JSON object, nothing else - Use exact lowercase values: ""invoice"" or ""bank-statement"" for class - Use exact lowercase values: ""start"" or ""continue"" for document_boundary - Ensure valid JSON syntax (proper quotes, commas, braces) - Do NOT add explanatory text before or after the JSON </final-instructions>'}]}]
-"
-1764450007849,"[INFO]	2025-11-29T21:00:07.849Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	  - additionalModelRequestFields: {'inferenceConfig': {'topK': 5}}
-"
-1764450007854,"[INFO]	2025-11-29T21:00:07.854Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Time taken for classification of page 9: 2.75 seconds
-"
-1764450007855,"[WARNING]	2025-11-29T21:00:07.855Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Structured data extraction will only work for JSON.
-"
-1764450007855,"[WARNING]	2025-11-29T21:00:07.855Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Format detection will only work for JSON.
-"
-1764450007855,"[INFO]	2025-11-29T21:00:07.855Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Parsed classification response as json: {'classification_reason': ""The document contains a clear invoice structure with a recipient section, invoice date, reference number, itemized charges, and total amount due. It also includes a due date and a note stating 'This is not a tax invoice', which aligns with the characteristics of an expense claim."", 'class': 'invoice', 'confidence': 0.95, 'document_boundary': 'start'}
-"
-1764450007855,"[INFO]	2025-11-29T21:00:07.855Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Page 9 classified as invoice
-"
-1764450007949,"[INFO]	2025-11-29T21:00:07.949Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	No resize requested (width or height is None/empty), returning original image
-"
-1764450007950,"[INFO]	2025-11-29T21:00:07.950Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Detected image format: jpeg
-"
-1764450007950,"[INFO]	2025-11-29T21:00:07.950Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Classifying page 27 with Bedrock
-"
-1764450007957,"[INFO]	2025-11-29T21:00:07.957Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Time taken for classification of page 11: 2.85 seconds
-"
-1764450007958,"[WARNING]	2025-11-29T21:00:07.958Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Structured data extraction will only work for JSON.
-"
-1764450007958,"[WARNING]	2025-11-29T21:00:07.958Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Format detection will only work for JSON.
-"
-1764450007958,"[INFO]	2025-11-29T21:00:07.958Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Parsed classification response as json: {'classification_reason': 'The document contains a clear invoice header, recipient details, itemized charges, and financial calculations typical of an invoice. The presence of an invoice date, reference number, and amount due further confirms this classification.', 'class': 'invoice', 'confidence': 0.98, 'document_boundary': 'start'}
-"
-1764450007958,"[INFO]	2025-11-29T21:00:07.958Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Page 11 classified as invoice
-"
-1764450007989,"[INFO]	2025-11-29T21:00:07.989Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Time taken for classification of page 19: 2.88 seconds
-"
-1764450007990,"[WARNING]	2025-11-29T21:00:07.990Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Structured data extraction will only work for JSON.
-"
-1764450007990,"[WARNING]	2025-11-29T21:00:07.990Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Format detection will only work for JSON.
-"
-1764450007990,"[INFO]	2025-11-29T21:00:07.990Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Parsed classification response as json: {'classification_reason': 'The document contains a clear invoice structure with a recipient section, invoice date, reference number, itemized charges, and financial calculations. It also includes an invoice number and a due date, which are typical of an invoice.', 'class': 'invoice', 'confidence': 0.95, 'document_boundary': 'start'}
-"
-1764450007990,"[INFO]	2025-11-29T21:00:07.990Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Page 19 classified as invoice
-"
-1764450008040,"[INFO]	2025-11-29T21:00:08.040Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Time taken for classification of page 17: 2.90 seconds
-"
-1764450008041,"[WARNING]	2025-11-29T21:00:08.041Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Structured data extraction will only work for JSON.
-"
-1764450008042,"[WARNING]	2025-11-29T21:00:08.041Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Format detection will only work for JSON.
-"
-1764450008042,"[INFO]	2025-11-29T21:00:08.042Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Parsed classification response as json: {'classification_reason': 'The document contains a clear invoice header, recipient details, itemized charges, VAT breakdown, and total amount due. It also includes an invoice date and reference number, aligning with the key identifiers of an invoice.', 'class': 'invoice', 'confidence': 0.98, 'document_boundary': 'start'}
-"
-1764450008042,"[INFO]	2025-11-29T21:00:08.042Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Page 17 classified as invoice
-"
-1764450008054,"[WARNING]	2025-11-29T21:00:08.054Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Removed <<CACHEPOINT>> tags for unsupported model: arn:aws:bedrock:eu-central-1:864899848062:inference-profile/eu.amazon.nova-pro-v1:0. CachePoint is only supported for: eu.anthropic.claude-3-7-sonnet-20250219-v1:0, eu.anthropic.claude-sonnet-4-20250514-v1:0, eu.anthropic.claude-sonnet-4-5-20250929-v1:0, eu.amazon.nova-lite-v1:0, eu.amazon.nova-pro-v1:0
-"
-1764450008055,"[INFO]	2025-11-29T21:00:08.055Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Bedrock request attempt 1/7:
-"
-1764450008055,"[INFO]	2025-11-29T21:00:08.055Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	  - model: arn:aws:bedrock:eu-central-1:864899848062:inference-profile/eu.amazon.nova-pro-v1:0
-"
-1764450008055,"[INFO]	2025-11-29T21:00:08.055Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	  - inferenceConfig: {'topP': 0.1, 'maxTokens': 8000}
-"
-1764450008055,"[INFO]	2025-11-29T21:00:08.055Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	  - system: [{'text': 'You are a multimodal document classification expert specializing in UK financial and commercial documents. Your task is to classify documents into predefined categories with HIGH CONFIDENCE based on visual layout, textual content, and distinctive features. You MUST provide a confidence score from 0.0 to 1.0 reflecting the strength of classification evidence. Your output must be valid JSON according to the requested format.
-<variables> <document-ocr-data>: OCR-extracted text content providing textual information for classification <document-image>: Visual representation showing layout, formatting, logos, and structure <document-types>: Valid document types you must classify into - ONLY use types from this list </variables>'}]
-"
-1764450008056,"[INFO]	2025-11-29T21:00:08.055Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	  - messages: [{'role': 'user', 'content': [{'text': '<task-description> Analyze the provided document using both visual layout and textual content to determine its document type with high confidence. Decide if this page starts a new document (""start"") or continues the previous document (""continue""). </task-description>
-<document-types> invoice  \t[ A commercial invoice or expense claim document issued by a supplier, vendor, or individual to request payment for goods or services purchased.
-KEY IDENTIFIERS: - Header text: ""Invoice"", ""Tax Invoice"", ""VAT Invoice"", ""Proforma Invoice"", ""Credit Note"", ""Receipt"" - Supplier/vendor details at top (company name, address, VAT/tax registration number) - Line items table with columns: description, quantity, unit price, amount - Financial calculations: subtotal, VAT/GST breakdown (often 20%% in UK), total amount - Invoice metadata: invoice number, invoice date, due date - Payment terms and bank details for wire transfer - May include purchase order number, customer reference
-DISTINGUISHING FEATURES: - Itemized charges showing WHAT was purchased (products/services) - Amounts OWED (not paid) - this is a request for payment - Business-to-business OR individual-to-business format - VAT invoice number format (e.g., ""INV-2024-001"", ""#12345"") - May show ""PAID"" stamp or payment status if settled
-INCLUDES SUBTYPES: - Supplier invoices (formal business invoices with VAT registration) - Expense claims/receipts (individual purchases, simpler format, from shops/restaurants) - Credit notes (negative invoices for refunds/adjustments) ]
-bank-statement  \t[ A financial statement issued by a bank or financial institution documenting account activity and transactions over a specific time period.
-KEY IDENTIFIERS: - Bank logo and institution name (e.g., Barclays, HSBC, Lloyds, NatWest, Metro Bank) - Account holder name and address - Account number (often partially masked: ****1234) - Sort code (UK: XX-XX-XX format) - Statement period with clear start and end dates - Opening balance and closing balance - Chronological transaction list with dates
-TRANSACTION TABLE COLUMNS: - Date (transaction date) - Description (merchant name, payment reference, transaction type) - Money OUT (debits, payments, withdrawals) - Money IN (credits, deposits, transfers received) - Running balance (account balance after each transaction)
-DISTINGUISHING FEATURES: - Shows money flowing IN and OUT of an account (not requesting payment) - Transaction history format (NOT itemized sales) - Statement period dates (e.g., ""01 Oct 2024 - 31 Oct 2024"") - Transaction types: DD (Direct Debit), SO (Standing Order), POS (Point of Sale), BACS, CHAPS, ATM - Interest charges, bank fees, overdraft information may be included - NOT an invoice - this is account activity documentation
-TRANSACTION TYPES COMMONLY SEEN: - Direct Debits (regular bills: utilities, subscriptions) - Standing Orders (regular transfers) - Card payments (POS, contactless, chip & PIN) - Bank transfers (BACS, CHAPS, Faster Payments) - ATM withdrawals - Salary deposits - Interest earned/charged ] </document-types>
-<classification-examples> Example 1 - Invoice Classification: Visual evidence: Header text ""TAX INVOICE"", company logo at top, table with columns (Description, Qty, Unit Price, Amount) Textual evidence: ""Invoice Number: INV-2024-12345"", ""Invoice Date: 15/11/2024"", itemized list showing ""Office Chairs x 5 @ £120.00"", financial calculation showing ""Subtotal: £600.00"", ""VAT 20%: £120.00"", ""Total Due: £720.00"", ""Payment Terms: Net 30 days"" Classification: ""invoice"" Confidence: 0.98 Reasoning: Clear invoice structure with all distinctive features - invoice number, supplier details, itemized charges, VAT breakdown, payment terms. High confidence due to multiple matching identifiers. Document Boundary: start
-Example 2 - Bank Statement Classification: Visual evidence: Bank logo (Barclays), professional letterhead, transaction table layout with date/description/amount columns Textual evidence: ""Barclays Bank PLC"", ""Statement Period: 01/10/2024 - 31/10/2024"", ""Account: ****1234"", ""Sort Code: 20-00-00"", ""Opening Balance: £5,420.50"", transaction list including ""15 Oct DD - Electric Company £85.00"", ""18 Oct POS - Tesco Superstore £42.15"", ""25 Oct BACS Credit - Salary £2,800.00"", ""Closing Balance: £8,093.35"" Classification: ""bank-statement"" Confidence: 0.99 Reasoning: Unmistakable bank statement format - bank header, statement period, account details, chronological transactions with debits/credits, running balance. All key identifiers present. Document Boundary: start
-Example 3 - Expense Receipt (Invoice subtype): Visual evidence: Simple receipt format from retail store, POS terminal print style Textual evidence: ""Tesco Express"", ""Receipt #: 1234"", ""Date: 15/11/2024"", list of grocery items with prices, ""Total: £35.42"", ""Card Payment"" Classification: ""invoice"" Confidence: 0.85 Reasoning: Classifying as ""invoice"" because it shows itemized purchases with amounts. This is a receipt/expense claim document (invoice subtype). Confidence slightly lower than formal B2B invoices due to simpler format, but still clearly requesting/documenting payment for goods. Document Boundary: start </classification-examples>
-<classification-instructions> Follow these steps to achieve HIGH CONFIDENCE classification:
-1. VISUAL ANALYSIS:
-   - Examine logos, headers, letterheads (bank logos vs company logos)
-   - Analyze document structure (transaction table vs itemized invoice)
-   - Check for distinctive formatting (statement period vs invoice number)
-
-2. TEXTUAL ANALYSIS:
-   - Identify key terminology (""Invoice"", ""Statement"", ""Account"", ""VAT"", ""Sort Code"")
-   - Look for distinctive metadata (invoice number format vs account number format)
-   - Analyze transaction/line item patterns (money IN/OUT vs items purchased)
-
-3. FEATURE MATCHING:
-   - Count how many KEY IDENTIFIERS match each document type
-   - More matches = higher confidence
-   - Look for DISTINGUISHING FEATURES that definitively rule in/out types
-
-4. CONFIDENCE ASSESSMENT:
-   HIGH (0.90-1.0): Multiple distinctive features clearly match ONE type, no ambiguity
-   MEDIUM (0.70-0.89): Most features match, minor ambiguity or missing secondary features
-   LOW (0.0-0.69): Limited features, conflicting signals, or poor image quality
-
-5. DOCUMENT BOUNDARY (CRITICAL FOR ACCURATE BATCHING):
-   This flag determines whether a page starts a NEW document or continues the previous one.
-   Accurate boundary detection enables optimal parallel processing.
-   
-   ⚠️ CRITICAL RULE: When classifying EACH PAGE INDEPENDENTLY, you must determine if this page
-   starts a NEW invoice or continues the PREVIOUS invoice. Look for continuation signals!
-   
-   For INVOICES - Set ""continue"" when you see ANY of these signals:
-   ✓ **NO invoice header/title** at top of page (no ""INVOICE"", ""TAX INVOICE"", ""RECEIPT"")
-   ✓ **NO ""Bill To:"" or ""To:"" section** (new invoices always have recipient details)
-   ✓ **NO company logo/letterhead** at top (continuation pages are plain)
-   ✓ **Mid-table content** - Description/Qty/Price columns continuing from previous page
-   ✓ **Page number indicators**: ""Page 2 of 3"", ""Continued from page X"", ""Page 2""
-   ✓ **Terms & conditions** at bottom (usually last page of invoice)
-   ✓ **Footer text only** - payment instructions, disclaimers, thank you notes
-   ✓ **Same invoice number visible** as previous page (if you can infer context)
-   
-   For INVOICES - Set ""start"" ONLY when you see CLEAR SIGNALS of a NEW invoice:
-   ✓ NEW ""Invoice Number:"" or ""Invoice #XXX"" in header area
-   ✓ NEW ""Bill To:"" or ""To:"" section (indicates new customer/recipient)
-   ✓ Company logo/letterhead at TOP of page (fresh invoice header)
-   ✓ Fresh invoice header text: ""INVOICE"", ""TAX INVOICE"", ""RECEIPT"" at top
-   ✓ New invoice date in header area (not buried in footer)
-   ✓ Line items table starting from beginning (not mid-table continuation)
-   
-   **DEFAULT BEHAVIOR - CRITICAL**:
-   - If page has NO clear invoice header/logo/recipient → prefer ""continue""
-   - If page looks like middle of a table → definitely ""continue""
-   - If page has footer/terms only → definitely ""continue""
-   - Only use ""start"" when you see CLEAR NEW INVOICE SIGNALS
-   - **When uncertain, prefer ""continue"" to avoid splitting multi-page invoices**
-   
-   For BANK STATEMENTS - Set ""start"" when you see:
-   ✓ Bank logo and statement header
-   ✓ ""Statement Period: DD/MM/YYYY - DD/MM/YYYY""
-   ✓ New account number or statement date range
-   
-   For BANK STATEMENTS - Set ""continue"" when you see:
-   ✓ Transaction list continuation
-   ✓ Same account number, continued transaction table
-   
-   **REMEMBER**: You see ONE page at a time. Look for absence of invoice header signals!
-
-6. CRITICAL: Only use document types explicitly listed in <document-types> section above </classification-instructions>
-<disambiguation-rules> Invoice vs Bank Statement confusion points: - Invoice: Shows WHAT was purchased (line items) and money OWED - Bank Statement: Shows WHERE money went/came from (transactions) and account ACTIVITY - Invoice: Has supplier details, invoice number, payment terms - Bank Statement: Has bank logo, account number, statement period - Invoice: Requests payment or documents a purchase - Bank Statement: Documents account history over time
-If uncertain, check: - Does it have an invoice number? → Likely invoice - Does it have an account number and statement period? → Likely bank-statement - Does it show ""Total Due"" or ""Amount Owed""? → Likely invoice - Does it show ""Opening Balance"" and ""Closing Balance""? → Likely bank-statement </disambiguation-rules>
-<output-format> ⚠️  CRITICAL: You MUST respond with ONLY valid JSON. No additional text before or after the JSON object. ⚠️  Your response must START with { and END with } - nothing else! ⚠️  Do NOT write explanations, comments, or markdown - ONLY the JSON object!
-Expected JSON structure: {
-  ""classification_reason"": ""Detailed reasoning with specific visual and textual evidence that led to this classification. List the KEY IDENTIFIERS found and explain why confidence is high/medium/low."",
-  ""class"": ""exact_document_type_from_list"",
-  ""confidence"": 0.95,
-  ""document_boundary"": ""start""
-}
-Field requirements: - ""class"": MUST be exactly ""invoice"" or ""bank-statement"" (lowercase, hyphen for bank statement) - ""confidence"": Number between 0.0 and 1.0 - ""document_boundary"": MUST be exactly ""start"" or ""continue"" (lowercase) - ""classification_reason"": Brief explanation (1-2 sentences)
-INCORRECT examples (DO NOT USE - these will cause parsing errors): ❌ ""Class"": ""Invoice"" (wrong case and capitalization) ❌ ""class"": ""bank statement"" (use hyphen: ""bank-statement"") ❌ ""document_boundary"": ""Start"" (must be lowercase: ""start"") ❌ Adding explanatory text outside the JSON object ❌ Here is my analysis: {...} (no text before the JSON!) ❌ ```json\
-{...}\
-``` (no markdown code blocks!) ❌ Let me classify this page. {...} (no explanatory text!)
-CORRECT example (THIS IS EXACTLY WHAT YOU MUST RETURN): ✅ {""classification_reason"": ""Clear invoice with invoice number INV-123, itemized charges, and VAT breakdown"", ""class"": ""invoice"", ""confidence"": 0.95, ""document_boundary"": ""start""}
-Remember: Your entire response must be parseable as JSON. Test mentally: can I call JSON.parse() on my response? </output-format>
-
-<document-ocr-data> To: Newsteer Limited 12a Fleet Business Park Sandy Lane Church Crookham Fleet Hampshire GU52 8BF UNITED KINGDOM Invoice Date 2 Feb 2024 Reference Number Expense Claims Ross Bettridge (ross.bettridge@gmail.com) Description Quantity Unit Price VAT Amount GBP EE - Phone 1.00 30.00 No VAT 30.00 Subtotal 30.00 TOTAL GBP 30.00 Less Amount Paid 30.00 AMOUNT DUE 0.00 DUE DATE 23 Apr 2024 This is not a tax invoice </document-ocr-data>
-<document-image> '}, {'image': '[image_data]'}, {'text': ' </document-image>
-<final-instructions> Analyze the document above by: 1. Applying the <classification-instructions> to examine visual and textual features 2. Using <classification-examples> as reference patterns 3. Applying <disambiguation-rules> if choosing between invoice and bank-statement 4. Selecting ONLY from document types in <document-types> 5. Providing confidence score based on strength of evidence 6. Outputting in EXACT JSON format specified in <output-format>
-CRITICAL FORMATTING RULES: - Output ONLY the JSON object, nothing else - Use exact lowercase values: ""invoice"" or ""bank-statement"" for class - Use exact lowercase values: ""start"" or ""continue"" for document_boundary - Ensure valid JSON syntax (proper quotes, commas, braces) - Do NOT add explanatory text before or after the JSON </final-instructions>'}]}]
-"
-1764450008056,"[INFO]	2025-11-29T21:00:08.056Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	  - additionalModelRequestFields: {'inferenceConfig': {'topK': 5}}
-"
-1764450008060,"[INFO]	2025-11-29T21:00:08.060Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	No resize requested (width or height is None/empty), returning original image
-"
-1764450008061,"[INFO]	2025-11-29T21:00:08.060Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Detected image format: jpeg
-"
-1764450008061,"[INFO]	2025-11-29T21:00:08.061Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Classifying page 28 with Bedrock
-"
-1764450008072,"[INFO]	2025-11-29T21:00:08.072Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Time taken for classification of page 13: 2.97 seconds
-"
-1764450008073,"[WARNING]	2025-11-29T21:00:08.073Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Structured data extraction will only work for JSON.
-"
-1764450008073,"[WARNING]	2025-11-29T21:00:08.073Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Format detection will only work for JSON.
-"
-1764450008073,"[INFO]	2025-11-29T21:00:08.073Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Parsed classification response as json: {'classification_reason': ""The document contains a clear invoice structure with a recipient section, invoice date, reference number, itemized charges, and financial calculations. It also includes an 'AMOUNT DUE' section, confirming it is an invoice."", 'class': 'invoice', 'confidence': 0.95, 'document_boundary': 'start'}
-"
-1764450008073,"[INFO]	2025-11-29T21:00:08.073Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Page 13 classified as invoice
-"
-1764450008196,"[INFO]	2025-11-29T21:00:08.196Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Bedrock request successful after 1 attempts. Duration: 1.45s
-"
-1764450008196,"[INFO]	2025-11-29T21:00:08.196Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Token Usage: {'inputTokens': 5014, 'outputTokens': 53, 'totalTokens': 5067}
-"
-1764450008208,"[WARNING]	2025-11-29T21:00:08.207Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Removed <<CACHEPOINT>> tags for unsupported model: arn:aws:bedrock:eu-central-1:864899848062:inference-profile/eu.amazon.nova-pro-v1:0. CachePoint is only supported for: eu.anthropic.claude-3-7-sonnet-20250219-v1:0, eu.anthropic.claude-sonnet-4-20250514-v1:0, eu.anthropic.claude-sonnet-4-5-20250929-v1:0, eu.amazon.nova-lite-v1:0, eu.amazon.nova-pro-v1:0
-"
-1764450008209,"[INFO]	2025-11-29T21:00:08.209Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Bedrock request attempt 1/7:
-"
-1764450008209,"[INFO]	2025-11-29T21:00:08.209Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	  - model: arn:aws:bedrock:eu-central-1:864899848062:inference-profile/eu.amazon.nova-pro-v1:0
-"
-1764450008209,"[INFO]	2025-11-29T21:00:08.209Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	  - inferenceConfig: {'topP': 0.1, 'maxTokens': 8000}
-"
-1764450008209,"[INFO]	2025-11-29T21:00:08.209Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	  - system: [{'text': 'You are a multimodal document classification expert specializing in UK financial and commercial documents. Your task is to classify documents into predefined categories with HIGH CONFIDENCE based on visual layout, textual content, and distinctive features. You MUST provide a confidence score from 0.0 to 1.0 reflecting the strength of classification evidence. Your output must be valid JSON according to the requested format.
-<variables> <document-ocr-data>: OCR-extracted text content providing textual information for classification <document-image>: Visual representation showing layout, formatting, logos, and structure <document-types>: Valid document types you must classify into - ONLY use types from this list </variables>'}]
-"
-1764450008209,"[INFO]	2025-11-29T21:00:08.209Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	  - messages: [{'role': 'user', 'content': [{'text': '<task-description> Analyze the provided document using both visual layout and textual content to determine its document type with high confidence. Decide if this page starts a new document (""start"") or continues the previous document (""continue""). </task-description>
-<document-types> invoice  \t[ A commercial invoice or expense claim document issued by a supplier, vendor, or individual to request payment for goods or services purchased.
-KEY IDENTIFIERS: - Header text: ""Invoice"", ""Tax Invoice"", ""VAT Invoice"", ""Proforma Invoice"", ""Credit Note"", ""Receipt"" - Supplier/vendor details at top (company name, address, VAT/tax registration number) - Line items table with columns: description, quantity, unit price, amount - Financial calculations: subtotal, VAT/GST breakdown (often 20%% in UK), total amount - Invoice metadata: invoice number, invoice date, due date - Payment terms and bank details for wire transfer - May include purchase order number, customer reference
-DISTINGUISHING FEATURES: - Itemized charges showing WHAT was purchased (products/services) - Amounts OWED (not paid) - this is a request for payment - Business-to-business OR individual-to-business format - VAT invoice number format (e.g., ""INV-2024-001"", ""#12345"") - May show ""PAID"" stamp or payment status if settled
-INCLUDES SUBTYPES: - Supplier invoices (formal business invoices with VAT registration) - Expense claims/receipts (individual purchases, simpler format, from shops/restaurants) - Credit notes (negative invoices for refunds/adjustments) ]
-bank-statement  \t[ A financial statement issued by a bank or financial institution documenting account activity and transactions over a specific time period.
-KEY IDENTIFIERS: - Bank logo and institution name (e.g., Barclays, HSBC, Lloyds, NatWest, Metro Bank) - Account holder name and address - Account number (often partially masked: ****1234) - Sort code (UK: XX-XX-XX format) - Statement period with clear start and end dates - Opening balance and closing balance - Chronological transaction list with dates
-TRANSACTION TABLE COLUMNS: - Date (transaction date) - Description (merchant name, payment reference, transaction type) - Money OUT (debits, payments, withdrawals) - Money IN (credits, deposits, transfers received) - Running balance (account balance after each transaction)
-DISTINGUISHING FEATURES: - Shows money flowing IN and OUT of an account (not requesting payment) - Transaction history format (NOT itemized sales) - Statement period dates (e.g., ""01 Oct 2024 - 31 Oct 2024"") - Transaction types: DD (Direct Debit), SO (Standing Order), POS (Point of Sale), BACS, CHAPS, ATM - Interest charges, bank fees, overdraft information may be included - NOT an invoice - this is account activity documentation
-TRANSACTION TYPES COMMONLY SEEN: - Direct Debits (regular bills: utilities, subscriptions) - Standing Orders (regular transfers) - Card payments (POS, contactless, chip & PIN) - Bank transfers (BACS, CHAPS, Faster Payments) - ATM withdrawals - Salary deposits - Interest earned/charged ] </document-types>
-<classification-examples> Example 1 - Invoice Classification: Visual evidence: Header text ""TAX INVOICE"", company logo at top, table with columns (Description, Qty, Unit Price, Amount) Textual evidence: ""Invoice Number: INV-2024-12345"", ""Invoice Date: 15/11/2024"", itemized list showing ""Office Chairs x 5 @ £120.00"", financial calculation showing ""Subtotal: £600.00"", ""VAT 20%: £120.00"", ""Total Due: £720.00"", ""Payment Terms: Net 30 days"" Classification: ""invoice"" Confidence: 0.98 Reasoning: Clear invoice structure with all distinctive features - invoice number, supplier details, itemized charges, VAT breakdown, payment terms. High confidence due to multiple matching identifiers. Document Boundary: start
-Example 2 - Bank Statement Classification: Visual evidence: Bank logo (Barclays), professional letterhead, transaction table layout with date/description/amount columns Textual evidence: ""Barclays Bank PLC"", ""Statement Period: 01/10/2024 - 31/10/2024"", ""Account: ****1234"", ""Sort Code: 20-00-00"", ""Opening Balance: £5,420.50"", transaction list including ""15 Oct DD - Electric Company £85.00"", ""18 Oct POS - Tesco Superstore £42.15"", ""25 Oct BACS Credit - Salary £2,800.00"", ""Closing Balance: £8,093.35"" Classification: ""bank-statement"" Confidence: 0.99 Reasoning: Unmistakable bank statement format - bank header, statement period, account details, chronological transactions with debits/credits, running balance. All key identifiers present. Document Boundary: start
-Example 3 - Expense Receipt (Invoice subtype): Visual evidence: Simple receipt format from retail store, POS terminal print style Textual evidence: ""Tesco Express"", ""Receipt #: 1234"", ""Date: 15/11/2024"", list of grocery items with prices, ""Total: £35.42"", ""Card Payment"" Classification: ""invoice"" Confidence: 0.85 Reasoning: Classifying as ""invoice"" because it shows itemized purchases with amounts. This is a receipt/expense claim document (invoice subtype). Confidence slightly lower than formal B2B invoices due to simpler format, but still clearly requesting/documenting payment for goods. Document Boundary: start </classification-examples>
-<classification-instructions> Follow these steps to achieve HIGH CONFIDENCE classification:
-1. VISUAL ANALYSIS:
-   - Examine logos, headers, letterheads (bank logos vs company logos)
-   - Analyze document structure (transaction table vs itemized invoice)
-   - Check for distinctive formatting (statement period vs invoice number)
-
-2. TEXTUAL ANALYSIS:
-   - Identify key terminology (""Invoice"", ""Statement"", ""Account"", ""VAT"", ""Sort Code"")
-   - Look for distinctive metadata (invoice number format vs account number format)
-   - Analyze transaction/line item patterns (money IN/OUT vs items purchased)
-
-3. FEATURE MATCHING:
-   - Count how many KEY IDENTIFIERS match each document type
-   - More matches = higher confidence
-   - Look for DISTINGUISHING FEATURES that definitively rule in/out types
-
-4. CONFIDENCE ASSESSMENT:
-   HIGH (0.90-1.0): Multiple distinctive features clearly match ONE type, no ambiguity
-   MEDIUM (0.70-0.89): Most features match, minor ambiguity or missing secondary features
-   LOW (0.0-0.69): Limited features, conflicting signals, or poor image quality
-
-5. DOCUMENT BOUNDARY (CRITICAL FOR ACCURATE BATCHING):
-   This flag determines whether a page starts a NEW document or continues the previous one.
-   Accurate boundary detection enables optimal parallel processing.
-   
-   ⚠️ CRITICAL RULE: When classifying EACH PAGE INDEPENDENTLY, you must determine if this page
-   starts a NEW invoice or continues the PREVIOUS invoice. Look for continuation signals!
-   
-   For INVOICES - Set ""continue"" when you see ANY of these signals:
-   ✓ **NO invoice header/title** at top of page (no ""INVOICE"", ""TAX INVOICE"", ""RECEIPT"")
-   ✓ **NO ""Bill To:"" or ""To:"" section** (new invoices always have recipient details)
-   ✓ **NO company logo/letterhead** at top (continuation pages are plain)
-   ✓ **Mid-table content** - Description/Qty/Price columns continuing from previous page
-   ✓ **Page number indicators**: ""Page 2 of 3"", ""Continued from page X"", ""Page 2""
-   ✓ **Terms & conditions** at bottom (usually last page of invoice)
-   ✓ **Footer text only** - payment instructions, disclaimers, thank you notes
-   ✓ **Same invoice number visible** as previous page (if you can infer context)
-   
-   For INVOICES - Set ""start"" ONLY when you see CLEAR SIGNALS of a NEW invoice:
-   ✓ NEW ""Invoice Number:"" or ""Invoice #XXX"" in header area
-   ✓ NEW ""Bill To:"" or ""To:"" section (indicates new customer/recipient)
-   ✓ Company logo/letterhead at TOP of page (fresh invoice header)
-   ✓ Fresh invoice header text: ""INVOICE"", ""TAX INVOICE"", ""RECEIPT"" at top
-   ✓ New invoice date in header area (not buried in footer)
-   ✓ Line items table starting from beginning (not mid-table continuation)
-   
-   **DEFAULT BEHAVIOR - CRITICAL**:
-   - If page has NO clear invoice header/logo/recipient → prefer ""continue""
-   - If page looks like middle of a table → definitely ""continue""
-   - If page has footer/terms only → definitely ""continue""
-   - Only use ""start"" when you see CLEAR NEW INVOICE SIGNALS
-   - **When uncertain, prefer ""continue"" to avoid splitting multi-page invoices**
-   
-   For BANK STATEMENTS - Set ""start"" when you see:
-   ✓ Bank logo and statement header
-   ✓ ""Statement Period: DD/MM/YYYY - DD/MM/YYYY""
-   ✓ New account number or statement date range
-   
-   For BANK STATEMENTS - Set ""continue"" when you see:
-   ✓ Transaction list continuation
-   ✓ Same account number, continued transaction table
-   
-   **REMEMBER**: You see ONE page at a time. Look for absence of invoice header signals!
-
-6. CRITICAL: Only use document types explicitly listed in <document-types> section above </classification-instructions>
-<disambiguation-rules> Invoice vs Bank Statement confusion points: - Invoice: Shows WHAT was purchased (line items) and money OWED - Bank Statement: Shows WHERE money went/came from (transactions) and account ACTIVITY - Invoice: Has supplier details, invoice number, payment terms - Bank Statement: Has bank logo, account number, statement period - Invoice: Requests payment or documents a purchase - Bank Statement: Documents account history over time
-If uncertain, check: - Does it have an invoice number? → Likely invoice - Does it have an account number and statement period? → Likely bank-statement - Does it show ""Total Due"" or ""Amount Owed""? → Likely invoice - Does it show ""Opening Balance"" and ""Closing Balance""? → Likely bank-statement </disambiguation-rules>
-<output-format> ⚠️  CRITICAL: You MUST respond with ONLY valid JSON. No additional text before or after the JSON object. ⚠️  Your response must START with { and END with } - nothing else! ⚠️  Do NOT write explanations, comments, or markdown - ONLY the JSON object!
-Expected JSON structure: {
-  ""classification_reason"": ""Detailed reasoning with specific visual and textual evidence that led to this classification. List the KEY IDENTIFIERS found and explain why confidence is high/medium/low."",
-  ""class"": ""exact_document_type_from_list"",
-  ""confidence"": 0.95,
-  ""document_boundary"": ""start""
-}
-Field requirements: - ""class"": MUST be exactly ""invoice"" or ""bank-statement"" (lowercase, hyphen for bank statement) - ""confidence"": Number between 0.0 and 1.0 - ""document_boundary"": MUST be exactly ""start"" or ""continue"" (lowercase) - ""classification_reason"": Brief explanation (1-2 sentences)
-INCORRECT examples (DO NOT USE - these will cause parsing errors): ❌ ""Class"": ""Invoice"" (wrong case and capitalization) ❌ ""class"": ""bank statement"" (use hyphen: ""bank-statement"") ❌ ""document_boundary"": ""Start"" (must be lowercase: ""start"") ❌ Adding explanatory text outside the JSON object ❌ Here is my analysis: {...} (no text before the JSON!) ❌ ```json\
-{...}\
-``` (no markdown code blocks!) ❌ Let me classify this page. {...} (no explanatory text!)
-CORRECT example (THIS IS EXACTLY WHAT YOU MUST RETURN): ✅ {""classification_reason"": ""Clear invoice with invoice number INV-123, itemized charges, and VAT breakdown"", ""class"": ""invoice"", ""confidence"": 0.95, ""document_boundary"": ""start""}
-Remember: Your entire response must be parseable as JSON. Test mentally: can I call JSON.parse() on my response? </output-format>
-
-<document-ocr-data> To: Newsteer Limited 12a Fleet Business Park Sandy Lane Church Crookham Fleet Hampshire GU52 8BF UNITED KINGDOM Invoice Date 9 Jan 2024 Industrial Agents Society Reference Number CE518F1F3525 Description Quantity Unit Price VAT Amount GBP IAS Subscription (Agent) 1.00 75.00 20% 75.00 Jan 9, 2024 - Jan 9, 2025 - Tracy Cooper Subtotal 75.00 TOTAL 20% 15.00 TOTAL GBP 90.00 Less Amount Paid 90.00 AMOUNT DUE 0.00 DUE DATE 9 Jan 2024 This is not a tax invoice </document-ocr-data>
-<document-image> '}, {'image': '[image_data]'}, {'text': ' </document-image>
-<final-instructions> Analyze the document above by: 1. Applying the <classification-instructions> to examine visual and textual features 2. Using <classification-examples> as reference patterns 3. Applying <disambiguation-rules> if choosing between invoice and bank-statement 4. Selecting ONLY from document types in <document-types> 5. Providing confidence score based on strength of evidence 6. Outputting in EXACT JSON format specified in <output-format>
-CRITICAL FORMATTING RULES: - Output ONLY the JSON object, nothing else - Use exact lowercase values: ""invoice"" or ""bank-statement"" for class - Use exact lowercase values: ""start"" or ""continue"" for document_boundary - Ensure valid JSON syntax (proper quotes, commas, braces) - Do NOT add explanatory text before or after the JSON </final-instructions>'}]}]
-"
-1764450008209,"[INFO]	2025-11-29T21:00:08.209Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	  - additionalModelRequestFields: {'inferenceConfig': {'topK': 5}}
-"
-1764450008215,"[INFO]	2025-11-29T21:00:08.215Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Time taken for classification of page 7: 3.11 seconds
-"
-1764450008216,"[WARNING]	2025-11-29T21:00:08.216Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Structured data extraction will only work for JSON.
-"
-1764450008216,"[WARNING]	2025-11-29T21:00:08.216Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Format detection will only work for JSON.
-"
-1764450008216,"[INFO]	2025-11-29T21:00:08.216Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Parsed classification response as json: {'classification_reason': ""The document contains a clear invoice structure with a reference number, itemized charges, and financial calculations. It includes a 'To:' section, invoice date, and amount due, which are typical of an invoice."", 'class': 'invoice', 'confidence': 0.95, 'document_boundary': 'start'}
-"
-1764450008216,"[INFO]	2025-11-29T21:00:08.216Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Page 7 classified as invoice
-"
-1764450008221,"[INFO]	2025-11-29T21:00:08.221Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Time taken for classification of page 1: 3.12 seconds
-"
-1764450008222,"[WARNING]	2025-11-29T21:00:08.222Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Structured data extraction will only work for JSON.
-"
-1764450008222,"[WARNING]	2025-11-29T21:00:08.222Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Format detection will only work for JSON.
-"
-1764450008223,"[INFO]	2025-11-29T21:00:08.222Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Parsed classification response as json: {'classification_reason': ""The document contains a 'To:' section with recipient details, an 'Invoice Date', a 'Reference Number', itemized charges with description, quantity, unit price, VAT, and amount, and a 'TOTAL GBP' with 'AMOUNT DUE'. These are all key identifiers of an invoice."", 'class': 'invoice', 'confidence': 0.95, 'document_boundary': 'start'}
-"
-1764450008223,"[INFO]	2025-11-29T21:00:08.223Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Page 1 classified as invoice
-"
-1764450008227,"[INFO]	2025-11-29T21:00:08.227Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Time taken for classification of page 18: 3.12 seconds
-"
-1764450008229,"[WARNING]	2025-11-29T21:00:08.228Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Structured data extraction will only work for JSON.
-"
-1764450008229,"[WARNING]	2025-11-29T21:00:08.229Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Format detection will only work for JSON.
-"
-1764450008229,"[INFO]	2025-11-29T21:00:08.229Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Parsed classification response as json: {'classification_reason': ""The document contains a clear invoice structure with a recipient section, invoice date, reference number, itemized charges, and total amount due. It also includes a due date and explicitly states 'This is not a tax invoice', confirming it as an expense claim invoice."", 'class': 'invoice', 'confidence': 0.95, 'document_boundary': 'start'}
-"
-1764450008229,"[INFO]	2025-11-29T21:00:08.229Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Page 18 classified as invoice
-"
-1764450008236,"[INFO]	2025-11-29T21:00:08.236Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Time taken for classification of page 3: 3.13 seconds
-"
-1764450008237,"[WARNING]	2025-11-29T21:00:08.237Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Structured data extraction will only work for JSON.
-"
-1764450008237,"[WARNING]	2025-11-29T21:00:08.237Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Format detection will only work for JSON.
-"
-1764450008238,"[INFO]	2025-11-29T21:00:08.237Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Parsed classification response as json: {'classification_reason': ""The document contains a clear invoice structure with a recipient section, invoice date, reference number, itemized charges, and financial calculations. It also includes a note stating 'This is not a tax invoice', which confirms it is an expense claim rather than a tax invoice."", 'class': 'invoice', 'confidence': 0.95, 'document_boundary': 'start'}
-"
-1764450008238,"[INFO]	2025-11-29T21:00:08.238Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Page 3 classified as invoice
-"
-1764450008243,"[INFO]	2025-11-29T21:00:08.243Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Time taken for classification of page 10: 3.14 seconds
-"
-1764450008244,"[WARNING]	2025-11-29T21:00:08.244Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Structured data extraction will only work for JSON.
-"
-1764450008244,"[WARNING]	2025-11-29T21:00:08.244Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Format detection will only work for JSON.
-"
-1764450008244,"[INFO]	2025-11-29T21:00:08.244Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Parsed classification response as json: {'classification_reason': 'The document contains a clear invoice header, reference number, itemized charges, and financial calculations typical of an invoice. It includes a recipient section, invoice date, and amount due, aligning with the key identifiers of an invoice.', 'class': 'invoice', 'confidence': 0.95, 'document_boundary': 'start'}
-"
-1764450008244,"[INFO]	2025-11-29T21:00:08.244Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Page 10 classified as invoice
-"
-1764450008250,"[INFO]	2025-11-29T21:00:08.250Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Time taken for classification of page 8: 3.15 seconds
-"
-1764450008251,"[WARNING]	2025-11-29T21:00:08.251Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Structured data extraction will only work for JSON.
-"
-1764450008251,"[WARNING]	2025-11-29T21:00:08.251Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Format detection will only work for JSON.
-"
-1764450008251,"[INFO]	2025-11-29T21:00:08.251Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Parsed classification response as json: {'classification_reason': 'The document contains a clear invoice structure with a recipient section, invoice date, reference number, itemized charges, and financial calculations. It also includes an invoice number and payment details, confirming it is an invoice.', 'class': 'invoice', 'confidence': 0.98, 'document_boundary': 'start'}
-"
-1764450008251,"[INFO]	2025-11-29T21:00:08.251Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Page 8 classified as invoice
-"
-1764450008266,"[INFO]	2025-11-29T21:00:08.266Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Time taken for classification of page 12: 3.13 seconds
-"
-1764450008266,"[WARNING]	2025-11-29T21:00:08.266Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Structured data extraction will only work for JSON.
-"
-1764450008266,"[WARNING]	2025-11-29T21:00:08.266Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Format detection will only work for JSON.
-"
-1764450008266,"[INFO]	2025-11-29T21:00:08.266Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Parsed classification response as json: {'classification_reason': ""The document contains a clear invoice header, reference number, itemized charges, VAT breakdown, and total amount due, indicating it is an invoice. The presence of 'Invoice 2 of 3' suggests it is a continuation of a multi-page invoice."", 'class': 'invoice', 'confidence': 0.98, 'document_boundary': 'continue'}
-"
-1764450008267,"[INFO]	2025-11-29T21:00:08.267Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Page 12 classified as invoice
-"
-1764450008328,"[INFO]	2025-11-29T21:00:08.328Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Time taken for classification of page 21: 1.64 seconds
-"
-1764450008328,"[WARNING]	2025-11-29T21:00:08.328Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Structured data extraction will only work for JSON.
-"
-1764450008328,"[WARNING]	2025-11-29T21:00:08.328Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Format detection will only work for JSON.
+1764520984727,"[DEBUG]	2025-11-30T16:43:04.727Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-parameter-build.s3.GetObject: calling handler <function remove_bucket_from_url_paths_from_model at 0xffff83cb8b80>
 "
-1764450008328,"[INFO]	2025-11-29T21:00:08.328Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Parsed classification response as json: {'classification_reason': 'Clear invoice with recipient details, invoice date, itemized charges, and total amount due.', 'class': 'invoice', 'confidence': 0.95, 'document_boundary': 'start'}
+1764520984727,"[DEBUG]	2025-11-30T16:43:04.727Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-parameter-build.s3.GetObject: calling handler <bound method S3RegionRedirectorv2.annotate_request_context of <botocore.utils.S3RegionRedirectorv2 object at 0xffff703f35f0>>
 "
-1764450008328,"[INFO]	2025-11-29T21:00:08.328Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Page 21 classified as invoice
+1764520984727,"[DEBUG]	2025-11-30T16:43:04.727Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-parameter-build.s3.GetObject: calling handler <bound method ClientCreator._inject_s3_input_parameters of <botocore.client.ClientCreator object at 0xffff81b09f40>>
 "
-1764450008478,"[INFO]	2025-11-29T21:00:08.478Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Bedrock request successful after 1 attempts. Duration: 1.59s
+1764520984727,"[DEBUG]	2025-11-30T16:43:04.727Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-parameter-build.s3.GetObject: calling handler <function generate_idempotent_uuid at 0xffff83e12700>
 "
-1764450008478,"[INFO]	2025-11-29T21:00:08.478Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Token Usage: {'inputTokens': 5023, 'outputTokens': 79, 'totalTokens': 5102}
+1764520984727,"[DEBUG]	2025-11-30T16:43:04.727Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-parameter-build.s3.GetObject: calling handler <function _handle_request_validation_mode_member at 0xffff83cb9260>
 "
-1764450008549,"[INFO]	2025-11-29T21:00:08.549Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Time taken for classification of page 22: 1.67 seconds
+1764520984727,"[DEBUG]	2025-11-30T16:43:04.727Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-endpoint-resolution.s3: calling handler <function customize_endpoint_resolver_builtins at 0xffff83cb8d60>
 "
-1764450008549,"[WARNING]	2025-11-29T21:00:08.549Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Structured data extraction will only work for JSON.
+1764520984727,"[DEBUG]	2025-11-30T16:43:04.727Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-endpoint-resolution.s3: calling handler <bound method S3RegionRedirectorv2.redirect_from_cache of <botocore.utils.S3RegionRedirectorv2 object at 0xffff703f35f0>>
 "
-1764450008549,"[WARNING]	2025-11-29T21:00:08.549Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Format detection will only work for JSON.
+1764520984727,"[DEBUG]	2025-11-30T16:43:04.727Z	72e452af-9de0-4b81-94d4-203b311e345d	Calling endpoint provider with parameters: {'Bucket': 'fiscalshield-idp-dev-outputbucket-1b6w2y9hfuen', 'Region': 'eu-central-1', 'UseFIPS': False, 'UseDualStack': False, 'ForcePathStyle': False, 'Accelerate': False, 'UseGlobalEndpoint': False, 'Key': 'users/23b4b872-20a1-709e-ffef-d20a604f60b5/test_invoice.pdf/pages/27/result.json', 'DisableMultiRegionAccessPoints': False, 'UseArnRegion': True}
 "
-1764450008549,"[INFO]	2025-11-29T21:00:08.549Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Parsed classification response as json: {'classification_reason': 'The document contains a clear invoice structure with a recipient section, invoice date, reference number, itemized charges, and financial calculations. It also includes an invoice number and a due date, which are typical of an invoice.', 'class': 'invoice', 'confidence': 0.95, 'document_boundary': 'start'}
+1764520984727,"[DEBUG]	2025-11-30T16:43:04.727Z	72e452af-9de0-4b81-94d4-203b311e345d	Endpoint provider result: https://fiscalshield-idp-dev-outputbucket-1b6w2y9hfuen.s3.eu-central-1.amazonaws.com
 "
-1764450008549,"[INFO]	2025-11-29T21:00:08.549Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Page 22 classified as invoice
+1764520984727,"[DEBUG]	2025-11-30T16:43:04.727Z	72e452af-9de0-4b81-94d4-203b311e345d	Selecting from endpoint provider's list of auth schemes: ""sigv4"". User selected auth scheme is: ""None""
 "
-1764450008637,"[INFO]	2025-11-29T21:00:08.637Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Bedrock request successful after 1 attempts. Duration: 1.66s
+1764520984727,"[DEBUG]	2025-11-30T16:43:04.727Z	72e452af-9de0-4b81-94d4-203b311e345d	Selected auth type ""v4"" as ""v4"" with signing context params: {'region': 'eu-central-1', 'signing_name': 's3', 'disableDoubleEncoding': True}
 "
-1764450008637,"[INFO]	2025-11-29T21:00:08.637Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Token Usage: {'inputTokens': 8968, 'outputTokens': 71, 'totalTokens': 9039}
+1764520984727,"[DEBUG]	2025-11-30T16:43:04.727Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-call.s3.GetObject: calling handler <function add_expect_header at 0xffff83e12ca0>
 "
-1764450008712,"[INFO]	2025-11-29T21:00:08.712Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Time taken for classification of page 24: 1.78 seconds
+1764520984727,"[DEBUG]	2025-11-30T16:43:04.727Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-call.s3.GetObject: calling handler <bound method S3ExpressIdentityResolver.apply_signing_cache_key of <botocore.utils.S3ExpressIdentityResolver object at 0xffff703f3d10>>
 "
-1764450008712,"[WARNING]	2025-11-29T21:00:08.712Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Structured data extraction will only work for JSON.
+1764520984727,"[DEBUG]	2025-11-30T16:43:04.727Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-call.s3.GetObject: calling handler <function add_recursion_detection_header at 0xffff83e10fe0>
 "
-1764450008712,"[WARNING]	2025-11-29T21:00:08.712Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Format detection will only work for JSON.
+1764520984727,"[DEBUG]	2025-11-30T16:43:04.727Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-call.s3.GetObject: calling handler <function inject_api_version_header_if_needed at 0xffff83cb8220>
 "
-1764450008712,"[INFO]	2025-11-29T21:00:08.712Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Parsed classification response as json: {'classification_reason': 'The document contains a clear invoice header, itemized charges, and financial calculations typical of an invoice. It includes an invoice date, reference number, and detailed line items with amounts.', 'class': 'invoice', 'confidence': 0.95, 'document_boundary': 'start'}
+1764520984727,"[DEBUG]	2025-11-30T16:43:04.727Z	72e452af-9de0-4b81-94d4-203b311e345d	Making request for OperationModel(name=GetObject) with params: {'url_path': '/users/23b4b872-20a1-709e-ffef-d20a604f60b5/test_invoice.pdf/pages/27/result.json', 'query_string': {}, 'method': 'GET', 'headers': {'x-amz-checksum-mode': 'ENABLED', 'User-Agent': 'Boto3/1.39.7 md/Botocore#1.39.17 ua/2.1 os/linux#5.10.245-269.978.amzn2.aarch64 md/arch#aarch64 lang/python#3.12.12 md/pyimpl#CPython exec-env/AWS_Lambda_python3.12 m/b,D,Z cfg/retry-mode#legacy Botocore/1.39.17', 'X-Amzn-Trace-Id': 'Root=1-692c73f4-1ed9ccacf77f74d4f28a975e;Parent=39cbf63ae2e997a9;Sampled=0;Lineage=3:a9bb9278:0'}, 'body': b'', 'auth_path': '/fiscalshield-idp-dev-outputbucket-1b6w2y9hfuen/users/23b4b872-20a1-709e-ffef-d20a604f60b5/test_invoice.pdf/pages/27/result.json', 'url': 'https://fiscalshield-idp-dev-outputbucket-1b6w2y9hfuen.s3.eu-central-1.amazonaws.com/users/23b4b872-20a1-709e-ffef-d20a604f60b5/test_invoice.pdf/pages/27/result.json', 'context': {'client_region': 'eu-central-1', 'client_config': <botocore.config.Config object at 0xffff703b55e0>, 'has_streaming_input': False, 'auth_type': 'v4', 'unsigned_payload': None, 'auth_options': ['aws.auth#sigv4'], 's3_redirect': {'redirected': False, 'bucket': 'fiscalshield-idp-dev-outputbucket-1b6w2y9hfuen', 'params': {'Bucket': 'fiscalshield-idp-dev-outputbucket-1b6w2y9hfuen', 'Key': 'users/23b4b872-20a1-709e-ffef-d20a604f60b5/test_invoice.pdf/pages/27/result.json', 'ChecksumMode': 'ENABLED'}}, 'input_params': {'Bucket': 'fiscalshield-idp-dev-outputbucket-1b6w2y9hfuen', 'Key': 'users/23b4b872-20a1-709e-ffef-d20a604f60b5/test_invoice.pdf/pages/27/result.json'}, 'signing': {'region': 'eu-central-1', 'signing_name': 's3', 'disableDoubleEncoding': True}, 'endpoint_properties': {'authSchemes': [{'disableDoubleEncoding': True, 'name': 'sigv4', 'signingName': 's3', 'signingRegion': 'eu-central-1'}]}, 'checksum': {'response_algorithms': ['crc32', 'sha1', 'sha256']}}}
 "
-1764450008712,"[INFO]	2025-11-29T21:00:08.712Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Page 24 classified as invoice
+1764520984727,"[DEBUG]	2025-11-30T16:43:04.727Z	72e452af-9de0-4b81-94d4-203b311e345d	Event request-created.s3.GetObject: calling handler <bound method RequestSigner.handler of <botocore.signers.RequestSigner object at 0xffff703b56a0>>
 "
-1764450008980,"[INFO]	2025-11-29T21:00:08.980Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Bedrock request successful after 1 attempts. Duration: 1.96s
+1764520984727,"[DEBUG]	2025-11-30T16:43:04.727Z	72e452af-9de0-4b81-94d4-203b311e345d	Event choose-signer.s3.GetObject: calling handler <function set_operation_specific_signer at 0xffff83e12480>
 "
-1764450008980,"[INFO]	2025-11-29T21:00:08.980Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Token Usage: {'inputTokens': 4997, 'outputTokens': 88, 'totalTokens': 5085}
+1764520984728,"[DEBUG]	2025-11-30T16:43:04.728Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-sign.s3.GetObject: calling handler <function remove_arn_from_signing_path at 0xffff83cb8cc0>
 "
-1764450009058,"[INFO]	2025-11-29T21:00:09.057Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Time taken for classification of page 23: 2.13 seconds
+1764520984728,"[DEBUG]	2025-11-30T16:43:04.728Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-sign.s3.GetObject: calling handler <function _set_extra_headers_for_unsigned_request at 0xffff83cb9300>
 "
-1764450009058,"[WARNING]	2025-11-29T21:00:09.058Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Structured data extraction will only work for JSON.
+1764520984728,"[DEBUG]	2025-11-30T16:43:04.728Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-sign.s3.GetObject: calling handler <bound method S3ExpressIdentityResolver.resolve_s3express_identity of <botocore.utils.S3ExpressIdentityResolver object at 0xffff703f3d10>>
 "
-1764450009058,"[WARNING]	2025-11-29T21:00:09.058Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Format detection will only work for JSON.
+1764520984728,"[DEBUG]	2025-11-30T16:43:04.728Z	72e452af-9de0-4b81-94d4-203b311e345d	Calculating signature using v4 auth.
 "
-1764450009058,"[INFO]	2025-11-29T21:00:09.058Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Parsed classification response as json: {'classification_reason': ""The document contains a clear invoice structure with a recipient section, invoice date, reference number, itemized charges, and total amount due. It also includes a note stating 'This is not a tax invoice', which aligns with the expense claim subtype of an invoice."", 'class': 'invoice', 'confidence': 0.95, 'document_boundary': 'start'}
+1764520984728,"[DEBUG]	2025-11-30T16:43:04.728Z	72e452af-9de0-4b81-94d4-203b311e345d	CanonicalRequest:
 "
-1764450009058,"[INFO]	2025-11-29T21:00:09.058Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Page 23 classified as invoice
+1764520984728,"GET
 "
-1764450009288,"[WARNING]	2025-11-29T21:00:09.288Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Connection pool is full, discarding connection: bedrock-runtime.eu-central-1.amazonaws.com. Connection pool size: 10
+1764520984728,"/users/23b4b872-20a1-709e-ffef-d20a604f60b5/test_invoice.pdf/pages/27/result.json
 "
-1764450009289,"[INFO]	2025-11-29T21:00:09.289Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Bedrock request successful after 1 attempts. Duration: 1.58s
+1764520984728,"host:fiscalshield-idp-dev-outputbucket-1b6w2y9hfuen.s3.eu-central-1.amazonaws.com
 "
-1764450009289,"[INFO]	2025-11-29T21:00:09.289Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Token Usage: {'inputTokens': 5003, 'outputTokens': 78, 'totalTokens': 5081}
+1764520984728,"x-amz-checksum-mode:ENABLED
 "
-1764450009341,"[INFO]	2025-11-29T21:00:09.341Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Time taken for classification of page 25: 1.86 seconds
+1764520984728,"x-amz-content-sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 "
-1764450009341,"[WARNING]	2025-11-29T21:00:09.341Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Structured data extraction will only work for JSON.
+1764520984728,"x-amz-date:20251130T164304Z
 "
-1764450009341,"[WARNING]	2025-11-29T21:00:09.341Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Format detection will only work for JSON.
+1764520984728,"x-amz-security-token:IQoJb3JpZ2luX2VjECEaDGV1LWNlbnRyYWwtMSJGMEQCIDlOB+3kIPy7r0bZAqILETYKgKZRqyYlwacGFGc5koKnAiB07tCzno16ubuq6dyx8sj4Z/29AyyHrLriYWkT3C8idyrfAwjq//////////8BEAAaDDg2NDg5OTg0ODA2MiIMtEiFLF6HvtxD2yIoKrMD2vu09KQieiigbe7A5Msoyr7C7MlS2fvxG1ftV1F5nMf/5l00AEG3/p4H1nU2GSwvv8Skzo4GTBrI9XFiu/8u9OPXHSl0UXJWDB+kBW2W17gbSnXR2i5ITiJqhX/ftIzy4DPdHCD0r5CjkaW+WcFqXzmw2hwkgEzmZ2syKDtaWikW9BCvmkUD21m75kBgrRgFvcOhd7laHX0+HpLIXUXP9DWKRdqZ8Dp986ya44X41owUU6v9urjkGMDSucOxFszM0cTHnO6jjpo3sfZZWgWMimVpcrge9YQyrYiT2Yo0ywJXpbQJMcTKFTLPuvXx7onzCVobicLx1ZcxY8xEPArYrL2GvyIpV5YOf/EfaAbkMf05Mo69Hx8lLohQhHweLubg8eeLFEicQ7CUZhafxMu3mJms/CXB0oU+cOGEhy3/LgG+ZKPw4PgwPrts8lSHcgJRT0zzGLXNn0+0BhvoHUt5iVT72/pBaAdZBQsUlk8FdGt0ama+XFhow9Su0+bKPUgLRexma6l85LWvm6ESdRMqbfVjz0CToPEQjIO+EVTbnbJrEomCuzcwO6GfVZZ93jJaT9jLMI7osckGOp8BHZOQtXY4E+beFr2tLeucvAVi96pkcZF9iS+gSJwdBwAt2VcFdJgpCT6dnygsPdVJhouJPVKNyt7J/0rHgxsyyk7QxQR+30Vik5nBciPnkvohGlv8MPsB7iUa3fSlaelG4B3UysqgEkhTvAAzAMz+XJpEmpGlcAWEiD7+DB00tPfBzzBBCEBQzjh4RejzrDy9nAgnARqiJ8pTDwlui34E
 "
-1764450009341,"[INFO]	2025-11-29T21:00:09.341Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Parsed classification response as json: {'classification_reason': 'The document contains a clear invoice header, recipient details, itemized charges, and financial calculations typical of an invoice. It includes an invoice date, reference number, and amount due section, confirming it as an invoice.', 'class': 'invoice', 'confidence': 0.98, 'document_boundary': 'start'}
+1764520984728,"host;x-amz-checksum-mode;x-amz-content-sha256;x-amz-date;x-amz-security-token
 "
-1764450009341,"[INFO]	2025-11-29T21:00:09.341Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Page 25 classified as invoice
+1764520984728,"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 "
-1764450009647,"[WARNING]	2025-11-29T21:00:09.647Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Connection pool is full, discarding connection: bedrock-runtime.eu-central-1.amazonaws.com. Connection pool size: 10
+1764520984728,"[DEBUG]	2025-11-30T16:43:04.728Z	72e452af-9de0-4b81-94d4-203b311e345d	StringToSign:
 "
-1764450009647,"[INFO]	2025-11-29T21:00:09.647Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Bedrock request successful after 1 attempts. Duration: 1.80s
+1764520984728,"AWS4-HMAC-SHA256
 "
-1764450009648,"[INFO]	2025-11-29T21:00:09.647Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Token Usage: {'inputTokens': 5014, 'outputTokens': 88, 'totalTokens': 5102}
+1764520984728,"20251130T164304Z
 "
-1764450009726,"[INFO]	2025-11-29T21:00:09.726Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Time taken for classification of page 26: 2.16 seconds
+1764520984728,"20251130/eu-central-1/s3/aws4_request
 "
-1764450009726,"[WARNING]	2025-11-29T21:00:09.726Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Structured data extraction will only work for JSON.
+1764520984728,"3780613aa318076abdab5da2809430a401b47cfc5944f48f48e3d7ad0875d236
 "
-1764450009726,"[WARNING]	2025-11-29T21:00:09.726Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Format detection will only work for JSON.
+1764520984728,"[DEBUG]	2025-11-30T16:43:04.728Z	72e452af-9de0-4b81-94d4-203b311e345d	Signature:
 "
-1764450009726,"[INFO]	2025-11-29T21:00:09.726Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Parsed classification response as json: {'classification_reason': ""The document contains a clear invoice structure with a recipient section, invoice date, reference number, itemized charges, and total amount due. It also includes a note stating 'This is not a tax invoice', which aligns with the expense claim subtype of an invoice."", 'class': 'invoice', 'confidence': 0.95, 'document_boundary': 'start'}
+1764520984728,"f76dcf101a96d429654c7cca0311d3093f69129ea7bef1df25fe7b719966e00c
 "
-1764450009726,"[INFO]	2025-11-29T21:00:09.726Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Page 26 classified as invoice
+1764520984728,"[DEBUG]	2025-11-30T16:43:04.728Z	72e452af-9de0-4b81-94d4-203b311e345d	Event request-created.s3.GetObject: calling handler <bound method UserAgentString.rebuild_and_replace_user_agent_handler of <botocore.useragent.UserAgentString object at 0xffff703f3590>>
 "
-1764450009832,"[WARNING]	2025-11-29T21:00:09.832Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Connection pool is full, discarding connection: bedrock-runtime.eu-central-1.amazonaws.com. Connection pool size: 10
+1764520984728,"[DEBUG]	2025-11-30T16:43:04.728Z	72e452af-9de0-4b81-94d4-203b311e345d	Event request-created.s3.GetObject: calling handler <function add_retry_headers at 0xffff83cb8ae0>
 "
-1764450009833,"[INFO]	2025-11-29T21:00:09.833Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Bedrock request successful after 1 attempts. Duration: 1.78s
+1764520984728,"[DEBUG]	2025-11-30T16:43:04.728Z	72e452af-9de0-4b81-94d4-203b311e345d	Sending http request: <AWSPreparedRequest stream_output=True, method=GET, url=https://fiscalshield-idp-dev-outputbucket-1b6w2y9hfuen.s3.eu-central-1.amazonaws.com/users/23b4b872-20a1-709e-ffef-d20a604f60b5/test_invoice.pdf/pages/27/result.json, headers={'x-amz-checksum-mode': b'ENABLED', 'User-Agent': b'Boto3/1.39.7 md/Botocore#1.39.17 ua/2.1 os/linux#5.10.245-269.978.amzn2.aarch64 md/arch#aarch64 lang/python#3.12.12 md/pyimpl#CPython exec-env/AWS_Lambda_python3.12 m/b,D,Z cfg/retry-mode#legacy Botocore/1.39.17', 'X-Amzn-Trace-Id': b'Root=1-692c73f4-1ed9ccacf77f74d4f28a975e;Parent=39cbf63ae2e997a9;Sampled=0;Lineage=3:a9bb9278:0', 'X-Amz-Date': b'20251130T164304Z', 'X-Amz-Security-Token': b'IQoJb3JpZ2luX2VjECEaDGV1LWNlbnRyYWwtMSJGMEQCIDlOB+3kIPy7r0bZAqILETYKgKZRqyYlwacGFGc5koKnAiB07tCzno16ubuq6dyx8sj4Z/29AyyHrLriYWkT3C8idyrfAwjq//////////8BEAAaDDg2NDg5OTg0ODA2MiIMtEiFLF6HvtxD2yIoKrMD2vu09KQieiigbe7A5Msoyr7C7MlS2fvxG1ftV1F5nMf/5l00AEG3/p4H1nU2GSwvv8Skzo4GTBrI9XFiu/8u9OPXHSl0UXJWDB+kBW2W17gbSnXR2i5ITiJqhX/ftIzy4DPdHCD0r5CjkaW+WcFqXzmw2hwkgEzmZ2syKDtaWikW9BCvmkUD21m75kBgrRgFvcOhd7laHX0+HpLIXUXP9DWKRdqZ8Dp986ya44X41owUU6v9urjkGMDSucOxFszM0cTHnO6jjpo3sfZZWgWMimVpcrge9YQyrYiT2Yo0ywJXpbQJMcTKFTLPuvXx7onzCVobicLx1ZcxY8xEPArYrL2GvyIpV5YOf/EfaAbkMf05Mo69Hx8lLohQhHweLubg8eeLFEicQ7CUZhafxMu3mJms/CXB0oU+cOGEhy3/LgG+ZKPw4PgwPrts8lSHcgJRT0zzGLXNn0+0BhvoHUt5iVT72/pBaAdZBQsUlk8FdGt0ama+XFhow9Su0+bKPUgLRexma6l85LWvm6ESdRMqbfVjz0CToPEQjIO+EVTbnbJrEomCuzcwO6GfVZZ93jJaT9jLMI7osckGOp8BHZOQtXY4E+beFr2tLeucvAVi96pkcZF9iS+gSJwdBwAt2VcFdJgpCT6dnygsPdVJhouJPVKNyt7J/0rHgxsyyk7QxQR+30Vik5nBciPnkvohGlv8MPsB7iUa3fSlaelG4B3UysqgEkhTvAAzAMz+XJpEmpGlcAWEiD7+DB00tPfBzzBBCEBQzjh4RejzrDy9nAgnARqiJ8pTDwlui34E', 'X-Amz-Content-SHA256': b'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 'Authorization': b'AWS4-HMAC-SHA256 Credential=ASIA4SYAMK57AP6636FK/20251130/eu-central-1/s3/aws4_request, SignedHeaders=host;x-amz-checksum-mode;x-amz-content-sha256;x-amz-date;x-amz-security-token, Signature=f76dcf101a96d429654c7cca0311d3093f69129ea7bef1df25fe7b719966e00c', 'amz-sdk-invocation-id': b'b28fe7ea-80e2-4610-b85a-50c8ad448bd3', 'amz-sdk-request': b'attempt=1'}>
 "
-1764450009833,"[INFO]	2025-11-29T21:00:09.833Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Token Usage: {'inputTokens': 5009, 'outputTokens': 87, 'totalTokens': 5096}
+1764520984728,"[DEBUG]	2025-11-30T16:43:04.728Z	72e452af-9de0-4b81-94d4-203b311e345d	Certificate path: /opt/python/certifi/cacert.pem
 "
-1764450009852,"[WARNING]	2025-11-29T21:00:09.852Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Connection pool is full, discarding connection: bedrock-runtime.eu-central-1.amazonaws.com. Connection pool size: 10
+1764520984755,"[DEBUG]	2025-11-30T16:43:04.754Z	72e452af-9de0-4b81-94d4-203b311e345d	https://fiscalshield-idp-dev-outputbucket-1b6w2y9hfuen.s3.eu-central-1.amazonaws.com:443 ""GET /users/23b4b872-20a1-709e-ffef-d20a604f60b5/test_invoice.pdf/pages/27/result.json HTTP/1.1"" 200 420
 "
-1764450009852,"[INFO]	2025-11-29T21:00:09.852Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Bedrock request successful after 1 attempts. Duration: 1.64s
+1764520984755,"[DEBUG]	2025-11-30T16:43:04.755Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-parse.s3.GetObject: calling handler <function _handle_200_error at 0xffff83cb9080>
 "
-1764450009853,"[INFO]	2025-11-29T21:00:09.852Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Token Usage: {'inputTokens': 5043, 'outputTokens': 64, 'totalTokens': 5107}
+1764520984755,"[DEBUG]	2025-11-30T16:43:04.755Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-parse.s3.GetObject: calling handler <function handle_expires_header at 0xffff83cb8ea0>
 "
-1764450009959,"[INFO]	2025-11-29T21:00:09.958Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Time taken for classification of page 27: 2.01 seconds
+1764520984755,"[DEBUG]	2025-11-30T16:43:04.755Z	72e452af-9de0-4b81-94d4-203b311e345d	Response headers: {'x-amz-id-2': 'Jw2suibPxveNTlxlXEfcGAAOTETIups/q9/AydV5zfunNuD/igrr/dXq9ggLaeEMpVpS4vuK9Lu8R0JIsvM8OXNL/51g6ZBK9iz6Fa1Rg90=', 'x-amz-request-id': 'ZFZ0DB5WHDX6HJV8', 'Date': 'Sun, 30 Nov 2025 16:43:05 GMT', 'Last-Modified': 'Sun, 30 Nov 2025 16:42:51 GMT', 'x-amz-expiration': 'expiry-date=""Tue, 01 Dec 2026 00:00:00 GMT"", rule-id=""DeleteAfterNDays""', 'ETag': '""9a04511d0224abb233fdfa5959ecfb4c""', 'x-amz-checksum-crc32': 'KQm83Q==', 'x-amz-checksum-type': 'FULL_OBJECT', 'x-amz-server-side-encryption': 'aws:kms', 'x-amz-server-side-encryption-aws-kms-key-id': 'arn:aws:kms:eu-central-1:864899848062:key/a960f907-4d93-49c2-b05f-acc470fcf9cb', 'x-amz-version-id': 'M4V1ehXOJTEeEHQTjFanPqO1e9Dtk5l1', 'Accept-Ranges': 'bytes', 'Content-Type': 'application/json', 'Content-Length': '420', 'Server': 'AmazonS3'}
 "
-1764450009960,"[WARNING]	2025-11-29T21:00:09.960Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Structured data extraction will only work for JSON.
+1764520984755,"[DEBUG]	2025-11-30T16:43:04.755Z	72e452af-9de0-4b81-94d4-203b311e345d	Response body:
 "
-1764450009960,"[WARNING]	2025-11-29T21:00:09.960Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Format detection will only work for JSON.
+1764520984755,"<botocore.httpchecksum.StreamingChecksumBody object at 0xffff705405e0>
 "
-1764450009960,"[INFO]	2025-11-29T21:00:09.960Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Parsed classification response as json: {'classification_reason': ""The document contains a clear invoice structure with a recipient section, invoice date, reference number, itemized charges, and financial calculations. It also includes a note stating 'This is not a tax invoice', which aligns with the expense claim subtype of an invoice."", 'class': 'invoice', 'confidence': 0.95, 'document_boundary': 'start'}
+1764520984755,"[DEBUG]	2025-11-30T16:43:04.755Z	72e452af-9de0-4b81-94d4-203b311e345d	Event needs-retry.s3.GetObject: calling handler <function _update_status_code at 0xffff83cb91c0>
 "
-1764450009960,"[INFO]	2025-11-29T21:00:09.960Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Page 27 classified as invoice
+1764520984755,"[DEBUG]	2025-11-30T16:43:04.755Z	72e452af-9de0-4b81-94d4-203b311e345d	Event needs-retry.s3.GetObject: calling handler <botocore.retryhandler.RetryHandler object at 0xffff703f3ce0>
 "
-1764450009971,"[INFO]	2025-11-29T21:00:09.971Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Time taken for classification of page 28: 1.91 seconds
+1764520984755,"[DEBUG]	2025-11-30T16:43:04.755Z	72e452af-9de0-4b81-94d4-203b311e345d	No retry needed.
 "
-1764450009971,"[WARNING]	2025-11-29T21:00:09.971Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Structured data extraction will only work for JSON.
+1764520984755,"[DEBUG]	2025-11-30T16:43:04.755Z	72e452af-9de0-4b81-94d4-203b311e345d	Event needs-retry.s3.GetObject: calling handler <bound method S3RegionRedirectorv2.redirect_from_error of <botocore.utils.S3RegionRedirectorv2 object at 0xffff703f35f0>>
 "
-1764450009971,"[WARNING]	2025-11-29T21:00:09.971Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	YAML library not available. Format detection will only work for JSON.
+1764520984756,"[INFO]	2025-11-30T16:43:04.756Z	72e452af-9de0-4b81-94d4-203b311e345d	📄 Section text length: 420 chars
 "
-1764450009971,"[INFO]	2025-11-29T21:00:09.971Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Parsed classification response as json: {'classification_reason': 'The document contains a clear invoice header, reference number, itemized charges, VAT breakdown, and total amount due, indicating it is an invoice.', 'class': 'invoice', 'confidence': 0.98, 'document_boundary': 'start'}
-"
-1764450009971,"[INFO]	2025-11-29T21:00:09.971Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Page 28 classified as invoice
-"
-1764450009973,"[INFO]	2025-11-29T21:00:09.973Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	All pages succeeded for document users/23b4b872-20a1-709e-ffef-d20a604f60b5/test_invoice.pdf - skipping cache (no retry needed)
-"
-1764450009973,"[INFO]	2025-11-29T21:00:09.973Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Document classified with 27 sections in 5.23 seconds
-"
-1764450009973,"[INFO]	2025-11-29T21:00:09.973Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	🔧 Smart batching enabled - creating optimized sections
-"
-1764450009973,"[INFO]	2025-11-29T21:00:09.973Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Detected 27 invoices in 28 pages
-"
-1764450009973,"[INFO]	2025-11-29T21:00:09.973Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Created section 1: 15 invoices, 15 pages
-"
-1764450009973,"[INFO]	2025-11-29T21:00:09.973Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Created section 2 (final): 12 invoices, 12 pages
-"
-1764450009973,"[INFO]	2025-11-29T21:00:09.973Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Smart batching complete: 28 pages → 2 sections
-"
-1764450009973,"[INFO]	2025-11-29T21:00:09.973Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	✅ Smart batching complete: 27 original sections → 2 optimized sections
-"
-1764450009973,"[INFO]	2025-11-29T21:00:09.973Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	================================================================================
-"
-1764450009973,"[INFO]	2025-11-29T21:00:09.973Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	📊 Classification complete: 28 pages, ~27 invoices across 2 sections
-"
-1764450009973,"[INFO]	2025-11-29T21:00:09.973Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	   (Page count = VALIDATION, Invoice count = METRIC)
-"
-1764450009973,"[INFO]	2025-11-29T21:00:09.973Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	  Section 1: invoice, 16 pages, ~15 invoices
-"
-1764450009973,"[INFO]	2025-11-29T21:00:09.973Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	  Section 2: invoice, 12 pages, ~12 invoices
-"
-1764450009973,"[INFO]	2025-11-29T21:00:09.973Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	================================================================================
-"
-1764450009973,"[INFO]	2025-11-29T21:00:09.973Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	🔄 Using user hint 'invoice' for routing (validation mode)
-"
-1764450009973,"[INFO]	2025-11-29T21:00:09.973Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	📝 Overrode classification: model='invoice' → user='invoice' (confidence=1.00) for routing
-"
-1764450009973,"[INFO]	2025-11-29T21:00:09.973Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	🔍 VALIDATION: user='invoice', model='invoice' (confidence=1.00), match=True
-"
-1764450010029,"[INFO]	2025-11-29T21:00:10.029Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	✅ User and model agree on 'invoice'. Validation ID: b5783d6a-f705-43bc-932c-2d739a51e1c3
-"
-1764450010029,"[INFO]	2025-11-29T21:00:10.029Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Time taken for classification: 5.33 seconds
-"
-1764450010029,"[INFO]	2025-11-29T21:00:10.029Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	🔍 LLM boundary detection enabled (model: arn:aws:bedrock:eu-central-1:864899848062:inference-profile/eu.anthropic.claude-3-5-sonnet-20240620-v1:0)
-"
-1764450010032,"[INFO]	2025-11-29T21:00:10.032Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	🔍 Detecting boundaries for invoice section 1
-"
-1764450010718,"[INFO]	2025-11-29T21:00:10.718Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	📄 Section text length: 40769 chars
-"
-1764450010718,"[ERROR]	2025-11-29T21:00:10.718Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	❌ Error in LLM boundary detection: '
+1764520984756,"[ERROR]	2025-11-30T16:43:04.756Z	72e452af-9de0-4b81-94d4-203b311e345d	❌ Error in LLM boundary detection: '
     ""id""'
 "
-1764450010718,"[WARNING]	2025-11-29T21:00:10.718Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	⚠️ Boundary detection/validation failed for section 1
+1764520984756,"[WARNING]	2025-11-30T16:43:04.756Z	72e452af-9de0-4b81-94d4-203b311e345d	⚠️ Boundary detection/validation failed for section 26
 "
-1764450010718,"[INFO]	2025-11-29T21:00:10.718Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	🔍 Detecting boundaries for invoice section 2
+1764520984756,"[INFO]	2025-11-30T16:43:04.756Z	72e452af-9de0-4b81-94d4-203b311e345d	🔍 Detecting boundaries for invoice section 27
 "
-1764450011129,"[INFO]	2025-11-29T21:00:11.129Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	📄 Section text length: 38354 chars
+1764520984756,"[DEBUG]	2025-11-30T16:43:04.756Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-parameter-build.s3.GetObject: calling handler <function sse_md5 at 0xffff83e12980>
 "
-1764450011129,"[ERROR]	2025-11-29T21:00:11.129Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	❌ Error in LLM boundary detection: '
+1764520984756,"[DEBUG]	2025-11-30T16:43:04.756Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-parameter-build.s3.GetObject: calling handler <function validate_bucket_name at 0xffff83e128e0>
+"
+1764520984756,"[DEBUG]	2025-11-30T16:43:04.756Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-parameter-build.s3.GetObject: calling handler <function remove_bucket_from_url_paths_from_model at 0xffff83cb8b80>
+"
+1764520984756,"[DEBUG]	2025-11-30T16:43:04.756Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-parameter-build.s3.GetObject: calling handler <bound method S3RegionRedirectorv2.annotate_request_context of <botocore.utils.S3RegionRedirectorv2 object at 0xffff703f35f0>>
+"
+1764520984756,"[DEBUG]	2025-11-30T16:43:04.756Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-parameter-build.s3.GetObject: calling handler <bound method ClientCreator._inject_s3_input_parameters of <botocore.client.ClientCreator object at 0xffff81b09f40>>
+"
+1764520984756,"[DEBUG]	2025-11-30T16:43:04.756Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-parameter-build.s3.GetObject: calling handler <function generate_idempotent_uuid at 0xffff83e12700>
+"
+1764520984756,"[DEBUG]	2025-11-30T16:43:04.756Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-parameter-build.s3.GetObject: calling handler <function _handle_request_validation_mode_member at 0xffff83cb9260>
+"
+1764520984756,"[DEBUG]	2025-11-30T16:43:04.756Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-endpoint-resolution.s3: calling handler <function customize_endpoint_resolver_builtins at 0xffff83cb8d60>
+"
+1764520984756,"[DEBUG]	2025-11-30T16:43:04.756Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-endpoint-resolution.s3: calling handler <bound method S3RegionRedirectorv2.redirect_from_cache of <botocore.utils.S3RegionRedirectorv2 object at 0xffff703f35f0>>
+"
+1764520984756,"[DEBUG]	2025-11-30T16:43:04.756Z	72e452af-9de0-4b81-94d4-203b311e345d	Calling endpoint provider with parameters: {'Bucket': 'fiscalshield-idp-dev-outputbucket-1b6w2y9hfuen', 'Region': 'eu-central-1', 'UseFIPS': False, 'UseDualStack': False, 'ForcePathStyle': False, 'Accelerate': False, 'UseGlobalEndpoint': False, 'Key': 'users/23b4b872-20a1-709e-ffef-d20a604f60b5/test_invoice.pdf/pages/17/result.json', 'DisableMultiRegionAccessPoints': False, 'UseArnRegion': True}
+"
+1764520984757,"[DEBUG]	2025-11-30T16:43:04.757Z	72e452af-9de0-4b81-94d4-203b311e345d	Endpoint provider result: https://fiscalshield-idp-dev-outputbucket-1b6w2y9hfuen.s3.eu-central-1.amazonaws.com
+"
+1764520984757,"[DEBUG]	2025-11-30T16:43:04.757Z	72e452af-9de0-4b81-94d4-203b311e345d	Selecting from endpoint provider's list of auth schemes: ""sigv4"". User selected auth scheme is: ""None""
+"
+1764520984757,"[DEBUG]	2025-11-30T16:43:04.757Z	72e452af-9de0-4b81-94d4-203b311e345d	Selected auth type ""v4"" as ""v4"" with signing context params: {'region': 'eu-central-1', 'signing_name': 's3', 'disableDoubleEncoding': True}
+"
+1764520984757,"[DEBUG]	2025-11-30T16:43:04.757Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-call.s3.GetObject: calling handler <function add_expect_header at 0xffff83e12ca0>
+"
+1764520984757,"[DEBUG]	2025-11-30T16:43:04.757Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-call.s3.GetObject: calling handler <bound method S3ExpressIdentityResolver.apply_signing_cache_key of <botocore.utils.S3ExpressIdentityResolver object at 0xffff703f3d10>>
+"
+1764520984757,"[DEBUG]	2025-11-30T16:43:04.757Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-call.s3.GetObject: calling handler <function add_recursion_detection_header at 0xffff83e10fe0>
+"
+1764520984757,"[DEBUG]	2025-11-30T16:43:04.757Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-call.s3.GetObject: calling handler <function inject_api_version_header_if_needed at 0xffff83cb8220>
+"
+1764520984757,"[DEBUG]	2025-11-30T16:43:04.757Z	72e452af-9de0-4b81-94d4-203b311e345d	Making request for OperationModel(name=GetObject) with params: {'url_path': '/users/23b4b872-20a1-709e-ffef-d20a604f60b5/test_invoice.pdf/pages/17/result.json', 'query_string': {}, 'method': 'GET', 'headers': {'x-amz-checksum-mode': 'ENABLED', 'User-Agent': 'Boto3/1.39.7 md/Botocore#1.39.17 ua/2.1 os/linux#5.10.245-269.978.amzn2.aarch64 md/arch#aarch64 lang/python#3.12.12 md/pyimpl#CPython exec-env/AWS_Lambda_python3.12 m/b,D,Z cfg/retry-mode#legacy Botocore/1.39.17', 'X-Amzn-Trace-Id': 'Root=1-692c73f4-1ed9ccacf77f74d4f28a975e;Parent=39cbf63ae2e997a9;Sampled=0;Lineage=3:a9bb9278:0'}, 'body': b'', 'auth_path': '/fiscalshield-idp-dev-outputbucket-1b6w2y9hfuen/users/23b4b872-20a1-709e-ffef-d20a604f60b5/test_invoice.pdf/pages/17/result.json', 'url': 'https://fiscalshield-idp-dev-outputbucket-1b6w2y9hfuen.s3.eu-central-1.amazonaws.com/users/23b4b872-20a1-709e-ffef-d20a604f60b5/test_invoice.pdf/pages/17/result.json', 'context': {'client_region': 'eu-central-1', 'client_config': <botocore.config.Config object at 0xffff703b55e0>, 'has_streaming_input': False, 'auth_type': 'v4', 'unsigned_payload': None, 'auth_options': ['aws.auth#sigv4'], 's3_redirect': {'redirected': False, 'bucket': 'fiscalshield-idp-dev-outputbucket-1b6w2y9hfuen', 'params': {'Bucket': 'fiscalshield-idp-dev-outputbucket-1b6w2y9hfuen', 'Key': 'users/23b4b872-20a1-709e-ffef-d20a604f60b5/test_invoice.pdf/pages/17/result.json', 'ChecksumMode': 'ENABLED'}}, 'input_params': {'Bucket': 'fiscalshield-idp-dev-outputbucket-1b6w2y9hfuen', 'Key': 'users/23b4b872-20a1-709e-ffef-d20a604f60b5/test_invoice.pdf/pages/17/result.json'}, 'signing': {'region': 'eu-central-1', 'signing_name': 's3', 'disableDoubleEncoding': True}, 'endpoint_properties': {'authSchemes': [{'disableDoubleEncoding': True, 'name': 'sigv4', 'signingName': 's3', 'signingRegion': 'eu-central-1'}]}, 'checksum': {'response_algorithms': ['crc32', 'sha1', 'sha256']}}}
+"
+1764520984757,"[DEBUG]	2025-11-30T16:43:04.757Z	72e452af-9de0-4b81-94d4-203b311e345d	Event request-created.s3.GetObject: calling handler <bound method RequestSigner.handler of <botocore.signers.RequestSigner object at 0xffff703b56a0>>
+"
+1764520984757,"[DEBUG]	2025-11-30T16:43:04.757Z	72e452af-9de0-4b81-94d4-203b311e345d	Event choose-signer.s3.GetObject: calling handler <function set_operation_specific_signer at 0xffff83e12480>
+"
+1764520984757,"[DEBUG]	2025-11-30T16:43:04.757Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-sign.s3.GetObject: calling handler <function remove_arn_from_signing_path at 0xffff83cb8cc0>
+"
+1764520984757,"[DEBUG]	2025-11-30T16:43:04.757Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-sign.s3.GetObject: calling handler <function _set_extra_headers_for_unsigned_request at 0xffff83cb9300>
+"
+1764520984757,"[DEBUG]	2025-11-30T16:43:04.757Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-sign.s3.GetObject: calling handler <bound method S3ExpressIdentityResolver.resolve_s3express_identity of <botocore.utils.S3ExpressIdentityResolver object at 0xffff703f3d10>>
+"
+1764520984758,"[DEBUG]	2025-11-30T16:43:04.758Z	72e452af-9de0-4b81-94d4-203b311e345d	Calculating signature using v4 auth.
+"
+1764520984758,"[DEBUG]	2025-11-30T16:43:04.758Z	72e452af-9de0-4b81-94d4-203b311e345d	CanonicalRequest:
+"
+1764520984758,"GET
+"
+1764520984758,"/users/23b4b872-20a1-709e-ffef-d20a604f60b5/test_invoice.pdf/pages/17/result.json
+"
+1764520984758,"host:fiscalshield-idp-dev-outputbucket-1b6w2y9hfuen.s3.eu-central-1.amazonaws.com
+"
+1764520984758,"x-amz-checksum-mode:ENABLED
+"
+1764520984758,"x-amz-content-sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+"
+1764520984758,"x-amz-date:20251130T164304Z
+"
+1764520984758,"x-amz-security-token:IQoJb3JpZ2luX2VjECEaDGV1LWNlbnRyYWwtMSJGMEQCIDlOB+3kIPy7r0bZAqILETYKgKZRqyYlwacGFGc5koKnAiB07tCzno16ubuq6dyx8sj4Z/29AyyHrLriYWkT3C8idyrfAwjq//////////8BEAAaDDg2NDg5OTg0ODA2MiIMtEiFLF6HvtxD2yIoKrMD2vu09KQieiigbe7A5Msoyr7C7MlS2fvxG1ftV1F5nMf/5l00AEG3/p4H1nU2GSwvv8Skzo4GTBrI9XFiu/8u9OPXHSl0UXJWDB+kBW2W17gbSnXR2i5ITiJqhX/ftIzy4DPdHCD0r5CjkaW+WcFqXzmw2hwkgEzmZ2syKDtaWikW9BCvmkUD21m75kBgrRgFvcOhd7laHX0+HpLIXUXP9DWKRdqZ8Dp986ya44X41owUU6v9urjkGMDSucOxFszM0cTHnO6jjpo3sfZZWgWMimVpcrge9YQyrYiT2Yo0ywJXpbQJMcTKFTLPuvXx7onzCVobicLx1ZcxY8xEPArYrL2GvyIpV5YOf/EfaAbkMf05Mo69Hx8lLohQhHweLubg8eeLFEicQ7CUZhafxMu3mJms/CXB0oU+cOGEhy3/LgG+ZKPw4PgwPrts8lSHcgJRT0zzGLXNn0+0BhvoHUt5iVT72/pBaAdZBQsUlk8FdGt0ama+XFhow9Su0+bKPUgLRexma6l85LWvm6ESdRMqbfVjz0CToPEQjIO+EVTbnbJrEomCuzcwO6GfVZZ93jJaT9jLMI7osckGOp8BHZOQtXY4E+beFr2tLeucvAVi96pkcZF9iS+gSJwdBwAt2VcFdJgpCT6dnygsPdVJhouJPVKNyt7J/0rHgxsyyk7QxQR+30Vik5nBciPnkvohGlv8MPsB7iUa3fSlaelG4B3UysqgEkhTvAAzAMz+XJpEmpGlcAWEiD7+DB00tPfBzzBBCEBQzjh4RejzrDy9nAgnARqiJ8pTDwlui34E
+"
+1764520984758,"host;x-amz-checksum-mode;x-amz-content-sha256;x-amz-date;x-amz-security-token
+"
+1764520984758,"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+"
+1764520984758,"[DEBUG]	2025-11-30T16:43:04.758Z	72e452af-9de0-4b81-94d4-203b311e345d	StringToSign:
+"
+1764520984758,"AWS4-HMAC-SHA256
+"
+1764520984758,"20251130T164304Z
+"
+1764520984758,"20251130/eu-central-1/s3/aws4_request
+"
+1764520984758,"6307706b720e815700bc3b4fa2aa40d4eb4affff2ec6884c1ff6ff8f13e594f5
+"
+1764520984758,"[DEBUG]	2025-11-30T16:43:04.758Z	72e452af-9de0-4b81-94d4-203b311e345d	Signature:
+"
+1764520984758,"4953e34680bd0b6e8416a5508ff52cc196589d2dd217872056a2ab7666fb45e2
+"
+1764520984758,"[DEBUG]	2025-11-30T16:43:04.758Z	72e452af-9de0-4b81-94d4-203b311e345d	Event request-created.s3.GetObject: calling handler <bound method UserAgentString.rebuild_and_replace_user_agent_handler of <botocore.useragent.UserAgentString object at 0xffff703f3590>>
+"
+1764520984759,"[DEBUG]	2025-11-30T16:43:04.759Z	72e452af-9de0-4b81-94d4-203b311e345d	Event request-created.s3.GetObject: calling handler <function add_retry_headers at 0xffff83cb8ae0>
+"
+1764520984759,"[DEBUG]	2025-11-30T16:43:04.759Z	72e452af-9de0-4b81-94d4-203b311e345d	Sending http request: <AWSPreparedRequest stream_output=True, method=GET, url=https://fiscalshield-idp-dev-outputbucket-1b6w2y9hfuen.s3.eu-central-1.amazonaws.com/users/23b4b872-20a1-709e-ffef-d20a604f60b5/test_invoice.pdf/pages/17/result.json, headers={'x-amz-checksum-mode': b'ENABLED', 'User-Agent': b'Boto3/1.39.7 md/Botocore#1.39.17 ua/2.1 os/linux#5.10.245-269.978.amzn2.aarch64 md/arch#aarch64 lang/python#3.12.12 md/pyimpl#CPython exec-env/AWS_Lambda_python3.12 m/b,D,Z cfg/retry-mode#legacy Botocore/1.39.17', 'X-Amzn-Trace-Id': b'Root=1-692c73f4-1ed9ccacf77f74d4f28a975e;Parent=39cbf63ae2e997a9;Sampled=0;Lineage=3:a9bb9278:0', 'X-Amz-Date': b'20251130T164304Z', 'X-Amz-Security-Token': b'IQoJb3JpZ2luX2VjECEaDGV1LWNlbnRyYWwtMSJGMEQCIDlOB+3kIPy7r0bZAqILETYKgKZRqyYlwacGFGc5koKnAiB07tCzno16ubuq6dyx8sj4Z/29AyyHrLriYWkT3C8idyrfAwjq//////////8BEAAaDDg2NDg5OTg0ODA2MiIMtEiFLF6HvtxD2yIoKrMD2vu09KQieiigbe7A5Msoyr7C7MlS2fvxG1ftV1F5nMf/5l00AEG3/p4H1nU2GSwvv8Skzo4GTBrI9XFiu/8u9OPXHSl0UXJWDB+kBW2W17gbSnXR2i5ITiJqhX/ftIzy4DPdHCD0r5CjkaW+WcFqXzmw2hwkgEzmZ2syKDtaWikW9BCvmkUD21m75kBgrRgFvcOhd7laHX0+HpLIXUXP9DWKRdqZ8Dp986ya44X41owUU6v9urjkGMDSucOxFszM0cTHnO6jjpo3sfZZWgWMimVpcrge9YQyrYiT2Yo0ywJXpbQJMcTKFTLPuvXx7onzCVobicLx1ZcxY8xEPArYrL2GvyIpV5YOf/EfaAbkMf05Mo69Hx8lLohQhHweLubg8eeLFEicQ7CUZhafxMu3mJms/CXB0oU+cOGEhy3/LgG+ZKPw4PgwPrts8lSHcgJRT0zzGLXNn0+0BhvoHUt5iVT72/pBaAdZBQsUlk8FdGt0ama+XFhow9Su0+bKPUgLRexma6l85LWvm6ESdRMqbfVjz0CToPEQjIO+EVTbnbJrEomCuzcwO6GfVZZ93jJaT9jLMI7osckGOp8BHZOQtXY4E+beFr2tLeucvAVi96pkcZF9iS+gSJwdBwAt2VcFdJgpCT6dnygsPdVJhouJPVKNyt7J/0rHgxsyyk7QxQR+30Vik5nBciPnkvohGlv8MPsB7iUa3fSlaelG4B3UysqgEkhTvAAzAMz+XJpEmpGlcAWEiD7+DB00tPfBzzBBCEBQzjh4RejzrDy9nAgnARqiJ8pTDwlui34E', 'X-Amz-Content-SHA256': b'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 'Authorization': b'AWS4-HMAC-SHA256 Credential=ASIA4SYAMK57AP6636FK/20251130/eu-central-1/s3/aws4_request, SignedHeaders=host;x-amz-checksum-mode;x-amz-content-sha256;x-amz-date;x-amz-security-token, Signature=4953e34680bd0b6e8416a5508ff52cc196589d2dd217872056a2ab7666fb45e2', 'amz-sdk-invocation-id': b'f74583d7-0f37-4e51-98a5-772c88d41966', 'amz-sdk-request': b'attempt=1'}>
+"
+1764520984759,"[DEBUG]	2025-11-30T16:43:04.759Z	72e452af-9de0-4b81-94d4-203b311e345d	Certificate path: /opt/python/certifi/cacert.pem
+"
+1764520984801,"[DEBUG]	2025-11-30T16:43:04.801Z	72e452af-9de0-4b81-94d4-203b311e345d	https://fiscalshield-idp-dev-outputbucket-1b6w2y9hfuen.s3.eu-central-1.amazonaws.com:443 ""GET /users/23b4b872-20a1-709e-ffef-d20a604f60b5/test_invoice.pdf/pages/17/result.json HTTP/1.1"" 200 446
+"
+1764520984801,"[DEBUG]	2025-11-30T16:43:04.801Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-parse.s3.GetObject: calling handler <function _handle_200_error at 0xffff83cb9080>
+"
+1764520984801,"[DEBUG]	2025-11-30T16:43:04.801Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-parse.s3.GetObject: calling handler <function handle_expires_header at 0xffff83cb8ea0>
+"
+1764520984801,"[DEBUG]	2025-11-30T16:43:04.801Z	72e452af-9de0-4b81-94d4-203b311e345d	Response headers: {'x-amz-id-2': 'D/nWkG7NFXGEJ8Pm6Ldoyyp5eflaGe0JmucLc24q992kFILG7wbIaQUPR/qc5WyfAqYvizgv09jd491wMZHuVbP2s2cWPc9f6P/bPqI0AAc=', 'x-amz-request-id': 'ZFZ8HS8MV6QQFMQW', 'Date': 'Sun, 30 Nov 2025 16:43:05 GMT', 'Last-Modified': 'Sun, 30 Nov 2025 16:42:49 GMT', 'x-amz-expiration': 'expiry-date=""Tue, 01 Dec 2026 00:00:00 GMT"", rule-id=""DeleteAfterNDays""', 'ETag': '""ac1c82a486db4533ae06c760e0d879fe""', 'x-amz-checksum-crc32': 'ZfaJbw==', 'x-amz-checksum-type': 'FULL_OBJECT', 'x-amz-server-side-encryption': 'aws:kms', 'x-amz-server-side-encryption-aws-kms-key-id': 'arn:aws:kms:eu-central-1:864899848062:key/a960f907-4d93-49c2-b05f-acc470fcf9cb', 'x-amz-version-id': 'hkWeJJNtrdDE.LwXCCVE_cGJN8PBML_N', 'Accept-Ranges': 'bytes', 'Content-Type': 'application/json', 'Content-Length': '446', 'Server': 'AmazonS3'}
+"
+1764520984801,"[DEBUG]	2025-11-30T16:43:04.801Z	72e452af-9de0-4b81-94d4-203b311e345d	Response body:
+"
+1764520984801,"<botocore.httpchecksum.StreamingChecksumBody object at 0xffff705420b0>
+"
+1764520984801,"[DEBUG]	2025-11-30T16:43:04.801Z	72e452af-9de0-4b81-94d4-203b311e345d	Event needs-retry.s3.GetObject: calling handler <function _update_status_code at 0xffff83cb91c0>
+"
+1764520984801,"[DEBUG]	2025-11-30T16:43:04.801Z	72e452af-9de0-4b81-94d4-203b311e345d	Event needs-retry.s3.GetObject: calling handler <botocore.retryhandler.RetryHandler object at 0xffff703f3ce0>
+"
+1764520984801,"[DEBUG]	2025-11-30T16:43:04.801Z	72e452af-9de0-4b81-94d4-203b311e345d	No retry needed.
+"
+1764520984801,"[DEBUG]	2025-11-30T16:43:04.801Z	72e452af-9de0-4b81-94d4-203b311e345d	Event needs-retry.s3.GetObject: calling handler <bound method S3RegionRedirectorv2.redirect_from_error of <botocore.utils.S3RegionRedirectorv2 object at 0xffff703f35f0>>
+"
+1764520984802,"[INFO]	2025-11-30T16:43:04.802Z	72e452af-9de0-4b81-94d4-203b311e345d	📄 Section text length: 446 chars
+"
+1764520984802,"[ERROR]	2025-11-30T16:43:04.802Z	72e452af-9de0-4b81-94d4-203b311e345d	❌ Error in LLM boundary detection: '
     ""id""'
 "
-1764450011129,"[WARNING]	2025-11-29T21:00:11.129Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	⚠️ Boundary detection/validation failed for section 2
+1764520984802,"[WARNING]	2025-11-30T16:43:04.802Z	72e452af-9de0-4b81-94d4-203b311e345d	⚠️ Boundary detection/validation failed for section 27
 "
-1764450011129,"[INFO]	2025-11-29T21:00:11.129Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Lambda metering for Classification: duration=7.000s, memory=4096.0MB, gb_seconds=28.0
+1764520984802,"[INFO]	2025-11-30T16:43:04.802Z	72e452af-9de0-4b81-94d4-203b311e345d	Lambda metering for Classification: duration=8.845s, memory=4096.0MB, gb_seconds=35.4
 "
-1764450011130,"[INFO]	2025-11-29T21:00:11.130Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Document size after classification: 22690 bytes
+1764520984802,"[INFO]	2025-11-30T16:43:04.802Z	72e452af-9de0-4b81-94d4-203b311e345d	Document size after classification: 29715 bytes
 "
-1764450011130,"[INFO]	2025-11-29T21:00:11.130Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Document size (22690 bytes) exceeds 0KB threshold, compressing to S3
+1764520984802,"[INFO]	2025-11-30T16:43:04.802Z	72e452af-9de0-4b81-94d4-203b311e345d	Document size (29715 bytes) exceeds 0KB threshold, compressing to S3
 "
-1764450011235,"[INFO]	2025-11-29T21:00:11.235Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Compressed document users/23b4b872-20a1-709e-ffef-d20a604f60b5/test_invoice.pdf to s3://fiscalshield-idp-dev-workingbucket-c1mept6rt9di/compressed_documents/users/23b4b872-20a1-709e-ffef-d20a604f60b5/test_invoice.pdf/1764450011134_classification_state.json
+1764520984802,"[DEBUG]	2025-11-30T16:43:04.802Z	72e452af-9de0-4b81-94d4-203b311e345d	Event choose-service-name: calling handler <function handle_service_name_alias at 0xffff83e10cc0>
 "
-1764450011236,"[INFO]	2025-11-29T21:00:11.236Z	7aa61c64-5fbd-41ef-bf15-428e99c89a41	Response: {""document"": {""id"": ""users/23b4b872-20a1-709e-ffef-d20a604f60b5/test_invoice.pdf"", ""document_id"": ""users/23b4b872-20a1-709e-ffef-d20a604f60b5/test_invoice.pdf"", ""s3_uri"": ""s3://fiscalshield-idp-dev-workingbucket-c1mept6rt9di/compressed_documents/users/23b4b872-20a1-709e-ffef-d20a604f60b5/test_invoice.pdf/1764450011134_classification_state.json"", ""timestamp"": ""1764450011134"", ""status"": ""CLASSIFYING"", ""num_pages"": 28, ""sections"": [{""section_id"": ""1"", ""classification"": ""invoice"", ""confidence"": 1.0}, {""section_id"": ""2"", ""classification"": ""invoice"", ""confidence"": 1.0}], ""compressed"": true, ""user_id"": ""23b4b872-20a1-709e-ffef-d20a604f60b5"", ""client_id"": ""15944206"", ""company_number"": ""15944206"", ""company_name"": ""TRESAI LIMITED""}}
+1764520984805,"[DEBUG]	2025-11-30T16:43:04.805Z	72e452af-9de0-4b81-94d4-203b311e345d	Event creating-client-class.s3: calling handler <function add_generate_presigned_post at 0xffff83dbc860>
 "
-1764450011241,"END RequestId: 7aa61c64-5fbd-41ef-bf15-428e99c89a41
+1764520984805,"[DEBUG]	2025-11-30T16:43:04.805Z	72e452af-9de0-4b81-94d4-203b311e345d	Event creating-client-class.s3: calling handler <function lazy_call.<locals>._handler at 0xffff838d54e0>
 "
-1764450011241,"REPORT RequestId: 7aa61c64-5fbd-41ef-bf15-428e99c89a41	Duration: 7111.29 ms	Billed Duration: 8206 ms	Memory Size: 4096 MB	Max Memory Used: 150 MB	Init Duration: 1094.45 ms	
+1764520984805,"[DEBUG]	2025-11-30T16:43:04.805Z	72e452af-9de0-4b81-94d4-203b311e345d	Event creating-client-class.s3: calling handler <function add_generate_presigned_url at 0xffff83dbc5e0>
+"
+1764520984805,"[DEBUG]	2025-11-30T16:43:04.805Z	72e452af-9de0-4b81-94d4-203b311e345d	Looking for endpoint for s3 via: environment_service
+"
+1764520984805,"[DEBUG]	2025-11-30T16:43:04.805Z	72e452af-9de0-4b81-94d4-203b311e345d	Looking for endpoint for s3 via: environment_global
+"
+1764520984805,"[DEBUG]	2025-11-30T16:43:04.805Z	72e452af-9de0-4b81-94d4-203b311e345d	Looking for endpoint for s3 via: config_service
+"
+1764520984805,"[DEBUG]	2025-11-30T16:43:04.805Z	72e452af-9de0-4b81-94d4-203b311e345d	Looking for endpoint for s3 via: config_global
+"
+1764520984805,"[DEBUG]	2025-11-30T16:43:04.805Z	72e452af-9de0-4b81-94d4-203b311e345d	No configured endpoint found.
+"
+1764520984806,"[DEBUG]	2025-11-30T16:43:04.806Z	72e452af-9de0-4b81-94d4-203b311e345d	Setting s3 timeout as (60, 60)
+"
+1764520984808,"[DEBUG]	2025-11-30T16:43:04.808Z	72e452af-9de0-4b81-94d4-203b311e345d	Registering retry handlers for service: s3
+"
+1764520984809,"[DEBUG]	2025-11-30T16:43:04.808Z	72e452af-9de0-4b81-94d4-203b311e345d	Registering S3 region redirector handler
+"
+1764520984809,"[DEBUG]	2025-11-30T16:43:04.809Z	72e452af-9de0-4b81-94d4-203b311e345d	Registering S3Express Identity Resolver
+"
+1764520984810,"[DEBUG]	2025-11-30T16:43:04.810Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-parameter-build.s3.PutObject: calling handler <function validate_ascii_metadata at 0xffff83e136a0>
+"
+1764520984810,"[DEBUG]	2025-11-30T16:43:04.810Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-parameter-build.s3.PutObject: calling handler <function sse_md5 at 0xffff83e12980>
+"
+1764520984810,"[DEBUG]	2025-11-30T16:43:04.810Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-parameter-build.s3.PutObject: calling handler <function convert_body_to_file_like_object at 0xffff83cb80e0>
+"
+1764520984810,"[DEBUG]	2025-11-30T16:43:04.810Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-parameter-build.s3.PutObject: calling handler <function validate_bucket_name at 0xffff83e128e0>
+"
+1764520984810,"[DEBUG]	2025-11-30T16:43:04.810Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-parameter-build.s3.PutObject: calling handler <function remove_bucket_from_url_paths_from_model at 0xffff83cb8b80>
+"
+1764520984810,"[DEBUG]	2025-11-30T16:43:04.810Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-parameter-build.s3.PutObject: calling handler <bound method S3RegionRedirectorv2.annotate_request_context of <botocore.utils.S3RegionRedirectorv2 object at 0xffff83f698b0>>
+"
+1764520984810,"[DEBUG]	2025-11-30T16:43:04.810Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-parameter-build.s3.PutObject: calling handler <bound method ClientCreator._inject_s3_input_parameters of <botocore.client.ClientCreator object at 0xffff7063a360>>
+"
+1764520984810,"[DEBUG]	2025-11-30T16:43:04.810Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-parameter-build.s3.PutObject: calling handler <function generate_idempotent_uuid at 0xffff83e12700>
+"
+1764520984810,"[DEBUG]	2025-11-30T16:43:04.810Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-parameter-build.s3.PutObject: calling handler <function _handle_request_validation_mode_member at 0xffff83cb9260>
+"
+1764520984810,"[DEBUG]	2025-11-30T16:43:04.810Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-endpoint-resolution.s3: calling handler <function customize_endpoint_resolver_builtins at 0xffff83cb8d60>
+"
+1764520984810,"[DEBUG]	2025-11-30T16:43:04.810Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-endpoint-resolution.s3: calling handler <bound method S3RegionRedirectorv2.redirect_from_cache of <botocore.utils.S3RegionRedirectorv2 object at 0xffff83f698b0>>
+"
+1764520984810,"[DEBUG]	2025-11-30T16:43:04.810Z	72e452af-9de0-4b81-94d4-203b311e345d	Calling endpoint provider with parameters: {'Bucket': 'fiscalshield-idp-dev-workingbucket-c1mept6rt9di', 'Region': 'eu-central-1', 'UseFIPS': False, 'UseDualStack': False, 'ForcePathStyle': False, 'Accelerate': False, 'UseGlobalEndpoint': False, 'Key': 'compressed_documents/users/23b4b872-20a1-709e-ffef-d20a604f60b5/test_invoice.pdf/1764520984809_classification_state.json', 'DisableMultiRegionAccessPoints': False, 'UseArnRegion': True}
+"
+1764520984810,"[DEBUG]	2025-11-30T16:43:04.810Z	72e452af-9de0-4b81-94d4-203b311e345d	Endpoint provider result: https://fiscalshield-idp-dev-workingbucket-c1mept6rt9di.s3.eu-central-1.amazonaws.com
+"
+1764520984810,"[DEBUG]	2025-11-30T16:43:04.810Z	72e452af-9de0-4b81-94d4-203b311e345d	Selecting from endpoint provider's list of auth schemes: ""sigv4"". User selected auth scheme is: ""None""
+"
+1764520984810,"[DEBUG]	2025-11-30T16:43:04.810Z	72e452af-9de0-4b81-94d4-203b311e345d	Selected auth type ""v4"" as ""v4"" with signing context params: {'region': 'eu-central-1', 'signing_name': 's3', 'disableDoubleEncoding': True}
+"
+1764520984811,"[DEBUG]	2025-11-30T16:43:04.811Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-call.s3.PutObject: calling handler <function add_expect_header at 0xffff83e12ca0>
+"
+1764520984811,"[DEBUG]	2025-11-30T16:43:04.811Z	72e452af-9de0-4b81-94d4-203b311e345d	Adding expect 100 continue header to request.
+"
+1764520984811,"[DEBUG]	2025-11-30T16:43:04.811Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-call.s3.PutObject: calling handler <bound method S3ExpressIdentityResolver.apply_signing_cache_key of <botocore.utils.S3ExpressIdentityResolver object at 0xffff705d75f0>>
+"
+1764520984811,"[DEBUG]	2025-11-30T16:43:04.811Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-call.s3.PutObject: calling handler <function add_recursion_detection_header at 0xffff83e10fe0>
+"
+1764520984811,"[DEBUG]	2025-11-30T16:43:04.811Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-call.s3.PutObject: calling handler <function inject_api_version_header_if_needed at 0xffff83cb8220>
+"
+1764520984811,"[DEBUG]	2025-11-30T16:43:04.811Z	72e452af-9de0-4b81-94d4-203b311e345d	Making request for OperationModel(name=PutObject) with params: {'url_path': '/compressed_documents/users/23b4b872-20a1-709e-ffef-d20a604f60b5/test_invoice.pdf/1764520984809_classification_state.json', 'query_string': {}, 'method': 'PUT', 'headers': {'Content-Type': 'application/json', 'User-Agent': 'Boto3/1.39.7 md/Botocore#1.39.17 ua/2.1 os/linux#5.10.245-269.978.amzn2.aarch64 md/arch#aarch64 lang/python#3.12.12 md/pyimpl#CPython exec-env/AWS_Lambda_python3.12 m/b,D,Z cfg/retry-mode#legacy Botocore/1.39.17', 'Expect': '100-continue', 'X-Amzn-Trace-Id': 'Root=1-692c73f4-1ed9ccacf77f74d4f28a975e;Parent=39cbf63ae2e997a9;Sampled=0;Lineage=3:a9bb9278:0', 'Transfer-Encoding': 'chunked', 'Content-Encoding': 'aws-chunked', 'X-Amz-Trailer': 'x-amz-checksum-crc32', 'X-Amz-Decoded-Content-Length': '29715', 'x-amz-sdk-checksum-algorithm': 'CRC32'}, 'body': <botocore.httpchecksum.AwsChunkedWrapper object at 0xffff70530bf0>, 'auth_path': '/fiscalshield-idp-dev-workingbucket-c1mept6rt9di/compressed_documents/users/23b4b872-20a1-709e-ffef-d20a604f60b5/test_invoice.pdf/1764520984809_classification_state.json', 'url': 'https://fiscalshield-idp-dev-workingbucket-c1mept6rt9di.s3.eu-central-1.amazonaws.com/compressed_documents/users/23b4b872-20a1-709e-ffef-d20a604f60b5/test_invoice.pdf/1764520984809_classification_state.json', 'context': {'client_region': 'eu-central-1', 'client_config': <botocore.config.Config object at 0xffff703b48c0>, 'has_streaming_input': True, 'auth_type': 'v4', 'unsigned_payload': None, 'auth_options': ['aws.auth#sigv4'], 's3_redirect': {'redirected': False, 'bucket': 'fiscalshield-idp-dev-workingbucket-c1mept6rt9di', 'params': {'Bucket': 'fiscalshield-idp-dev-workingbucket-c1mept6rt9di', 'Key': 'compressed_documents/users/23b4b872-20a1-709e-ffef-d20a604f60b5/test_invoice.pdf/1764520984809_classification_state.json', 'Body': <_io.BytesIO object at 0xffff706f1a80>, 'ContentType': 'application/json'}}, 'input_params': {'Bucket': 'fiscalshield-idp-dev-workingbucket-c1mept6rt9di', 'Key': 'compressed_documents/users/23b4b872-20a1-709e-ffef-d20a604f60b5/test_invoice.pdf/1764520984809_classification_state.json'}, 'signing': {'region': 'eu-central-1', 'signing_name': 's3', 'disableDoubleEncoding': True}, 'endpoint_properties': {'authSchemes': [{'disableDoubleEncoding': True, 'name': 'sigv4', 'signingName': 's3', 'signingRegion': 'eu-central-1'}]}, 'checksum': {'request_algorithm_header': {'name': 'x-amz-sdk-checksum-algorithm', 'value': 'CRC32'}, 'request_algorithm': {'algorithm': 'crc32', 'in': 'trailer', 'name': 'x-amz-checksum-crc32'}}}}
+"
+1764520984811,"[DEBUG]	2025-11-30T16:43:04.811Z	72e452af-9de0-4b81-94d4-203b311e345d	Event request-created.s3.PutObject: calling handler <bound method RequestSigner.handler of <botocore.signers.RequestSigner object at 0xffff703b7800>>
+"
+1764520984811,"[DEBUG]	2025-11-30T16:43:04.811Z	72e452af-9de0-4b81-94d4-203b311e345d	Event choose-signer.s3.PutObject: calling handler <function set_operation_specific_signer at 0xffff83e12480>
+"
+1764520984811,"[DEBUG]	2025-11-30T16:43:04.811Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-sign.s3.PutObject: calling handler <function remove_arn_from_signing_path at 0xffff83cb8cc0>
+"
+1764520984811,"[DEBUG]	2025-11-30T16:43:04.811Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-sign.s3.PutObject: calling handler <function _set_extra_headers_for_unsigned_request at 0xffff83cb9300>
+"
+1764520984811,"[DEBUG]	2025-11-30T16:43:04.811Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-sign.s3.PutObject: calling handler <bound method S3ExpressIdentityResolver.resolve_s3express_identity of <botocore.utils.S3ExpressIdentityResolver object at 0xffff705d75f0>>
+"
+1764520984812,"[DEBUG]	2025-11-30T16:43:04.812Z	72e452af-9de0-4b81-94d4-203b311e345d	Calculating signature using v4 auth.
+"
+1764520984812,"[DEBUG]	2025-11-30T16:43:04.812Z	72e452af-9de0-4b81-94d4-203b311e345d	CanonicalRequest:
+"
+1764520984812,"PUT
+"
+1764520984812,"/compressed_documents/users/23b4b872-20a1-709e-ffef-d20a604f60b5/test_invoice.pdf/1764520984809_classification_state.json
+"
+1764520984812,"content-encoding:aws-chunked
+"
+1764520984812,"content-type:application/json
+"
+1764520984812,"host:fiscalshield-idp-dev-workingbucket-c1mept6rt9di.s3.eu-central-1.amazonaws.com
+"
+1764520984812,"x-amz-content-sha256:STREAMING-UNSIGNED-PAYLOAD-TRAILER
+"
+1764520984812,"x-amz-date:20251130T164304Z
+"
+1764520984812,"x-amz-decoded-content-length:29715
+"
+1764520984812,"x-amz-sdk-checksum-algorithm:CRC32
+"
+1764520984812,"x-amz-security-token:IQoJb3JpZ2luX2VjECEaDGV1LWNlbnRyYWwtMSJGMEQCIDlOB+3kIPy7r0bZAqILETYKgKZRqyYlwacGFGc5koKnAiB07tCzno16ubuq6dyx8sj4Z/29AyyHrLriYWkT3C8idyrfAwjq//////////8BEAAaDDg2NDg5OTg0ODA2MiIMtEiFLF6HvtxD2yIoKrMD2vu09KQieiigbe7A5Msoyr7C7MlS2fvxG1ftV1F5nMf/5l00AEG3/p4H1nU2GSwvv8Skzo4GTBrI9XFiu/8u9OPXHSl0UXJWDB+kBW2W17gbSnXR2i5ITiJqhX/ftIzy4DPdHCD0r5CjkaW+WcFqXzmw2hwkgEzmZ2syKDtaWikW9BCvmkUD21m75kBgrRgFvcOhd7laHX0+HpLIXUXP9DWKRdqZ8Dp986ya44X41owUU6v9urjkGMDSucOxFszM0cTHnO6jjpo3sfZZWgWMimVpcrge9YQyrYiT2Yo0ywJXpbQJMcTKFTLPuvXx7onzCVobicLx1ZcxY8xEPArYrL2GvyIpV5YOf/EfaAbkMf05Mo69Hx8lLohQhHweLubg8eeLFEicQ7CUZhafxMu3mJms/CXB0oU+cOGEhy3/LgG+ZKPw4PgwPrts8lSHcgJRT0zzGLXNn0+0BhvoHUt5iVT72/pBaAdZBQsUlk8FdGt0ama+XFhow9Su0+bKPUgLRexma6l85LWvm6ESdRMqbfVjz0CToPEQjIO+EVTbnbJrEomCuzcwO6GfVZZ93jJaT9jLMI7osckGOp8BHZOQtXY4E+beFr2tLeucvAVi96pkcZF9iS+gSJwdBwAt2VcFdJgpCT6dnygsPdVJhouJPVKNyt7J/0rHgxsyyk7QxQR+30Vik5nBciPnkvohGlv8MPsB7iUa3fSlaelG4B3UysqgEkhTvAAzAMz+XJpEmpGlcAWEiD7+DB00tPfBzzBBCEBQzjh4RejzrDy9nAgnARqiJ8pTDwlui34E
+"
+1764520984812,"x-amz-trailer:x-amz-checksum-crc32
+"
+1764520984812,"content-encoding;content-type;host;x-amz-content-sha256;x-amz-date;x-amz-decoded-content-length;x-amz-sdk-checksum-algorithm;x-amz-security-token;x-amz-trailer
+"
+1764520984812,"STREAMING-UNSIGNED-PAYLOAD-TRAILER
+"
+1764520984812,"[DEBUG]	2025-11-30T16:43:04.812Z	72e452af-9de0-4b81-94d4-203b311e345d	StringToSign:
+"
+1764520984812,"AWS4-HMAC-SHA256
+"
+1764520984812,"20251130T164304Z
+"
+1764520984812,"20251130/eu-central-1/s3/aws4_request
+"
+1764520984812,"e7ba8c2daf983a49df9b3d9b822e99b26162b4a95eb242a5b325c0872121740c
+"
+1764520984812,"[DEBUG]	2025-11-30T16:43:04.812Z	72e452af-9de0-4b81-94d4-203b311e345d	Signature:
+"
+1764520984812,"840c613ec0488c09b7181525ecc76e4423975d1f3a950a98a264f509516e8a01
+"
+1764520984812,"[DEBUG]	2025-11-30T16:43:04.812Z	72e452af-9de0-4b81-94d4-203b311e345d	Event request-created.s3.PutObject: calling handler <bound method UserAgentString.rebuild_and_replace_user_agent_handler of <botocore.useragent.UserAgentString object at 0xffff705d7530>>
+"
+1764520984812,"[DEBUG]	2025-11-30T16:43:04.812Z	72e452af-9de0-4b81-94d4-203b311e345d	Event request-created.s3.PutObject: calling handler <function add_retry_headers at 0xffff83cb8ae0>
+"
+1764520984812,"[DEBUG]	2025-11-30T16:43:04.812Z	72e452af-9de0-4b81-94d4-203b311e345d	Sending http request: <AWSPreparedRequest stream_output=False, method=PUT, url=https://fiscalshield-idp-dev-workingbucket-c1mept6rt9di.s3.eu-central-1.amazonaws.com/compressed_documents/users/23b4b872-20a1-709e-ffef-d20a604f60b5/test_invoice.pdf/1764520984809_classification_state.json, headers={'Content-Type': b'application/json', 'User-Agent': b'Boto3/1.39.7 md/Botocore#1.39.17 ua/2.1 os/linux#5.10.245-269.978.amzn2.aarch64 md/arch#aarch64 lang/python#3.12.12 md/pyimpl#CPython exec-env/AWS_Lambda_python3.12 m/U,b,D,Z cfg/retry-mode#legacy Botocore/1.39.17', 'Expect': b'100-continue', 'X-Amzn-Trace-Id': b'Root=1-692c73f4-1ed9ccacf77f74d4f28a975e;Parent=39cbf63ae2e997a9;Sampled=0;Lineage=3:a9bb9278:0', 'Transfer-Encoding': b'chunked', 'Content-Encoding': b'aws-chunked', 'X-Amz-Trailer': b'x-amz-checksum-crc32', 'X-Amz-Decoded-Content-Length': b'29715', 'x-amz-sdk-checksum-algorithm': b'CRC32', 'X-Amz-Date': b'20251130T164304Z', 'X-Amz-Security-Token': b'IQoJb3JpZ2luX2VjECEaDGV1LWNlbnRyYWwtMSJGMEQCIDlOB+3kIPy7r0bZAqILETYKgKZRqyYlwacGFGc5koKnAiB07tCzno16ubuq6dyx8sj4Z/29AyyHrLriYWkT3C8idyrfAwjq//////////8BEAAaDDg2NDg5OTg0ODA2MiIMtEiFLF6HvtxD2yIoKrMD2vu09KQieiigbe7A5Msoyr7C7MlS2fvxG1ftV1F5nMf/5l00AEG3/p4H1nU2GSwvv8Skzo4GTBrI9XFiu/8u9OPXHSl0UXJWDB+kBW2W17gbSnXR2i5ITiJqhX/ftIzy4DPdHCD0r5CjkaW+WcFqXzmw2hwkgEzmZ2syKDtaWikW9BCvmkUD21m75kBgrRgFvcOhd7laHX0+HpLIXUXP9DWKRdqZ8Dp986ya44X41owUU6v9urjkGMDSucOxFszM0cTHnO6jjpo3sfZZWgWMimVpcrge9YQyrYiT2Yo0ywJXpbQJMcTKFTLPuvXx7onzCVobicLx1ZcxY8xEPArYrL2GvyIpV5YOf/EfaAbkMf05Mo69Hx8lLohQhHweLubg8eeLFEicQ7CUZhafxMu3mJms/CXB0oU+cOGEhy3/LgG+ZKPw4PgwPrts8lSHcgJRT0zzGLXNn0+0BhvoHUt5iVT72/pBaAdZBQsUlk8FdGt0ama+XFhow9Su0+bKPUgLRexma6l85LWvm6ESdRMqbfVjz0CToPEQjIO+EVTbnbJrEomCuzcwO6GfVZZ93jJaT9jLMI7osckGOp8BHZOQtXY4E+beFr2tLeucvAVi96pkcZF9iS+gSJwdBwAt2VcFdJgpCT6dnygsPdVJhouJPVKNyt7J/0rHgxsyyk7QxQR+30Vik5nBciPnkvohGlv8MPsB7iUa3fSlaelG4B3UysqgEkhTvAAzAMz+XJpEmpGlcAWEiD7+DB00tPfBzzBBCEBQzjh4RejzrDy9nAgnARqiJ8pTDwlui34E', 'X-Amz-Content-SHA256': b'STREAMING-UNSIGNED-PAYLOAD-TRAILER', 'Authorization': b'AWS4-HMAC-SHA256 Credential=ASIA4SYAMK57AP6636FK/20251130/eu-central-1/s3/aws4_request, SignedHeaders=content-encoding;content-type;host;x-amz-content-sha256;x-amz-date;x-amz-decoded-content-length;x-amz-sdk-checksum-algorithm;x-amz-security-token;x-amz-trailer, Signature=840c613ec0488c09b7181525ecc76e4423975d1f3a950a98a264f509516e8a01', 'amz-sdk-invocation-id': b'734b5926-d6ff-4685-abc2-ea0c070504b6', 'amz-sdk-request': b'attempt=1'}>
+"
+1764520984812,"[DEBUG]	2025-11-30T16:43:04.812Z	72e452af-9de0-4b81-94d4-203b311e345d	Certificate path: /opt/python/certifi/cacert.pem
+"
+1764520984812,"[DEBUG]	2025-11-30T16:43:04.812Z	72e452af-9de0-4b81-94d4-203b311e345d	Starting new HTTPS connection (1): fiscalshield-idp-dev-workingbucket-c1mept6rt9di.s3.eu-central-1.amazonaws.com:443
+"
+1764520984827,"[DEBUG]	2025-11-30T16:43:04.827Z	72e452af-9de0-4b81-94d4-203b311e345d	Waiting for 100 Continue response.
+"
+1764520984880,"[DEBUG]	2025-11-30T16:43:04.880Z	72e452af-9de0-4b81-94d4-203b311e345d	100 Continue response seen, now sending request body.
+"
+1764520984909,"[DEBUG]	2025-11-30T16:43:04.909Z	72e452af-9de0-4b81-94d4-203b311e345d	https://fiscalshield-idp-dev-workingbucket-c1mept6rt9di.s3.eu-central-1.amazonaws.com:443 ""PUT /compressed_documents/users/23b4b872-20a1-709e-ffef-d20a604f60b5/test_invoice.pdf/1764520984809_classification_state.json HTTP/1.1"" 200 0
+"
+1764520984909,"[DEBUG]	2025-11-30T16:43:04.909Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-parse.s3.PutObject: calling handler <function _handle_200_error at 0xffff83cb9080>
+"
+1764520984910,"[DEBUG]	2025-11-30T16:43:04.909Z	72e452af-9de0-4b81-94d4-203b311e345d	Event before-parse.s3.PutObject: calling handler <function handle_expires_header at 0xffff83cb8ea0>
+"
+1764520984910,"[DEBUG]	2025-11-30T16:43:04.910Z	72e452af-9de0-4b81-94d4-203b311e345d	Response headers: {'x-amz-id-2': '3yYyV/HAv0of3Sp4EmbemmBaACfFrTYbYlY69bGGX5ziW+2wZomV9qeVHqXj+oFUR5dxe91tE5/xFS1XqDyDe9SGuOA7DskGypz5sUEFJDE=', 'x-amz-request-id': 'ZFZ4TVE6VBNJ773Y', 'Date': 'Sun, 30 Nov 2025 16:43:05 GMT', 'x-amz-version-id': 'Gow86pYVclugGy4ay2pPq_kajTuZRCmS', 'x-amz-expiration': 'expiry-date=""Wed, 31 Dec 2025 00:00:00 GMT"", rule-id=""DeleteAfterNDays""', 'x-amz-server-side-encryption': 'aws:kms', 'x-amz-server-side-encryption-aws-kms-key-id': 'arn:aws:kms:eu-central-1:864899848062:key/a960f907-4d93-49c2-b05f-acc470fcf9cb', 'ETag': '""06e875a502fcab85fe98eec137090518""', 'x-amz-checksum-crc32': 'zzGn+Q==', 'x-amz-checksum-type': 'FULL_OBJECT', 'Content-Length': '0', 'Server': 'AmazonS3'}
+"
+1764520984910,"[DEBUG]	2025-11-30T16:43:04.910Z	72e452af-9de0-4b81-94d4-203b311e345d	Response body:
+"
+1764520984910,"b''
+"
+1764520984910,"[DEBUG]	2025-11-30T16:43:04.910Z	72e452af-9de0-4b81-94d4-203b311e345d	Event needs-retry.s3.PutObject: calling handler <function _update_status_code at 0xffff83cb91c0>
+"
+1764520984910,"[DEBUG]	2025-11-30T16:43:04.910Z	72e452af-9de0-4b81-94d4-203b311e345d	Event needs-retry.s3.PutObject: calling handler <botocore.retryhandler.RetryHandler object at 0xffff705d78f0>
+"
+1764520984910,"[DEBUG]	2025-11-30T16:43:04.910Z	72e452af-9de0-4b81-94d4-203b311e345d	No retry needed.
+"
+1764520984910,"[DEBUG]	2025-11-30T16:43:04.910Z	72e452af-9de0-4b81-94d4-203b311e345d	Event needs-retry.s3.PutObject: calling handler <bound method S3RegionRedirectorv2.redirect_from_error of <botocore.utils.S3RegionRedirectorv2 object at 0xffff83f698b0>>
+"
+1764520984910,"[INFO]	2025-11-30T16:43:04.910Z	72e452af-9de0-4b81-94d4-203b311e345d	Compressed document users/23b4b872-20a1-709e-ffef-d20a604f60b5/test_invoice.pdf to s3://fiscalshield-idp-dev-workingbucket-c1mept6rt9di/compressed_documents/users/23b4b872-20a1-709e-ffef-d20a604f60b5/test_invoice.pdf/1764520984809_classification_state.json
+"
+1764520984912,"[INFO]	2025-11-30T16:43:04.911Z	72e452af-9de0-4b81-94d4-203b311e345d	Response: {""document"": {""id"": ""users/23b4b872-20a1-709e-ffef-d20a604f60b5/test_invoice.pdf"", ""document_id"": ""users/23b4b872-20a1-709e-ffef-d20a604f60b5/test_invoice.pdf"", ""s3_uri"": ""s3://fiscalshield-idp-dev-workingbucket-c1mept6rt9di/compressed_documents/users/23b4b872-20a1-709e-ffef-d20a604f60b5/test_invoice.pdf/1764520984809_classification_state.json"", ""timestamp"": ""1764520984809"", ""status"": ""CLASSIFYING"", ""num_pages"": 28, ""sections"": [{""section_id"": ""1"", ""classification"": ""invoice"", ""confidence"": 1.0}, {""section_id"": ""2"", ""classification"": ""invoice"", ""confidence"": 1.0}, {""section_id"": ""3"", ""classification"": ""invoice"", ""confidence"": 1.0}, {""section_id"": ""4"", ""classification"": ""invoice"", ""confidence"": 1.0}, {""section_id"": ""5"", ""classification"": ""invoice"", ""confidence"": 1.0}, {""section_id"": ""6"", ""classification"": ""invoice"", ""confidence"": 1.0}, {""section_id"": ""7"", ""classification"": ""invoice"", ""confidence"": 1.0}, {""section_id"": ""8"", ""classification"": ""invoice"", ""confidence"": 1.0}, {""section_id"": ""9"", ""classification"": ""invoice"", ""confidence"": 1.0}, {""section_id"": ""10"", ""classification"": ""invoice"", ""confidence"": 1.0}, {""section_id"": ""11"", ""classification"": ""invoice"", ""confidence"": 1.0}, {""section_id"": ""12"", ""classification"": ""invoice"", ""confidence"": 1.0}, {""section_id"": ""13"", ""classification"": ""invoice"", ""confidence"": 1.0}, {""section_id"": ""14"", ""classification"": ""invoice"", ""confidence"": 1.0}, {""section_id"": ""15"", ""classification"": ""invoice"", ""confidence"": 1.0}, {""section_id"": ""16"", ""classification"": ""invoice"", ""confidence"": 1.0}, {""section_id"": ""17"", ""classification"": ""invoice"", ""confidence"": 1.0}, {""section_id"": ""18"", ""classification"": ""invoice"", ""confidence"": 1.0}, {""section_id"": ""19"", ""classification"": ""invoice"", ""confidence"": 1.0}, {""section_id"": ""20"", ""classification"": ""invoice"", ""confidence"": 1.0}, {""section_id"": ""21"", ""classification"": ""invoice"", ""confidence"": 1.0}, {""section_id"": ""22"", ""classification"": ""invoice"", ""confidence"": 1.0}, {""section_id"": ""23"", ""classification"": ""invoice"", ""confidence"": 1.0}, {""section_id"": ""24"", ""classification"": ""invoice"", ""confidence"": 1.0}, {""section_id"": ""25"", ""classification"": ""invoice"", ""confidence"": 1.0}, {""section_id"": ""26"", ""classification"": ""invoice"", ""confidence"": 1.0}, {""section_id"": ""27"", ""classification"": ""invoice"", ""confidence"": 1.0}], ""compressed"": true, ""user_id"": ""23b4b872-20a1-709e-ffef-d20a604f60b5"", ""client_id"": ""15944206"", ""company_number"": ""15944206"", ""company_name"": ""TRESAI LIMITED""}}
+"
+1764520984917,"END RequestId: 72e452af-9de0-4b81-94d4-203b311e345d
+"
+1764520984917,"REPORT RequestId: 72e452af-9de0-4b81-94d4-203b311e345d	Duration: 8959.28 ms	Billed Duration: 10163 ms	Memory Size: 4096 MB	Max Memory Used: 159 MB	Init Duration: 1202.75 ms	
 "

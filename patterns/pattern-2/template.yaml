@@ -363,6 +363,9 @@ Resources:
       BuildProjectName: !Ref Pattern2DockerBuildProject
       # Force rebuild when source changes (filename includes content hash)
       CodeLocation: !Sub "arn:${AWS::Partition}:s3:::${ArtifactBucket}/${ArtifactPrefix}/${Pattern2SourceZipfile}"
+      # Force rebuild on every deployment by including ImageVersion (which changes on every publish)
+      # This ensures code changes are always deployed even if ZIP hash collides
+      ImageVersion: !Ref ImageVersion
 
   Pattern2EcrRepositoryCleanup:
     Type: Custom::ECRRepositoryCleanup
