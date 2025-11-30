@@ -238,6 +238,9 @@ classification:
   enable_llm_boundary_detection: true
   boundary_detection_model: "arn:aws:bedrock:eu-central-1:864899848062:inference-profile/eu.anthropic.claude-3-5-sonnet-20240620-v1:0"  # Sonnet 3.5 for accuracy
   use_prompt_caching: false  # Inference profiles don't support prompt caching yet
+  boundary_min_coverage: 0.92          # Require 92% text coverage per section (Phase 2 default)
+  boundary_max_gap_ratio: 0.12         # Largest uncovered span allowed (fraction of section text)
+  fallback_pages_per_boundary: 2       # Deterministic fallback chunk size when LLM output is invalid
   
   # Page count validation (enforced in queue_sender Lambda)
   max_pages: 500  # Maximum pages allowed per uploaded PDF file

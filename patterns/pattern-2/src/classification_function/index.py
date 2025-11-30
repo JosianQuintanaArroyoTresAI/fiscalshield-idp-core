@@ -381,11 +381,28 @@ def handler(event, context):
     # Uses Claude Sonnet 3.5 to intelligently detect invoice boundaries
     try:
         # Get configuration for boundary detection
-        enable_llm_boundaries = config.get("classification", {}).get("enable_llm_boundary_detection", True)
-        boundary_model_id = config.get("classification", {}).get(
+        classification_cfg = config.get("classification", {})
+
+        def _safe_float(value, default):
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return default
+
+        def _safe_int(value, default):
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return default
+
+        enable_llm_boundaries = classification_cfg.get("enable_llm_boundary_detection", True)
+        boundary_model_id = classification_cfg.get(
             "boundary_detection_model", DEFAULT_BOUNDARY_MODEL_ID
         )
-        use_caching = config.get("classification", {}).get("use_prompt_caching", True)
+        use_caching = classification_cfg.get("use_prompt_caching", True)
+        boundary_min_coverage = _safe_float(classification_cfg.get("boundary_min_coverage", 0.92), 0.92)
+        boundary_max_gap_ratio = _safe_float(classification_cfg.get("boundary_max_gap_ratio", 0.12), 0.12)
+        fallback_pages_per_boundary = _safe_int(classification_cfg.get("fallback_pages_per_boundary", 2), 2)
         
         if not enable_llm_boundaries:
             logger.info("⏭️  LLM boundary detection disabled in config")
@@ -402,7 +419,10 @@ def handler(event, context):
             detector = LLMBoundaryDetector(
                 region=region,
                 model_id=boundary_model_id,
-                use_caching=use_caching
+                use_caching=use_caching,
+                min_coverage=boundary_min_coverage,
+                max_gap_ratio=boundary_max_gap_ratio,
+                fallback_pages_per_boundary=fallback_pages_per_boundary
             )
             
             # Process each invoice section
@@ -426,25 +446,57 @@ def handler(event, context):
                                 section_text=section_text,
                                 section_pages=section.page_ids
                             )
-                            
-                            # Validate boundaries
-                            if boundaries and detector.validate_boundaries(boundaries, section_text):
-                                # Store validated boundaries
+
+                            validation_passed = False
+                            validation_reason = None
+                            if boundaries:
+                                validation_passed = detector.validate_boundaries(boundaries, section_text)
+                                if not validation_passed:
+                                    validation_reason = detector.last_validation_error or "validation_failed"
+                            else:
+                                validation_reason = "llm_returned_no_boundaries"
+
+                            if validation_passed:
                                 section.attributes['boundaries'] = boundaries
                                 section.attributes['boundary_strategy'] = 'llm_detected'
                                 section.attributes['invoice_count'] = len(boundaries)
                                 section.attributes['boundary_model'] = boundary_model_id
-                                
+                                metrics.put_metric("LLMBoundaryValidationPassed", len(boundaries))
                                 logger.info(
                                     f"✅ Detected {len(boundaries)} invoices in section {section.section_id}"
                                 )
                             else:
-                                # Validation failed or no boundaries - mark for chunked extraction
+                                metrics.put_metric("LLMBoundaryValidationFailed", 1)
                                 logger.warning(
                                     f"⚠️ Boundary detection/validation failed for section {section.section_id}"
                                 )
                                 section.attributes['boundary_strategy'] = 'validation_failed'
                                 section.attributes['invoice_count'] = 0
+                                if validation_reason:
+                                    section.attributes['boundary_failure_reason'] = validation_reason
+
+                                fallback_boundaries = detector.generate_page_chunk_fallback(
+                                    section_text=section_text,
+                                    section_pages=section.page_ids,
+                                    max_pages_per_boundary=fallback_pages_per_boundary
+                                )
+
+                                if fallback_boundaries:
+                                    section.attributes['boundaries'] = fallback_boundaries
+                                    section.attributes['boundary_strategy'] = 'fallback_page_chunks'
+                                    section.attributes['invoice_count'] = len(fallback_boundaries)
+                                    section.attributes['boundary_model'] = boundary_model_id
+                                    section.attributes['boundary_failure_reason'] = validation_reason or 'llm_unavailable'
+                                    metrics.put_metric("LLMBoundaryFallbackUsed", len(fallback_boundaries))
+                                    logger.info(
+                                        f"🛟 Applied fallback boundaries for section {section.section_id}"
+                                    )
+                                else:
+                                    logger.error(
+                                        f"❌ Fallback boundary generation failed for section {section.section_id}"
+                                    )
+                                    section.attributes['boundary_strategy'] = 'fallback_failed'
+                                    section.attributes['boundary_failure_reason'] = validation_reason or 'fallback_failed'
                                 
                         except Exception as e:
                             logger.error(f"❌ Error in LLM boundary detection: {str(e)}")

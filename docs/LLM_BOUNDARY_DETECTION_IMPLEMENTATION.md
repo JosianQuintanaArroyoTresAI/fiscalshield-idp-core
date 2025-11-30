@@ -9,7 +9,8 @@ We've successfully implemented **LLM-based boundary detection** for the classifi
 1. **New Module:** `lib/idp_common_pkg/idp_common/classification/llm_boundary_detection.py`
    - `LLMBoundaryDetector` class - Uses Claude Sonnet 3.5 for intelligent boundary detection
    - `get_section_text()` helper - Extracts section text with PAGE markers
-   - Comprehensive validation logic
+  - Comprehensive validation logic with coverage + gap heuristics (Phase 2)
+  - Deterministic fallback generator that emits PAGE-chunked ranges when LLM output is unusable
    - Prompt caching support (90% cost savings)
 
 2. **Updated:** `patterns/pattern-2/src/classification_function/index.py`
@@ -23,9 +24,17 @@ We've successfully implemented **LLM-based boundary detection** for the classifi
    - Prompt caching enabled
 
 4. **New Tests:** `tests/test_llm_boundary_detection.py`
-   - Unit tests for all boundary detection functions
-   - Validation tests
-   - Mock Bedrock integration tests
+  - Unit tests for all boundary detection functions
+  - Validation + fallback tests
+  - Mock Bedrock integration tests
+
+---
+
+## ♻️ Phase 2 Enhancements
+
+- **Stricter validation:** Minimum coverage now 92% with a max-gap heuristic (default 12%) and detailed coverage stats in logs.
+- **Automatic fallback:** Deterministic PAGE-chunk boundaries keep extraction moving when LLM output is empty or invalid.
+- **Observability:** New metrics (`LLMBoundaryValidationPassed`, `LLMBoundaryValidationFailed`, `LLMBoundaryFallbackUsed`) surface health in CloudWatch.
 
 ---
 
@@ -203,6 +212,15 @@ classification:
   boundary_detection_model: "anthropic.claude-3-7-sonnet-20250219-v1:0"
 ```
 
+### Phase 2 Validation & Fallback Controls
+
+```yaml
+classification:
+  boundary_min_coverage: 0.92       # % of characters covered by invoices
+  boundary_max_gap_ratio: 0.12      # Max uncovered span fraction (largest gap / text length)
+  fallback_pages_per_boundary: 2    # Number of pages per deterministic fallback chunk
+```
+
 ### Feature Flags
 
 ```yaml
@@ -218,14 +236,15 @@ classification:
 
 ### Validation Thresholds
 
-Adjust in code if needed (`llm_boundary_detection.py`):
+Runtime defaults (Phase 2) are configured via YAML, but you can still override in code if needed:
 
 ```python
 detector.validate_boundaries(
-    boundaries,
-    section_text,
-    min_coverage=0.80,  # Minimum 80% text coverage
-    max_boundaries=100  # Maximum 100 boundaries per section
+  boundaries,
+  section_text,
+  min_coverage=0.92,          # Minimum 92% coverage
+  max_boundaries=100,         # Maximum 100 boundaries per section
+  max_gap_ratio=0.12          # Largest uncovered span allowed
 )
 ```
 
@@ -235,22 +254,26 @@ detector.validate_boundaries(
 
 ### Key Metrics to Track
 
-1. **Boundary Detection Success Rate**
-   - CloudWatch Namespace: `TaxGuard/BoundaryDetection`
-   - Metric: `ValidationPassed`
-   - Target: >90%
+1. **Boundary Validation Health**
+  - Namespace: `TaxGuard/BoundaryDetection`
+  - Metrics: `LLMBoundaryValidationPassed`, `LLMBoundaryValidationFailed`
+  - Target: >90% pass, <10% fail
 
-2. **Boundaries Detected**
-   - Metric: `BoundariesDetected`
-   - Should match expected invoice count
+2. **Fallback Usage**
+  - Metric: `LLMBoundaryFallbackUsed`
+  - Expect near-zero steady state; spikes signal prompt/coverage drift
 
-3. **Token Usage**
-   - Check CloudWatch logs for token usage
-   - Cache hit rate should be >80% after first call
+3. **Boundaries Detected**
+  - Metric: `BoundariesDetected`
+  - Should align with `invoice_count` stored per section
 
-4. **Cost per Section**
-   - Sonnet 3.5: ~$0.06 per section (with caching: ~$0.02)
-   - Still saves $9+ in extraction costs
+4. **Token Usage**
+  - Check CloudWatch logs for token usage
+  - Cache hit rate should be >80% after first call
+
+5. **Cost per Section**
+  - Sonnet 3.5: ~$0.06 per section (with caching: ~$0.02)
+  - Still saves $9+ in extraction costs
 
 ### CloudWatch Insights Queries
 
@@ -293,13 +316,17 @@ logger.info(f"Section text preview: {section_text[:500]}")
 1. LLM returned overlapping boundaries
 2. Text coverage too low (<80%)
 3. Too many boundaries (>100)
+4. Largest uncovered gap exceeded threshold (>12%)
 
 **Check logs for:**
 ```
 ❌ Overlapping boundaries detected
 ⚠️ Low text coverage: 45.2%
+⚠️ Large uncovered region detected: 18.0% gap (allowed <12.0%)
 ❌ Too many boundaries: 150
 ```
+
+When this happens repeatedly, the Lambda now emits deterministic fallback metadata (`boundary_strategy=fallback_page_chunks`) so extraction can continue, but you should still investigate prompt drift.
 
 ### Issue: High costs
 

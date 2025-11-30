@@ -165,6 +165,19 @@ class TestLLMBoundaryDetector:
         result = detector.validate_boundaries(boundaries, section_text, min_coverage=0.80)
         assert result is False
     
+    def test_validate_boundaries_large_gap(self):
+        """Test boundary validation rejects large uncovered regions"""
+        detector = LLMBoundaryDetector(min_coverage=0.50, max_gap_ratio=0.05)
+        section_text = "x" * 1000
+        boundaries = [
+            {'id': 1, 'start_char': 0, 'end_char': 450, 'confidence': 'high'},
+            {'id': 2, 'start_char': 750, 'end_char': 1000, 'confidence': 'high'}
+        ]
+
+        result = detector.validate_boundaries(boundaries, section_text)
+        assert result is False
+        assert detector.last_validation_error == "gap_threshold_exceeded"
+
     def test_validate_boundaries_missing_fields(self):
         """Test boundary validation rejects boundaries with missing fields"""
         detector = LLMBoundaryDetector()
@@ -189,46 +202,48 @@ class TestLLMBoundaryDetector:
         result = detector.validate_boundaries(boundaries, section_text)
         assert result is False
     
-    @patch('boto3.client')
-    def test_detect_invoice_boundaries_success(self, mock_boto_client):
+    @patch('idp_common.classification.llm_boundary_detection.BedrockClient')
+    def test_detect_invoice_boundaries_success(self, mock_bedrock_client_cls):
         """Test successful boundary detection with mocked Bedrock response"""
-        # Mock Bedrock response
-        mock_bedrock = MagicMock()
-        mock_boto_client.return_value = mock_bedrock
+        mock_bedrock_client = MagicMock()
+        mock_bedrock_client_cls.return_value = mock_bedrock_client
+        
+        llm_payload = json.dumps([
+            {
+                'id': 1,
+                'start_char': 0,
+                'end_char': 500,
+                'confidence': 'high',
+                'page_numbers': [1],
+                'start_indicator': 'Invoice Number: INV-001',
+                'end_indicator': 'AMOUNT DUE: £780.00'
+            },
+            {
+                'id': 2,
+                'start_char': 501,
+                'end_char': 1000,
+                'confidence': 'high',
+                'page_numbers': [2],
+                'start_indicator': 'Invoice Number: INV-002',
+                'end_indicator': 'AMOUNT DUE: £1200.00'
+            }
+        ])
         
         mock_response = {
-            'body': MagicMock(
-                read=lambda: json.dumps({
-                    'content': [{'text': json.dumps([
-                        {
-                            'id': 1,
-                            'start_char': 0,
-                            'end_char': 500,
-                            'confidence': 'high',
-                            'page_numbers': [1],
-                            'start_indicator': 'Invoice Number: INV-001',
-                            'end_indicator': 'AMOUNT DUE: £780.00'
-                        },
-                        {
-                            'id': 2,
-                            'start_char': 501,
-                            'end_char': 1000,
-                            'confidence': 'high',
-                            'page_numbers': [2],
-                            'start_indicator': 'Invoice Number: INV-002',
-                            'end_indicator': 'AMOUNT DUE: £1200.00'
-                        }
-                    ])}],
-                    'usage': {
-                        'input_tokens': 1000,
-                        'output_tokens': 100,
-                        'cache_read_input_tokens': 900
+            'response': {
+                'output': {
+                    'message': {
+                        'content': [{'text': llm_payload}]
                     }
-                }).encode()
-            )
+                },
+                'usage': {
+                    'inputTokens': 1000,
+                    'outputTokens': 100
+                }
+            }
         }
         
-        mock_bedrock.invoke_model.return_value = mock_response
+        mock_bedrock_client.invoke_model.return_value = mock_response
         
         detector = LLMBoundaryDetector()
         boundaries = detector.detect_invoice_boundaries(
@@ -239,14 +254,13 @@ class TestLLMBoundaryDetector:
         assert len(boundaries) == 2
         assert boundaries[0]['id'] == 1
         assert boundaries[1]['id'] == 2
-        assert mock_bedrock.invoke_model.called
+        assert mock_bedrock_client.invoke_model.called
     
-    @patch('boto3.client')
-    def test_detect_invoice_boundaries_error_handling(self, mock_boto_client):
+    @patch('idp_common.classification.llm_boundary_detection.BedrockClient')
+    def test_detect_invoice_boundaries_error_handling(self, mock_bedrock_client_cls):
         """Test boundary detection handles Bedrock errors gracefully"""
-        # Mock Bedrock error
         mock_bedrock = MagicMock()
-        mock_boto_client.return_value = mock_bedrock
+        mock_bedrock_client_cls.return_value = mock_bedrock
         
         from botocore.exceptions import ClientError
         mock_bedrock.invoke_model.side_effect = ClientError(
@@ -261,6 +275,23 @@ class TestLLMBoundaryDetector:
         )
         
         assert boundaries == []
+
+    def test_generate_page_chunk_fallback(self):
+        """Test fallback boundary generation using PAGE markers"""
+        detector = LLMBoundaryDetector(fallback_pages_per_boundary=1)
+        fallback = detector.generate_page_chunk_fallback(SAMPLE_INVOICE_TEXT)
+        assert len(fallback) == 2
+        assert fallback[0]['page_numbers'] == [1]
+        assert fallback[0]['id'] == 1
+
+    def test_generate_page_chunk_fallback_without_markers(self):
+        """Test fallback boundary generation when no markers exist"""
+        detector = LLMBoundaryDetector()
+        text = "Invoice Number: 1\nTotal 10"
+        fallback = detector.generate_page_chunk_fallback(text, [])
+        assert len(fallback) == 1
+        assert fallback[0]['start_char'] == 0
+        assert fallback[0]['end_char'] == len(text)
 
 
 class TestGetSectionText:

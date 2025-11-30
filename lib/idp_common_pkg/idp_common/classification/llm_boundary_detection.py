@@ -8,6 +8,7 @@ Replaces regex-based semantic chunking with intelligent boundary identification
 
 import json
 import logging
+import re
 from typing import List, Dict, Any, Optional
 from botocore.exceptions import ClientError
 from idp_common.bedrock.client import BedrockClient
@@ -96,7 +97,10 @@ class LLMBoundaryDetector:
         self,
         region: str = "us-east-1",
         model_id: str = DEFAULT_BOUNDARY_MODEL_ID,
-        use_caching: bool = True
+        use_caching: bool = True,
+        min_coverage: float = 0.92,
+        max_gap_ratio: float = 0.12,
+        fallback_pages_per_boundary: int = 2
     ):
         """
         Initialize LLM boundary detector.
@@ -109,6 +113,11 @@ class LLMBoundaryDetector:
         self.region = region
         self.model_id = model_id
         self.use_caching = use_caching
+        self.min_coverage = min_coverage
+        self.max_gap_ratio = max_gap_ratio
+        self.fallback_pages_per_boundary = max(1, fallback_pages_per_boundary)
+        self.last_validation_details: Dict[str, Any] = {}
+        self.last_validation_error: Optional[str] = None
         self.bedrock_client = BedrockClient(region=region)
         
     def detect_invoice_boundaries(
@@ -266,8 +275,9 @@ class LLMBoundaryDetector:
         self,
         boundaries: List[Dict[str, Any]],
         section_text: str,
-        min_coverage: float = 0.80,
-        max_boundaries: int = 100
+        min_coverage: Optional[float] = None,
+        max_boundaries: int = 100,
+        max_gap_ratio: Optional[float] = None
     ) -> bool:
         """
         Validate that detected boundaries are reasonable.
@@ -287,8 +297,13 @@ class LLMBoundaryDetector:
         Returns:
             True if boundaries pass validation, False otherwise
         """
+        self.last_validation_details = {}
+        min_coverage = self.min_coverage if min_coverage is None else min_coverage
+        max_gap_ratio = self.max_gap_ratio if max_gap_ratio is None else max_gap_ratio
+
         if not boundaries:
             logger.warning("⚠️ No boundaries detected")
+            self.last_validation_error = "no_boundaries"
             return False
         
         try:
@@ -298,6 +313,14 @@ class LLMBoundaryDetector:
                 missing = [f for f in required_fields if f not in boundary]
                 if missing:
                     logger.error(f"❌ Boundary {idx} missing fields: {missing}")
+                    self.last_validation_error = f"missing_fields:{missing}"
+                    return False
+
+                if boundary['start_char'] >= boundary['end_char']:
+                    logger.error(
+                        f"❌ Invalid boundary {boundary.get('id')}: start_char >= end_char"
+                    )
+                    self.last_validation_error = "start_greater_than_end"
                     return False
             
             # Check 2: No overlapping boundaries
@@ -312,22 +335,56 @@ class LLMBoundaryDetector:
                         f"Invoice {current['id']} ends at {current['end_char']}, "
                         f"Invoice {next_boundary['id']} starts at {next_boundary['start_char']}"
                     )
+                    self.last_validation_error = "overlap_detected"
                     return False
             
             # Check 3: Boundaries cover most of text
-            total_coverage = sum(b['end_char'] - b['start_char'] for b in boundaries)
-            coverage_ratio = total_coverage / len(section_text) if len(section_text) > 0 else 0
+            total_coverage = 0
+            largest_gap = 0
+            previous_end = 0
+            text_length = len(section_text)
+
+            for boundary in sorted_boundaries:
+                start = boundary['start_char']
+                end = boundary['end_char']
+                gap = max(0, start - previous_end)
+                if gap > largest_gap:
+                    largest_gap = gap
+                total_coverage += max(0, end - start)
+                previous_end = end
+
+            tail_gap = max(0, text_length - previous_end)
+            if tail_gap > largest_gap:
+                largest_gap = tail_gap
+
+            coverage_ratio = total_coverage / text_length if text_length > 0 else 0
+            largest_gap_ratio = largest_gap / text_length if text_length > 0 else 0
+
+            logger.info(
+                f"📏 Coverage stats: {coverage_ratio:.1%} coverage, "
+                f"max gap {largest_gap_ratio:.1%}"
+            )
             
             if coverage_ratio < min_coverage:
                 logger.warning(
                     f"⚠️ Low text coverage: {coverage_ratio:.1%} "
                     f"(expected >{min_coverage:.0%})"
                 )
+                self.last_validation_error = "low_coverage"
+                return False
+
+            if max_gap_ratio is not None and largest_gap_ratio > max_gap_ratio:
+                logger.warning(
+                    f"⚠️ Large uncovered region detected: {largest_gap_ratio:.1%} gap "
+                    f"(allowed <{max_gap_ratio:.1%})"
+                )
+                self.last_validation_error = "gap_threshold_exceeded"
                 return False
             
             # Check 4: Reasonable boundary count
             if len(boundaries) > max_boundaries:
                 logger.error(f"❌ Too many boundaries: {len(boundaries)} (max {max_boundaries})")
+                self.last_validation_error = "too_many_boundaries"
                 return False
             
             # Check 5: Boundaries within text bounds
@@ -338,6 +395,7 @@ class LLMBoundaryDetector:
                         f"start={boundary['start_char']}, end={boundary['end_char']}, "
                         f"text_length={len(section_text)}"
                     )
+                    self.last_validation_error = "boundary_out_of_range"
                     return False
             
             # All checks passed
@@ -345,12 +403,127 @@ class LLMBoundaryDetector:
                 f"✅ Boundary validation passed: {len(boundaries)} invoices, "
                 f"{coverage_ratio:.1%} coverage"
             )
+            self.last_validation_details = {
+                "coverage_ratio": coverage_ratio,
+                "largest_gap_ratio": largest_gap_ratio,
+                "boundary_count": len(boundaries)
+            }
+            self.last_validation_error = None
             return True
             
         except Exception as e:
             logger.error(f"❌ Error during boundary validation: {str(e)}")
+            self.last_validation_error = str(e)
             return False
 
+    def generate_page_chunk_fallback(
+        self,
+        section_text: str,
+        section_pages: Optional[List[str]] = None,
+        max_pages_per_boundary: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        """Generate deterministic fallback boundaries using PAGE markers."""
+
+        if not section_text:
+            logger.warning("Cannot generate fallback boundaries without section text")
+            return []
+
+        pages_per_boundary = max_pages_per_boundary or self.fallback_pages_per_boundary
+        page_blocks = self._extract_page_blocks(section_text)
+
+        if section_pages and len(page_blocks) != len(section_pages):
+            logger.debug(
+                "Fallback page block count mismatch: text has %s markers, section has %s pages",
+                len(page_blocks),
+                len(section_pages)
+            )
+
+        if not page_blocks:
+            logger.info("Fallback using single boundary covering entire section")
+            return [
+                {
+                    "id": 1,
+                    "start_char": 0,
+                    "end_char": len(section_text),
+                    "confidence": "low",
+                    "page_numbers": [],
+                    "start_indicator": self._extract_indicator_snippet(section_text, 0, forward=True),
+                    "end_indicator": self._extract_indicator_snippet(section_text, len(section_text), forward=False)
+                }
+            ]
+
+        boundaries: List[Dict[str, Any]] = []
+        current_chunk: List[Dict[str, Any]] = []
+
+        for block in page_blocks:
+            current_chunk.append(block)
+            if len(current_chunk) >= pages_per_boundary:
+                boundaries.append(self._build_fallback_boundary(current_chunk, section_text))
+                current_chunk = []
+
+        if current_chunk:
+            boundaries.append(self._build_fallback_boundary(current_chunk, section_text))
+
+        for idx, boundary in enumerate(boundaries, start=1):
+            boundary["id"] = idx
+
+        logger.info(
+            f"🛟 Generated {len(boundaries)} fallback boundaries using {pages_per_boundary} page(s) per chunk"
+        )
+        return boundaries
+
+    def _extract_page_blocks(self, section_text: str) -> List[Dict[str, Any]]:
+        """Build page spans using PAGE markers in the section text."""
+        matches = list(re.finditer(r"\[PAGE:(\d+)\]", section_text))
+        page_blocks: List[Dict[str, Any]] = []
+
+        for idx, match in enumerate(matches):
+            start = match.end()
+            end = matches[idx + 1].start() if idx + 1 < len(matches) else len(section_text)
+            page_blocks.append(
+                {
+                    "page_number": int(match.group(1)),
+                    "start": start,
+                    "end": end,
+                }
+            )
+
+        return page_blocks
+
+    def _build_fallback_boundary(
+        self,
+        page_blocks: List[Dict[str, Any]],
+        section_text: str
+    ) -> Dict[str, Any]:
+        start_char = page_blocks[0]["start"]
+        end_char = page_blocks[-1]["end"]
+        return {
+            "id": 0,  # placeholder, set later
+            "start_char": start_char,
+            "end_char": end_char,
+            "confidence": "low",
+            "page_numbers": [block["page_number"] for block in page_blocks],
+            "start_indicator": self._extract_indicator_snippet(section_text, start_char, forward=True),
+            "end_indicator": self._extract_indicator_snippet(section_text, end_char, forward=False)
+        }
+
+    def _extract_indicator_snippet(
+        self,
+        text: str,
+        pivot: int,
+        forward: bool,
+        window: int = 120
+    ) -> str:
+        if forward:
+            snippet = text[pivot: min(len(text), pivot + window)]
+        else:
+            start = max(0, pivot - window)
+            snippet = text[start:pivot]
+
+        cleaned = snippet.strip()
+        if not cleaned:
+            return "fallback-boundary"
+        return cleaned
 
 def get_section_text(section, pages: Dict) -> str:
     """
