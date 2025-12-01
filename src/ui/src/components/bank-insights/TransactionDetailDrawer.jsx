@@ -34,17 +34,21 @@ const TransactionDetailDrawer = ({ transaction, visible, onDismiss }) => {
   const [sourceError, setSourceError] = useState(null);
   const [isFullScreen, setIsFullScreen] = useState(false);
 
+  // Extract page number early for use in useEffect dependency
+  const rawData = transaction?.rawData || {};
+  const pageNumber = rawData.SourcePage || transaction?.sourcePage;
+
   useEffect(() => {
+    // Reset all state when transaction or page changes
     setIsSourceVisible(false);
     setSourceDocumentUrl(null);
     setSourceError(null);
     setIsSourceLoading(false);
     setIsFullScreen(false);
-  }, [transaction?.id]);
+  }, [transaction?.id, pageNumber]);
 
   if (!transaction) return null;
 
-  const rawData = transaction.rawData || {};
   const isAnalyzed = transaction.analysisStatus === 'ANALYZED';
   const documentKey = resolveDocumentKey({
     s3Path: transaction.s3Path,
@@ -72,7 +76,7 @@ const TransactionDetailDrawer = ({ transaction, visible, onDismiss }) => {
   }
 
   // Construct page image URI from document URI (for snapshot view)
-  const pageNumber = rawData.SourcePage || transaction.sourcePage;
+  // pageNumber is calculated earlier for use in useEffect dependency
 
   // Debug: Log what we're searching for
   console.log('[TRANSACTION DRAWER PAGE DEBUG] Looking for page image:', {
@@ -570,7 +574,7 @@ const TransactionDetailDrawer = ({ transaction, visible, onDismiss }) => {
                   <Box>
                     {/* Thumbnail/Preview */}
                     {!isFullScreen && (
-                      <Box
+                      <div
                         onClick={() => setIsFullScreen(true)}
                         style={{
                           cursor: 'pointer',
@@ -597,22 +601,22 @@ const TransactionDetailDrawer = ({ transaction, visible, onDismiss }) => {
                           onMouseOver={(e) => (e.currentTarget.style.transform = 'scale(1.02)')}
                           onMouseOut={(e) => (e.currentTarget.style.transform = 'scale(1)')}
                         />
-                        <Box
-                          position="absolute"
-                          bottom="8px"
-                          right="8px"
-                          padding="xs"
+                        <div
                           style={{
+                            position: 'absolute',
+                            bottom: '8px',
+                            right: '8px',
                             background: 'rgba(0,0,0,0.7)',
                             color: 'white',
                             borderRadius: '4px',
                             fontSize: '12px',
                             padding: '4px 8px',
+                            pointerEvents: 'none',
                           }}
                         >
                           🔍 Click to enlarge
-                        </Box>
-                      </Box>
+                        </div>
+                      </div>
                     )}
 
                     {/* Full Screen View */}
@@ -638,11 +642,7 @@ const TransactionDetailDrawer = ({ transaction, visible, onDismiss }) => {
 
                     <Box padding={{ top: 's' }} textAlign="center">
                       <Box variant="small" color="text-body-secondary">
-                        {isFullScreen
-                          ? 'Full size view'
-                          : pageNumber
-                          ? `Page ${pageNumber} snapshot • Click to enlarge`
-                          : 'Click to enlarge'}
+                        {isFullScreen ? 'Full size view' : `Page ${pageNumber} snapshot`}
                       </Box>
                     </Box>
                   </Box>
