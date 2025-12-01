@@ -90,7 +90,7 @@ export const getPageImageFromDocuments = ({ documents = [], documentKeyCandidate
     documentKeyCandidates,
     pageNumber,
   });
-  
+
   if (!documents.length || !documentKeyCandidates.length) {
     console.log('[sourceDocumentUtils] Early return: no documents or candidates');
     return null;
@@ -104,19 +104,22 @@ export const getPageImageFromDocuments = ({ documents = [], documentKeyCandidate
 
   const matchingDocument = documents.find((doc) => keys.includes(doc?.objectKey));
   if (!matchingDocument) {
-    console.log('[sourceDocumentUtils] No matching document found. Available keys:', documents.map(d => d?.objectKey));
+    console.log(
+      '[sourceDocumentUtils] No matching document found. Available keys:',
+      documents.map((d) => d?.objectKey),
+    );
     return null;
   }
-  
+
   if (!matchingDocument.pages || matchingDocument.pages.length === 0) {
     console.log('[sourceDocumentUtils] Matching document has no pages:', matchingDocument.objectKey);
     return null;
   }
-  
+
   console.log('[sourceDocumentUtils] Found matching document:', {
     objectKey: matchingDocument.objectKey,
     pagesCount: matchingDocument.pages.length,
-    pageIds: matchingDocument.pages.map(p => p.Id),
+    pageIds: matchingDocument.pages.map((p) => p.Id),
   });
 
   if (!pageNumber) {
@@ -126,7 +129,7 @@ export const getPageImageFromDocuments = ({ documents = [], documentKeyCandidate
 
   const numericTarget = coerceNumber(pageNumber);
   console.log('[sourceDocumentUtils] Numeric target:', numericTarget);
-  
+
   if (numericTarget && numericTarget > 0) {
     const byIndex = matchingDocument.pages[numericTarget - 1];
     if (byIndex?.ImageUri) {

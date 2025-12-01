@@ -104,7 +104,7 @@ const InvoiceDetailDrawer = ({ invoice, visible, onDismiss }) => {
   // Construct page image URI from document URI (for snapshot view)
   // Invoices may span multiple pages, so we'll use the first page if available
   const pageNumber = rawData.SourcePage || invoice.sourcePage || rawData.PageNumber || 1;
-  
+
   // Debug: Log what we're searching for
   console.log('[INVOICE DRAWER PAGE DEBUG] Looking for page image:', {
     pageNumber,
@@ -118,18 +118,21 @@ const InvoiceDetailDrawer = ({ invoice, visible, onDismiss }) => {
     documentsCount: documents?.length,
     OutputBucket: settings?.OutputBucket,
   });
-  
+
   // Debug: Log what documents we have
   if (documents?.length > 0) {
-    console.log('[INVOICE DRAWER PAGE DEBUG] Available documents:', documents.map(doc => ({
-      objectKey: doc?.objectKey,
-      pagesCount: doc?.pages?.length,
-      firstPageId: doc?.pages?.[0]?.Id,
-      firstPageImageUri: doc?.pages?.[0]?.ImageUri,
-      allPageIds: doc?.pages?.map(p => p.Id),
-    })));
+    console.log(
+      '[INVOICE DRAWER PAGE DEBUG] Available documents:',
+      documents.map((doc) => ({
+        objectKey: doc?.objectKey,
+        pagesCount: doc?.pages?.length,
+        firstPageId: doc?.pages?.[0]?.Id,
+        firstPageImageUri: doc?.pages?.[0]?.ImageUri,
+        allPageIds: doc?.pages?.map((p) => p.Id),
+      })),
+    );
   }
-  
+
   const pageImageFromDocuments = getPageImageFromDocuments({
     documents,
     documentKeyCandidates: [documentKey, rawData.DocumentId, invoice?.s3Path],
@@ -141,7 +144,7 @@ const InvoiceDetailDrawer = ({ invoice, visible, onDismiss }) => {
     pageNumber,
   });
   const pageImageUri = pageImageFromDocuments || computedPageImageUri;
-  
+
   console.log('[INVOICE DRAWER PAGE DEBUG] Resolution result:', {
     pageImageFromDocuments,
     computedPageImageUri,
