@@ -368,10 +368,13 @@ Resources:
                 Action:
                   - s3:GetObject
                   - s3:PutObject
+                Resource:
+                  - !Sub "${EvaluationDataBucket.Arn}/*"
+              - Effect: Allow
+                Action:
                   - s3:ListBucket
                 Resource:
                   - !GetAtt EvaluationDataBucket.Arn
-                  - !Sub "${EvaluationDataBucket.Arn}/*"
 
   # =========================================================================
   # LAMBDA FUNCTIONS
