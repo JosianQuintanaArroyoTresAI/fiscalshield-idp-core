@@ -85,28 +85,52 @@ const coerceNumber = (value) => {
 };
 
 export const getPageImageFromDocuments = ({ documents = [], documentKeyCandidates = [], pageNumber }) => {
+  console.log('[sourceDocumentUtils] getPageImageFromDocuments called:', {
+    documentsCount: documents.length,
+    documentKeyCandidates,
+    pageNumber,
+  });
+  
   if (!documents.length || !documentKeyCandidates.length) {
+    console.log('[sourceDocumentUtils] Early return: no documents or candidates');
     return null;
   }
 
   const keys = documentKeyCandidates.filter(Boolean);
   if (!keys.length) {
+    console.log('[sourceDocumentUtils] Early return: no valid keys after filtering');
     return null;
   }
 
   const matchingDocument = documents.find((doc) => keys.includes(doc?.objectKey));
-  if (!matchingDocument || !matchingDocument.pages || matchingDocument.pages.length === 0) {
+  if (!matchingDocument) {
+    console.log('[sourceDocumentUtils] No matching document found. Available keys:', documents.map(d => d?.objectKey));
     return null;
   }
+  
+  if (!matchingDocument.pages || matchingDocument.pages.length === 0) {
+    console.log('[sourceDocumentUtils] Matching document has no pages:', matchingDocument.objectKey);
+    return null;
+  }
+  
+  console.log('[sourceDocumentUtils] Found matching document:', {
+    objectKey: matchingDocument.objectKey,
+    pagesCount: matchingDocument.pages.length,
+    pageIds: matchingDocument.pages.map(p => p.Id),
+  });
 
   if (!pageNumber) {
+    console.log('[sourceDocumentUtils] No page number specified, returning first page');
     return matchingDocument.pages[0]?.ImageUri || null;
   }
 
   const numericTarget = coerceNumber(pageNumber);
+  console.log('[sourceDocumentUtils] Numeric target:', numericTarget);
+  
   if (numericTarget && numericTarget > 0) {
     const byIndex = matchingDocument.pages[numericTarget - 1];
     if (byIndex?.ImageUri) {
+      console.log('[sourceDocumentUtils] Match by index (1-based):', { index: numericTarget, pageId: byIndex.Id });
       return byIndex.ImageUri;
     }
   }
@@ -122,8 +146,10 @@ export const getPageImageFromDocuments = ({ documents = [], documentKeyCandidate
   });
 
   if (explicitMatch?.ImageUri) {
+    console.log('[sourceDocumentUtils] Match by explicit ID:', explicitMatch.Id);
     return explicitMatch.ImageUri;
   }
 
+  console.log('[sourceDocumentUtils] No match found, falling back to first page');
   return matchingDocument.pages[0]?.ImageUri || null;
 };

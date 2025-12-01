@@ -78,6 +78,26 @@ const TransactionDetailDrawer = ({ transaction, visible, onDismiss }) => {
 
   // Construct page image URI from document URI (for snapshot view)
   const pageNumber = rawData.SourcePage || transaction.sourcePage;
+  
+  // Debug: Log what we're searching for
+  console.log('[TRANSACTION DRAWER PAGE DEBUG] Looking for page image:', {
+    pageNumber,
+    documentKey,
+    documentKeyCandidates: [documentKey, rawData.DocumentId, transaction?.s3Path],
+    documentsCount: documents?.length,
+    OutputBucket: settings?.OutputBucket,
+  });
+  
+  // Debug: Log what documents we have
+  if (documents?.length > 0) {
+    console.log('[TRANSACTION DRAWER PAGE DEBUG] Available documents:', documents.map(doc => ({
+      objectKey: doc?.objectKey,
+      pagesCount: doc?.pages?.length,
+      firstPageId: doc?.pages?.[0]?.Id,
+      firstPageImageUri: doc?.pages?.[0]?.ImageUri,
+    })));
+  }
+  
   const pageImageFromDocuments = getPageImageFromDocuments({
     documents,
     documentKeyCandidates: [documentKey, rawData.DocumentId, transaction?.s3Path],
@@ -89,6 +109,12 @@ const TransactionDetailDrawer = ({ transaction, visible, onDismiss }) => {
     pageNumber,
   });
   const pageImageUri = pageImageFromDocuments || computedPageImageUri;
+  
+  console.log('[TRANSACTION DRAWER PAGE DEBUG] Resolution result:', {
+    pageImageFromDocuments,
+    computedPageImageUri,
+    finalPageImageUri: pageImageUri,
+  });
 
   if (pageImageUri) {
     logger.info(`[SOURCE DOC] Page image URI resolved (${pageImageFromDocuments ? 'document cache' : 'computed'}).`);
