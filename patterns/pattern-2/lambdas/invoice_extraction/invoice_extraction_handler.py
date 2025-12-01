@@ -802,6 +802,7 @@ bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
 extraction_table = dynamodb.Table(EXTRACTION_RESULTS_TABLE)
 config_table = dynamodb.Table(CONFIGURATION_TABLE)
 tracking_table = dynamodb.Table(TRACKING_TABLE) if TRACKING_TABLE else None
+s3_client = boto3.client('s3', region_name=AWS_REGION)
 
 
 THROTTLING_ERROR_CODES = {"ThrottlingException", "TooManyRequestsException"}
@@ -2606,7 +2607,6 @@ def lambda_handler(event, context):
 
         if isinstance(document_data, str):
             # Document is S3 URI string - fetch from S3
-            s3_client = boto3.client('s3')
             from urllib.parse import urlparse
             parsed_uri = urlparse(document_data)
             bucket = parsed_uri.netloc
@@ -2621,7 +2621,6 @@ def lambda_handler(event, context):
             s3_uri = document_data['s3_uri']
             log_with_timestamp(f"📦 Document is compressed, fetching from S3: {s3_uri}")
 
-            s3_client = boto3.client('s3')
             from urllib.parse import urlparse
             parsed_uri = urlparse(s3_uri)
             bucket = parsed_uri.netloc
@@ -2751,7 +2750,17 @@ def lambda_handler(event, context):
                         bucket = parsed_uri.netloc
                         key = parsed_uri.path.lstrip('/')
 
-                        s3_obj = s3_client.get_object(Bucket=bucket, Key=key)
+                        try:
+                            s3_obj = s3_client.get_object(Bucket=bucket, Key=key)
+                        except ClientError as error:
+                            error_code = error.response.get('Error', {}).get('Code', 'Unknown')
+                            if error_code == 'NoSuchKey':
+                                log_with_timestamp(
+                                    f"⚠️ raw_text_uri missing for page {page_id}: s3://{bucket}/{key}"
+                                )
+                                continue
+                            raise
+
                         raw_text_data = json.loads(s3_obj['Body'].read().decode('utf-8'))
 
                         log_with_timestamp(f"📋 rawText.json keys: {list(raw_text_data.keys())}")
