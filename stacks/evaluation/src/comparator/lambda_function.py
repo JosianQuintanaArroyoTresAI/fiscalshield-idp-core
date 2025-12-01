@@ -205,7 +205,114 @@ def compare_documents(baseline_docs: List[Dict], evaluation_docs: List[Dict]) ->
     }
 
 
-def save_metrics(evaluation_id: str, metrics: Dict[str, Any], mode: str):
+def calculate_classification_metrics(evaluation_docs: List[Dict]) -> Dict[str, Any]:
+    """
+    Calculate classification accuracy metrics.
+    
+    Compares:
+    1. User classification vs Model classification (from production)
+    2. User classification vs Evaluation model classification
+    3. Production model vs Evaluation model classification
+    
+    Args:
+        evaluation_docs: Evaluation result documents with classification data
+        
+    Returns:
+        Classification metrics
+    """
+    total_docs = 0
+    user_model_matches = 0
+    user_eval_matches = 0
+    model_eval_matches = 0
+    
+    user_model_available = 0
+    model_eval_available = 0
+    user_eval_available = 0
+    
+    classification_details = []
+    
+    for doc in evaluation_docs:
+        total_docs += 1
+        
+        # Get metadata with classification information
+        metadata = doc.get('metadata', {})
+        classification_validation = metadata.get('classificationValidation', {})
+        
+        user_classification = classification_validation.get('userClassification')
+        model_classification = classification_validation.get('modelClassification')
+        
+        # Get evaluation model classification
+        eval_classification = doc.get('evaluationClassification', {}).get('document_type')
+        
+        # Normalize to uppercase for comparison
+        user_norm = user_classification.upper() if user_classification else None
+        model_norm = model_classification.upper() if model_classification else None
+        eval_norm = eval_classification.upper() if eval_classification else None
+        
+        # Compare user vs production model
+        if user_norm and model_norm:
+            user_model_available += 1
+            if user_norm == model_norm:
+                user_model_matches += 1
+        
+        # Compare user vs evaluation model
+        if user_norm and eval_norm:
+            user_eval_available += 1
+            if user_norm == eval_norm:
+                user_eval_matches += 1
+        
+        # Compare production model vs evaluation model
+        if model_norm and eval_norm:
+            model_eval_available += 1
+            if model_norm == eval_norm:
+                model_eval_matches += 1
+        
+        # Track disagreements for analysis
+        if user_norm or model_norm or eval_norm:
+            all_match = (
+                (not user_norm or not model_norm or user_norm == model_norm) and
+                (not user_norm or not eval_norm or user_norm == eval_norm) and
+                (not model_norm or not eval_norm or model_norm == eval_norm)
+            )
+            
+            if not all_match:
+                classification_details.append({
+                    'document_id': doc.get('documentId'),
+                    'user_classification': user_classification,
+                    'model_classification': model_classification,
+                    'evaluation_classification': eval_classification,
+                    'user_model_match': user_norm == model_norm if (user_norm and model_norm) else None,
+                    'user_eval_match': user_norm == eval_norm if (user_norm and eval_norm) else None,
+                    'model_eval_match': model_norm == eval_norm if (model_norm and eval_norm) else None
+                })
+    
+    # Calculate accuracy percentages
+    user_model_accuracy = (user_model_matches / user_model_available) if user_model_available > 0 else None
+    user_eval_accuracy = (user_eval_matches / user_eval_available) if user_eval_available > 0 else None
+    model_eval_accuracy = (model_eval_matches / model_eval_available) if model_eval_available > 0 else None
+    
+    return {
+        'total_documents': total_docs,
+        'user_vs_production_model': {
+            'available': user_model_available,
+            'matches': user_model_matches,
+            'accuracy': round(user_model_accuracy, 4) if user_model_accuracy is not None else None
+        },
+        'user_vs_evaluation_model': {
+            'available': user_eval_available,
+            'matches': user_eval_matches,
+            'accuracy': round(user_eval_accuracy, 4) if user_eval_accuracy is not None else None
+        },
+        'production_vs_evaluation_model': {
+            'available': model_eval_available,
+            'matches': model_eval_matches,
+            'accuracy': round(model_eval_accuracy, 4) if model_eval_accuracy is not None else None
+        },
+        'disagreements': classification_details[:20]  # Limit to first 20 disagreements
+    }
+
+
+def save_metrics(evaluation_id: str, metrics: Dict[str, Any], classification_metrics: Dict[str, Any], mode: str):
     """Save comparison metrics to DynamoDB."""
     if not EVALUATION_METRICS_TABLE:
         logger.warning("EVALUATION_METRICS_TABLE not set, skipping save")
@@ -215,13 +322,15 @@ def save_metrics(evaluation_id: str, metrics: Dict[str, Any], mode: str):
     
     timestamp = int(datetime.now().timestamp())
     
-    item = {
+    # Save extraction metrics
+    extraction_item = {
         'PK': f'EVALUATION#{evaluation_id}',
-        'SK': f'METRICS#{timestamp}',
+        'SK': f'EXTRACTION_METRICS#{timestamp}',
         'GSI1PK': 'EVALUATION',
         'GSI1SK': f'MODEL#{mode}',
         'EvaluationDate': timestamp,
         'EvaluationId': evaluation_id,
+        'MetricType': 'EXTRACTION',
         'Mode': mode,
         'TotalFields': metrics['total_fields'],
         'ExactMatches': metrics['exact_matches'],
@@ -232,8 +341,46 @@ def save_metrics(evaluation_id: str, metrics: Dict[str, Any], mode: str):
         'CreatedAt': timestamp
     }
     
-    table.put_item(Item=item)
-    logger.info(f"Saved metrics for evaluation {evaluation_id}")
+    table.put_item(Item=extraction_item)
+    logger.info(f"Saved extraction metrics for evaluation {evaluation_id}")
+    
+    # Save classification metrics if available
+    if classification_metrics.get('total_documents', 0) > 0:
+        classification_item = {
+            'PK': f'EVALUATION#{evaluation_id}',
+            'SK': f'CLASSIFICATION_METRICS#{timestamp}',
+            'GSI1PK': 'EVALUATION',
+            'GSI1SK': f'CLASSIFICATION#{mode}',
+            'EvaluationDate': timestamp,
+            'EvaluationId': evaluation_id,
+            'MetricType': 'CLASSIFICATION',
+            'Mode': mode,
+            'TotalDocuments': classification_metrics['total_documents'],
+            'CreatedAt': timestamp
+        }
+        
+        # Add user vs production model metrics
+        if classification_metrics['user_vs_production_model']['accuracy'] is not None:
+            classification_item['UserVsProductionAvailable'] = classification_metrics['user_vs_production_model']['available']
+            classification_item['UserVsProductionMatches'] = classification_metrics['user_vs_production_model']['matches']
+            classification_item['UserVsProductionAccuracy'] = Decimal(str(classification_metrics['user_vs_production_model']['accuracy']))
+        
+        # Add user vs evaluation model metrics
+        if classification_metrics['user_vs_evaluation_model']['accuracy'] is not None:
+            classification_item['UserVsEvaluationAvailable'] = classification_metrics['user_vs_evaluation_model']['available']
+            classification_item['UserVsEvaluationMatches'] = classification_metrics['user_vs_evaluation_model']['matches']
+            classification_item['UserVsEvaluationAccuracy'] = Decimal(str(classification_metrics['user_vs_evaluation_model']['accuracy']))
+        
+        # Add production vs evaluation model metrics
+        if classification_metrics['production_vs_evaluation_model']['accuracy'] is not None:
+            classification_item['ProductionVsEvaluationAvailable'] = classification_metrics['production_vs_evaluation_model']['available']
+            classification_item['ProductionVsEvaluationMatches'] = classification_metrics['production_vs_evaluation_model']['matches']
+            classification_item['ProductionVsEvaluationAccuracy'] = Decimal(str(classification_metrics['production_vs_evaluation_model']['accuracy']))
+        
+        classification_item['DisagreementCount'] = len(classification_metrics['disagreements'])
+        
+        table.put_item(Item=classification_item)
+        logger.info(f"Saved classification metrics for evaluation {evaluation_id}")
 
 
 def lambda_handler(event, context):
@@ -295,14 +442,19 @@ def lambda_handler(event, context):
         # Compare documents
         metrics = compare_documents(baseline_docs, evaluation_docs)
         
-        # Save metrics to DynamoDB
-        save_metrics(evaluation_id, metrics, mode)
+        # Calculate classification metrics
+        classification_metrics = calculate_classification_metrics(evaluation_docs)
         
-        logger.info(f"Comparison complete: {metrics['accuracy']*100:.2f}% accuracy")
+        # Save metrics to DynamoDB
+        save_metrics(evaluation_id, metrics, classification_metrics, mode)
+        
+        logger.info(f"Comparison complete: {metrics['accuracy']*100:.2f}% extraction accuracy")
+        logger.info(f"Classification metrics: {classification_metrics}")
         
         return {
             'statusCode': 200,
-            'metrics': metrics
+            'metrics': metrics,
+            'classificationMetrics': classification_metrics
         }
         
     except Exception as e:
