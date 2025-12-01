@@ -21,11 +21,7 @@ import useAppContext from '../../contexts/app';
 import useSettingsContext from '../../contexts/settings';
 import useDocumentsContext from '../../contexts/documents';
 import generateS3PresignedUrl from '../common/generate-s3-presigned-url';
-import {
-  resolveDocumentKey,
-  buildPageImageUri,
-  getPageImageFromDocuments,
-} from '../../utils/sourceDocumentUtils';
+import { resolveDocumentKey, buildPageImageUri, getPageImageFromDocuments } from '../../utils/sourceDocumentUtils';
 import { resolveDocumentKey, buildPageImageUri } from '../../utils/sourceDocumentUtils';
 
 const logger = new Logger('InvoiceDetailDrawer');
