@@ -61,5 +61,69 @@ export const buildPageImageUri = ({ outputBucket, documentKey, pageNumber }) => 
   }
 
   const normalizedKey = stripLeadingSlash(documentKey);
-  return `s3://${bucket}/${normalizedKey}/pages/${pageNumber}/image.jpg`;
+  const normalizedPage = pageNumber.toString().trim();
+  return `s3://${bucket}/${normalizedKey}/pages/${normalizedPage}/image.jpg`;
+};
+
+const coerceNumber = (value) => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isNaN(parsed)) {
+    return parsed;
+  }
+
+  const digits = value.toString().match(/\d+/g);
+  if (!digits) {
+    return null;
+  }
+  const lastGroup = digits[digits.length - 1];
+  const parsedDigits = Number(lastGroup);
+  return Number.isNaN(parsedDigits) ? null : parsedDigits;
+};
+
+export const getPageImageFromDocuments = ({ documents = [], documentKeyCandidates = [], pageNumber }) => {
+  if (!documents.length || !documentKeyCandidates.length) {
+    return null;
+  }
+
+  const keys = documentKeyCandidates.filter(Boolean);
+  if (!keys.length) {
+    return null;
+  }
+
+  const matchingDocument = documents.find((doc) => keys.includes(doc?.objectKey));
+  if (!matchingDocument || !matchingDocument.pages || matchingDocument.pages.length === 0) {
+    return null;
+  }
+
+  if (!pageNumber) {
+    return matchingDocument.pages[0]?.ImageUri || null;
+  }
+
+  const numericTarget = coerceNumber(pageNumber);
+  if (numericTarget && numericTarget > 0) {
+    const byIndex = matchingDocument.pages[numericTarget - 1];
+    if (byIndex?.ImageUri) {
+      return byIndex.ImageUri;
+    }
+  }
+
+  const normalizedTarget = pageNumber.toString().trim();
+  const explicitMatch = matchingDocument.pages.find((page) => {
+    const normalizedId = page?.Id ? page.Id.toString().trim() : '';
+    if (normalizedId && normalizedId === normalizedTarget) {
+      return true;
+    }
+    const numericId = coerceNumber(page?.Id ?? page?.PageNumber);
+    return numericTarget && numericId && numericId === numericTarget;
+  });
+
+  if (explicitMatch?.ImageUri) {
+    return explicitMatch.ImageUri;
+  }
+
+  return matchingDocument.pages[0]?.ImageUri || null;
 };

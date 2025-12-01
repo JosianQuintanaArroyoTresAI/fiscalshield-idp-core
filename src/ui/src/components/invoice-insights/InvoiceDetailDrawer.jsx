@@ -19,7 +19,13 @@ import {
 import { Logger } from 'aws-amplify';
 import useAppContext from '../../contexts/app';
 import useSettingsContext from '../../contexts/settings';
+import useDocumentsContext from '../../contexts/documents';
 import generateS3PresignedUrl from '../common/generate-s3-presigned-url';
+import {
+  resolveDocumentKey,
+  buildPageImageUri,
+  getPageImageFromDocuments,
+} from '../../utils/sourceDocumentUtils';
 import { resolveDocumentKey, buildPageImageUri } from '../../utils/sourceDocumentUtils';
 
 const logger = new Logger('InvoiceDetailDrawer');
@@ -27,6 +33,7 @@ const logger = new Logger('InvoiceDetailDrawer');
 const InvoiceDetailDrawer = ({ invoice, visible, onDismiss }) => {
   const { currentCredentials } = useAppContext();
   const { settings } = useSettingsContext();
+  const { documents } = useDocumentsContext();
   const [isSourceVisible, setIsSourceVisible] = useState(false);
   const [sourceDocumentUrl, setSourceDocumentUrl] = useState(null);
   const [isSourceLoading, setIsSourceLoading] = useState(false);
@@ -101,14 +108,20 @@ const InvoiceDetailDrawer = ({ invoice, visible, onDismiss }) => {
   // Construct page image URI from document URI (for snapshot view)
   // Invoices may span multiple pages, so we'll use the first page if available
   const pageNumber = rawData.SourcePage || rawData.PageNumber || 1;
-  const pageImageUri = buildPageImageUri({
+  const pageImageFromDocuments = getPageImageFromDocuments({
+    documents,
+    documentKeyCandidates: [documentKey, rawData.DocumentId, invoice?.s3Path],
+    pageNumber,
+  });
+  const computedPageImageUri = buildPageImageUri({
     outputBucket: settings?.OutputBucket,
     documentKey,
     pageNumber,
   });
+  const pageImageUri = pageImageFromDocuments || computedPageImageUri;
 
   if (pageImageUri) {
-    logger.info(`[SOURCE DOC] Page image URI: ${pageImageUri}`);
+    logger.info(`[SOURCE DOC] Page image URI resolved (${pageImageFromDocuments ? 'document cache' : 'computed'}).`);
     logger.info(`[SOURCE DOC] Source document: ${sourceDocumentTarget}`);
     logger.info(`[SOURCE DOC] Page number: ${pageNumber}`);
   } else if (pageNumber && documentKey && !settings?.OutputBucket) {

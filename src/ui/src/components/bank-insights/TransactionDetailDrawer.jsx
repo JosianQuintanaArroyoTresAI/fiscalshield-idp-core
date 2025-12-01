@@ -18,7 +18,13 @@ import {
 import { Logger } from 'aws-amplify';
 import useAppContext from '../../contexts/app';
 import useSettingsContext from '../../contexts/settings';
+import useDocumentsContext from '../../contexts/documents';
 import generateS3PresignedUrl from '../common/generate-s3-presigned-url';
+import {
+  resolveDocumentKey,
+  buildPageImageUri,
+  getPageImageFromDocuments,
+} from '../../utils/sourceDocumentUtils';
 import { resolveDocumentKey, buildPageImageUri } from '../../utils/sourceDocumentUtils';
 
 const logger = new Logger('TransactionDetailDrawer');
@@ -26,6 +32,7 @@ const logger = new Logger('TransactionDetailDrawer');
 const TransactionDetailDrawer = ({ transaction, visible, onDismiss }) => {
   const { currentCredentials } = useAppContext();
   const { settings } = useSettingsContext();
+  const { documents } = useDocumentsContext();
   const [isSourceVisible, setIsSourceVisible] = useState(false);
   const [sourceDocumentUrl, setSourceDocumentUrl] = useState(null);
   const [isSourceLoading, setIsSourceLoading] = useState(false);
@@ -71,14 +78,20 @@ const TransactionDetailDrawer = ({ transaction, visible, onDismiss }) => {
 
   // Construct page image URI from document URI (for snapshot view)
   const pageNumber = rawData.SourcePage || transaction.sourcePage;
-  const pageImageUri = buildPageImageUri({
+  const pageImageFromDocuments = getPageImageFromDocuments({
+    documents,
+    documentKeyCandidates: [documentKey, rawData.DocumentId, transaction?.s3Path],
+    pageNumber,
+  });
+  const computedPageImageUri = buildPageImageUri({
     outputBucket: settings?.OutputBucket,
     documentKey,
     pageNumber,
   });
+  const pageImageUri = pageImageFromDocuments || computedPageImageUri;
 
   if (pageImageUri) {
-    logger.info(`[SOURCE DOC] Page image URI: ${pageImageUri}`);
+    logger.info(`[SOURCE DOC] Page image URI resolved (${pageImageFromDocuments ? 'document cache' : 'computed'}).`);
     logger.info(`[SOURCE DOC] Source document: ${sourceDocumentTarget}`);
     logger.info(`[SOURCE DOC] Page number: ${pageNumber}`);
   } else if (pageNumber && documentKey && !settings?.OutputBucket) {
