@@ -20,6 +20,7 @@ import { Logger } from 'aws-amplify';
 import useAppContext from '../../contexts/app';
 import useSettingsContext from '../../contexts/settings';
 import generateS3PresignedUrl from '../common/generate-s3-presigned-url';
+import { resolveDocumentKey, buildPageImageUri } from '../../utils/sourceDocumentUtils';
 
 const logger = new Logger('InvoiceDetailDrawer');
 
@@ -44,6 +45,11 @@ const InvoiceDetailDrawer = ({ invoice, visible, onDismiss }) => {
 
   const rawData = invoice.rawData || {};
   const isAnalyzed = invoice.analysisStatus === 'ANALYZED';
+  const documentKey = resolveDocumentKey({
+    s3Path: invoice.s3Path,
+    s3Uri: invoice.s3Uri || rawData.S3Uri,
+    documentId: invoice.id || rawData.DocumentId,
+  });
 
   // Debug logging for troubleshooting
   console.log('[INVOICE DRAWER DEBUG] Invoice data:', {
@@ -95,17 +101,23 @@ const InvoiceDetailDrawer = ({ invoice, visible, onDismiss }) => {
   // Construct page image URI from document URI (for snapshot view)
   // Invoices may span multiple pages, so we'll use the first page if available
   const pageNumber = rawData.SourcePage || rawData.PageNumber || 1;
-  let pageImageUri = null;
-  if (sourceDocumentTarget && pageNumber) {
-    // Page images are stored in S3 at: bucket/path/doc.pdf/pages/N/image.jpg
-    // But sourceDocumentTarget is s3://bucket/path/doc.pdf, so we just append the path
-    pageImageUri = `${sourceDocumentTarget}/pages/${pageNumber}/image.jpg`;
+  const pageImageUri = buildPageImageUri({
+    outputBucket: settings?.OutputBucket,
+    documentKey,
+    pageNumber,
+  });
+
+  if (pageImageUri) {
     logger.info(`[SOURCE DOC] Page image URI: ${pageImageUri}`);
     logger.info(`[SOURCE DOC] Source document: ${sourceDocumentTarget}`);
     logger.info(`[SOURCE DOC] Page number: ${pageNumber}`);
+  } else if (pageNumber && documentKey && !settings?.OutputBucket) {
+    logger.warn('[SOURCE DOC] Missing OutputBucket setting. Cannot build page image preview URI.');
+  } else if (pageNumber && documentKey) {
+    logger.warn('[SOURCE DOC] Unable to construct page image URI despite having key and page number.');
   } else {
     logger.warn(
-      `[SOURCE DOC] Cannot construct page image - sourceDocumentTarget: ${sourceDocumentTarget}, pageNumber: ${pageNumber}`,
+      `[SOURCE DOC] Cannot construct page image - documentKey: ${documentKey}, pageNumber: ${pageNumber}, outputBucket: ${settings?.OutputBucket}`,
     );
   }
 
