@@ -238,6 +238,42 @@ const TransactionDetailDrawer = ({ transaction, visible, onDismiss }) => {
     }
   };
 
+  const handleDownloadDocument = async () => {
+    if (!sourceDocumentTarget) {
+      logger.warn('[SOURCE DOC] No source document target available');
+      return;
+    }
+
+    try {
+      if (!currentCredentials) {
+        throw new Error('Missing AWS credentials');
+      }
+
+      logger.info(`[SOURCE DOC] Downloading PDF: ${sourceDocumentTarget}`);
+
+      // Generate URL without forceInline to trigger download
+      const url = await generateS3PresignedUrl(sourceDocumentTarget, currentCredentials, {
+        forceInline: false,
+      });
+
+      // Extract filename from S3 URI
+      const filename = sourceDocumentTarget.split('/').pop() || 'bank-statement.pdf';
+
+      // Create temporary link and trigger download
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      logger.info(`[SOURCE DOC] Download triggered: ${filename}`);
+    } catch (error) {
+      logger.error('[SOURCE DOC] Failed to download document:', error);
+      setSourceError(error.message || 'Failed to download document.');
+    }
+  };
+
   return (
     <Drawer header={<Header variant="h2">Transaction Details</Header>} visible={visible} onDismiss={onDismiss}>
       <SpaceBetween size="l">
