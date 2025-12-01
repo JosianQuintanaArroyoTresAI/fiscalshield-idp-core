@@ -147,13 +147,16 @@ def compare_documents(baseline_docs: List[Dict], evaluation_docs: List[Dict]) ->
         evaluation_docs: List of evaluation extraction results
     
     Returns:
-        Comparison metrics
+        Comparison metrics including overall and per-field accuracy
     """
     total_fields = 0
     exact_matches = 0
     fuzzy_matches = 0
     mismatches = 0
     differences = []
+    
+    # Track per-field accuracy
+    field_stats = {}  # field_name -> {total, exact, fuzzy, mismatch}
     
     # Create lookup dict for evaluation results
     eval_dict = {doc.get('recordId') or doc.get('document_id'): doc for doc in evaluation_docs}
@@ -180,18 +183,62 @@ def compare_documents(baseline_docs: List[Dict], evaluation_docs: List[Dict]) ->
             
             comparison = compare_fields(baseline_value, eval_value)
             
+            # Initialize field stats if first time seeing this field
+            if field not in field_stats:
+                field_stats[field] = {
+                    'total': 0,
+                    'exact_matches': 0,
+                    'fuzzy_matches': 0,
+                    'mismatches': 0,
+                    'examples': []
+                }
+            
+            field_stats[field]['total'] += 1
+            
             if comparison['match'] == 'exact':
                 exact_matches += 1
+                field_stats[field]['exact_matches'] += 1
             elif comparison['match'] == 'fuzzy':
                 fuzzy_matches += 1
+                field_stats[field]['fuzzy_matches'] += 1
             else:
                 mismatches += 1
+                field_stats[field]['mismatches'] += 1
+                
+                # Store example of mismatch (limit per field)
+                if len(field_stats[field]['examples']) < 3:
+                    field_stats[field]['examples'].append({
+                        'document_id': doc_id,
+                        'baseline': baseline_value,
+                        'evaluation': eval_value
+                    })
+                
                 differences.append({
                     'document_id': doc_id,
                     'field': field,
                     'baseline': baseline_value,
                     'evaluation': eval_value
                 })
+    
+    # Calculate per-field accuracy
+    field_accuracy = []
+    for field_name, stats in field_stats.items():
+        accurate_count = stats['exact_matches'] + stats['fuzzy_matches']
+        accuracy = accurate_count / stats['total'] if stats['total'] > 0 else 0.0
+        
+        field_accuracy.append({
+            'field_name': field_name,
+            'total_occurrences': stats['total'],
+            'exact_matches': stats['exact_matches'],
+            'fuzzy_matches': stats['fuzzy_matches'],
+            'mismatches': stats['mismatches'],
+            'accuracy': round(accuracy, 4),
+            'error_rate': round(stats['mismatches'] / stats['total'], 4) if stats['total'] > 0 else 0.0,
+            'examples': stats['examples']
+        })
+    
+    # Sort by error rate (highest first) to highlight problematic fields
+    field_accuracy.sort(key=lambda x: x['error_rate'], reverse=True)
     
     accuracy = (exact_matches + fuzzy_matches) / total_fields if total_fields > 0 else 0.0
     
@@ -201,7 +248,8 @@ def compare_documents(baseline_docs: List[Dict], evaluation_docs: List[Dict]) ->
         'fuzzy_matches': fuzzy_matches,
         'mismatches': mismatches,
         'accuracy': round(accuracy, 4),
-        'differences': differences[:50]  # Limit to first 50 differences
+        'differences': differences[:50],  # Limit to first 50 differences
+        'field_level_accuracy': field_accuracy  # NEW: Per-field breakdown
     }
 
 
@@ -343,6 +391,36 @@ def save_metrics(evaluation_id: str, metrics: Dict[str, Any], classification_met
     
     table.put_item(Item=extraction_item)
     logger.info(f"Saved extraction metrics for evaluation {evaluation_id}")
+    
+    # Save per-field metrics
+    if 'field_level_accuracy' in metrics and metrics['field_level_accuracy']:
+        for field_metric in metrics['field_level_accuracy']:
+            field_item = {
+                'PK': f'EVALUATION#{evaluation_id}',
+                'SK': f'FIELD#{field_metric["field_name"]}#{timestamp}',
+                'GSI1PK': f'FIELD#{field_metric["field_name"]}',
+                'GSI1SK': f'DATE#{timestamp}',
+                'EvaluationDate': timestamp,
+                'EvaluationId': evaluation_id,
+                'MetricType': 'FIELD_LEVEL',
+                'FieldName': field_metric['field_name'],
+                'Mode': mode,
+                'TotalOccurrences': field_metric['total_occurrences'],
+                'ExactMatches': field_metric['exact_matches'],
+                'FuzzyMatches': field_metric['fuzzy_matches'],
+                'Mismatches': field_metric['mismatches'],
+                'Accuracy': Decimal(str(field_metric['accuracy'])),
+                'ErrorRate': Decimal(str(field_metric['error_rate'])),
+                'CreatedAt': timestamp
+            }
+            
+            # Store examples as JSON string (DynamoDB doesn't support nested lists well)
+            if field_metric.get('examples'):
+                field_item['ErrorExamples'] = json.dumps(field_metric['examples'], default=str)
+            
+            table.put_item(Item=field_item)
+        
+        logger.info(f"Saved {len(metrics['field_level_accuracy'])} field-level metrics for evaluation {evaluation_id}")
     
     # Save classification metrics if available
     if classification_metrics.get('total_documents', 0) > 0:
