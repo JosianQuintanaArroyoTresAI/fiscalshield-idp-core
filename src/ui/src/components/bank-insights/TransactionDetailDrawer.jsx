@@ -36,7 +36,29 @@ const TransactionDetailDrawer = ({ transaction, visible, onDismiss }) => {
 
   // Extract page number early for use in useEffect dependency
   const rawData = transaction?.rawData || {};
-  const pageNumber = rawData.SourcePage || transaction?.sourcePage;
+  
+  // Determine the most reliable page number
+  // Priority: SourcePage (if > 1) > first page from ChunkPages > transaction.sourcePage
+  let pageNumber = null;
+  
+  // SourcePage is reliable if it's greater than 1
+  if (rawData.SourcePage && rawData.SourcePage > 1) {
+    pageNumber = rawData.SourcePage;
+  }
+  // ChunkPages is an array of pages this transaction spans - use the first one
+  else if (rawData.ChunkPages && Array.isArray(rawData.ChunkPages) && rawData.ChunkPages.length > 0) {
+    // ChunkPages comes from DynamoDB as array of objects like [{N: "22"}, {N: "23"}]
+    const firstChunk = rawData.ChunkPages[0];
+    if (typeof firstChunk === 'object' && firstChunk.N) {
+      pageNumber = parseInt(firstChunk.N, 10);
+    } else if (typeof firstChunk === 'number') {
+      pageNumber = firstChunk;
+    }
+  }
+  // Fallback to other sources
+  if (!pageNumber) {
+    pageNumber = transaction?.sourcePage || 1;
+  }
 
   useEffect(() => {
     // Reset all state when transaction or page changes
