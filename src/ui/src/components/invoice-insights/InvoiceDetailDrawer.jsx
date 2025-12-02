@@ -46,14 +46,15 @@ const InvoiceDetailDrawer = ({ invoice, visible, onDismiss }) => {
   if (rawData.SourcePage && rawData.SourcePage > 1) {
     pageNumber = rawData.SourcePage;
   }
-  // ChunkPages is an array of pages this invoice spans - use the first one
+  // ChunkPages is an array like [prev_page, current_page] - use the LAST one
   else if (rawData.ChunkPages && Array.isArray(rawData.ChunkPages) && rawData.ChunkPages.length > 0) {
     // ChunkPages comes from DynamoDB as array of objects like [{N: "22"}, {N: "23"}]
-    const firstChunk = rawData.ChunkPages[0];
-    if (typeof firstChunk === 'object' && firstChunk.N) {
-      pageNumber = parseInt(firstChunk.N, 10);
-    } else if (typeof firstChunk === 'number') {
-      pageNumber = firstChunk;
+    // The LAST page in the array is the actual page where the invoice appears
+    const lastChunk = rawData.ChunkPages[rawData.ChunkPages.length - 1];
+    if (typeof lastChunk === 'object' && lastChunk.N) {
+      pageNumber = parseInt(lastChunk.N, 10);
+    } else if (typeof lastChunk === 'number') {
+      pageNumber = lastChunk;
     }
   }
   // Fallback to other sources
