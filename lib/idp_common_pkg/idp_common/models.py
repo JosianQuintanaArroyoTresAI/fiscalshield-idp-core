@@ -85,6 +85,7 @@ class Page:
     confidence: float = 0.0
     tables: List[Dict[str, Any]] = field(default_factory=list)
     forms: Dict[str, str] = field(default_factory=dict)
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
