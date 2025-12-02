@@ -41,8 +41,6 @@ Mappings:
       ConfigPath: "rvl-cdip-package-sample"
     rvl-cdip-package-sample-with-few-shot-examples:
       ConfigPath: "rvl-cdip-package-sample-with-few-shot-examples"
-    bank-statement-sample:
-      ConfigPath: "bank-statement-sample"
     default:
       ConfigPath: "rvl-cdip-package-sample"
 
