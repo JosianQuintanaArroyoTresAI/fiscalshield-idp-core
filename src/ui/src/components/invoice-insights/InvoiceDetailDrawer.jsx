@@ -127,11 +127,11 @@ const InvoiceDetailDrawer = ({ invoice, visible, onDismiss }) => {
     console.log(
       '[INVOICE DRAWER PAGE DEBUG] Available documents:',
       documents.map((doc) => ({
-        objectKey: doc?.objectKey,
-        pagesCount: doc?.pages?.length,
-        firstPageId: doc?.pages?.[0]?.Id,
-        firstPageImageUri: doc?.pages?.[0]?.ImageUri,
-        allPageIds: doc?.pages?.map((p) => p.Id),
+        ObjectKey: doc?.ObjectKey,
+        pagesCount: doc?.Pages?.length,
+        firstPageId: doc?.Pages?.[0]?.Id,
+        firstPageImageUri: doc?.Pages?.[0]?.ImageUri,
+        allPageIds: doc?.Pages?.map((p) => p.Id),
       })),
     );
   }

@@ -92,10 +92,10 @@ const TransactionDetailDrawer = ({ transaction, visible, onDismiss }) => {
     console.log(
       '[TRANSACTION DRAWER PAGE DEBUG] Available documents:',
       documents.map((doc) => ({
-        objectKey: doc?.objectKey,
-        pagesCount: doc?.pages?.length,
-        firstPageId: doc?.pages?.[0]?.Id,
-        firstPageImageUri: doc?.pages?.[0]?.ImageUri,
+        ObjectKey: doc?.ObjectKey,
+        pagesCount: doc?.Pages?.length,
+        firstPageId: doc?.Pages?.[0]?.Id,
+        firstPageImageUri: doc?.Pages?.[0]?.ImageUri,
       })),
     );
   }
