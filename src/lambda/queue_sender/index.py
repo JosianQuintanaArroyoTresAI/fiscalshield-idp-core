@@ -9,6 +9,8 @@ import logging
 import re
 from datetime import datetime, timezone, timedelta
 from datetime import datetime as _datetime_class
+from pypdf import PdfReader
+from io import BytesIO
 from idp_common.models import Document, Status
 
 logger = logging.getLogger()
@@ -21,6 +23,7 @@ QUEUE_URL = os.environ.get("QUEUE_URL", "")
 APPSYNC_API_URL = os.environ.get("APPSYNC_API_URL", "")
 DATA_RETENTION_IN_DAYS = int(os.environ.get("DATA_RETENTION_IN_DAYS", "30"))
 OUTPUT_BUCKET = os.environ.get("OUTPUT_BUCKET", "")
+MAX_PAGES = int(os.environ.get("MAX_PAGES", "500"))  # Maximum page limit for PDFs
 
 
 def extract_user_id_from_path(object_key):
@@ -73,6 +76,55 @@ def validate_user_id(user_id):
     if not re.match(uuid_pattern, user_id, re.IGNORECASE):
         logger.warning(f"User ID doesn't match UUID pattern: {user_id}")
     return user_id
+
+
+def validate_pdf_page_count(bucket_name, object_key):
+    """
+    Validate PDF page count to prevent processing oversized documents.
+    
+    Args:
+        bucket_name: S3 bucket name
+        object_key: S3 object key
+    
+    Raises:
+        ValueError: If PDF exceeds MAX_PAGES limit
+    """
+    # Only validate PDFs
+    if not object_key.lower().endswith('.pdf'):
+        return
+    
+    try:
+        s3_client = boto3.client('s3')
+        
+        # Download PDF file to memory
+        logger.info(f"Downloading PDF to validate page count: {object_key}")
+        response = s3_client.get_object(Bucket=bucket_name, Key=object_key)
+        pdf_bytes = response['Body'].read()
+        
+        # Count pages using pypdf
+        pdf_reader = PdfReader(BytesIO(pdf_bytes))
+        page_count = len(pdf_reader.pages)
+        
+        logger.info(f"PDF page count: {page_count} (limit: {MAX_PAGES})")
+        
+        if page_count > MAX_PAGES:
+            error_msg = (
+                f"PDF exceeds maximum page limit: {page_count} pages found, "
+                f"but maximum allowed is {MAX_PAGES} pages. "
+                f"Please split the file or reduce the number of pages."
+            )
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+            
+        logger.info(f"✓ PDF validation passed: {page_count} pages within {MAX_PAGES} page limit")
+        
+    except ValueError:
+        # Re-raise validation errors
+        raise
+    except Exception as e:
+        # Log other errors but don't block processing
+        logger.warning(f"Failed to validate PDF page count: {str(e)}")
+        # Continue processing - classification will handle invalid PDFs
 
 
 def handler(event, context):
@@ -131,6 +183,14 @@ def handler(event, context):
         except ValueError as e:
             logger.error(f"Path validation error: {str(e)}")
             # This will go to DLQ for investigation
+            raise
+
+        # Validate PDF page count (safety net - frontend should catch this too)
+        try:
+            validate_pdf_page_count(bucket_name, object_key)
+        except ValueError as e:
+            logger.error(f"PDF page count validation failed: {str(e)}")
+            # This will go to DLQ - user needs to split the file
             raise
 
         # Create a Document object (same pattern as reprocess_document_resolver)

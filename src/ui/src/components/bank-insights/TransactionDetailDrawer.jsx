@@ -18,31 +18,66 @@ import {
 import { Logger } from 'aws-amplify';
 import useAppContext from '../../contexts/app';
 import useSettingsContext from '../../contexts/settings';
+import useDocumentsContext from '../../contexts/documents';
 import generateS3PresignedUrl from '../common/generate-s3-presigned-url';
+import { resolveDocumentKey, buildPageImageUri, getPageImageFromDocuments } from '../../utils/sourceDocumentUtils';
 
 const logger = new Logger('TransactionDetailDrawer');
 
 const TransactionDetailDrawer = ({ transaction, visible, onDismiss }) => {
   const { currentCredentials } = useAppContext();
   const { settings } = useSettingsContext();
+  const { documents } = useDocumentsContext();
   const [isSourceVisible, setIsSourceVisible] = useState(false);
   const [sourceDocumentUrl, setSourceDocumentUrl] = useState(null);
   const [isSourceLoading, setIsSourceLoading] = useState(false);
   const [sourceError, setSourceError] = useState(null);
   const [isFullScreen, setIsFullScreen] = useState(false);
 
+  // Extract page number early for use in useEffect dependency
+  const rawData = transaction?.rawData || {};
+
+  // Determine the most reliable page number
+  // Priority: SourcePage (if > 1) > first page from ChunkPages > transaction.sourcePage
+  let pageNumber = null;
+
+  // SourcePage is reliable if it's greater than 1
+  if (rawData.SourcePage && rawData.SourcePage > 1) {
+    pageNumber = rawData.SourcePage;
+  }
+  // ChunkPages is an array like [prev_page, current_page] - use the LAST one
+  else if (rawData.ChunkPages && Array.isArray(rawData.ChunkPages) && rawData.ChunkPages.length > 0) {
+    // ChunkPages comes from DynamoDB as array of objects like [{N: "22"}, {N: "23"}]
+    // The LAST page in the array is the actual page where the transaction appears
+    const lastChunk = rawData.ChunkPages[rawData.ChunkPages.length - 1];
+    if (typeof lastChunk === 'object' && lastChunk.N) {
+      pageNumber = parseInt(lastChunk.N, 10);
+    } else if (typeof lastChunk === 'number') {
+      pageNumber = lastChunk;
+    }
+  }
+  // Fallback to other sources
+  if (!pageNumber) {
+    pageNumber = transaction?.sourcePage || 1;
+  }
+
   useEffect(() => {
+    // Reset all state when transaction or page changes
     setIsSourceVisible(false);
     setSourceDocumentUrl(null);
     setSourceError(null);
     setIsSourceLoading(false);
     setIsFullScreen(false);
-  }, [transaction?.id]);
+  }, [transaction?.id, pageNumber]);
 
   if (!transaction) return null;
 
-  const rawData = transaction.rawData || {};
   const isAnalyzed = transaction.analysisStatus === 'ANALYZED';
+  const documentKey = resolveDocumentKey({
+    s3Path: transaction.s3Path,
+    s3Uri: transaction.s3Uri || rawData.S3Uri,
+    documentId: transaction.id || rawData.DocumentId,
+  });
 
   // Construct proper S3 URI from the transaction data
   let sourceDocumentTarget = transaction.s3Uri || rawData.S3Uri;
@@ -61,6 +96,63 @@ const TransactionDetailDrawer = ({ transaction, visible, onDismiss }) => {
     // Fallback: use s3Path if available
     sourceDocumentTarget = `s3://${settings.InputBucket}/${transaction.s3Path}`;
     logger.debug(`Constructed S3 URI from s3Path: ${sourceDocumentTarget}`);
+  }
+
+  // Construct page image URI from document URI (for snapshot view)
+  // pageNumber is calculated earlier for use in useEffect dependency
+
+  // Debug: Log what we're searching for
+  console.log('[TRANSACTION DRAWER PAGE DEBUG] Looking for page image:', {
+    pageNumber,
+    documentKey,
+    documentKeyCandidates: [documentKey, rawData.DocumentId, transaction?.s3Path],
+    documentsCount: documents?.length,
+    OutputBucket: settings?.OutputBucket,
+  });
+
+  // Debug: Log what documents we have
+  if (documents?.length > 0) {
+    console.log(
+      '[TRANSACTION DRAWER PAGE DEBUG] Available documents:',
+      documents.map((doc) => ({
+        ObjectKey: doc?.ObjectKey,
+        pagesCount: doc?.Pages?.length,
+        firstPageId: doc?.Pages?.[0]?.Id,
+        firstPageImageUri: doc?.Pages?.[0]?.ImageUri,
+      })),
+    );
+  }
+
+  const pageImageFromDocuments = getPageImageFromDocuments({
+    documents,
+    documentKeyCandidates: [documentKey, rawData.DocumentId, transaction?.s3Path],
+    pageNumber,
+  });
+  const computedPageImageUri = buildPageImageUri({
+    outputBucket: settings?.OutputBucket,
+    documentKey,
+    pageNumber,
+  });
+  const pageImageUri = pageImageFromDocuments || computedPageImageUri;
+
+  console.log('[TRANSACTION DRAWER PAGE DEBUG] Resolution result:', {
+    pageImageFromDocuments,
+    computedPageImageUri,
+    finalPageImageUri: pageImageUri,
+  });
+
+  if (pageImageUri) {
+    logger.info(`[SOURCE DOC] Page image URI resolved (${pageImageFromDocuments ? 'document cache' : 'computed'}).`);
+    logger.info(`[SOURCE DOC] Source document: ${sourceDocumentTarget}`);
+    logger.info(`[SOURCE DOC] Page number: ${pageNumber}`);
+  } else if (pageNumber && documentKey && !settings?.OutputBucket) {
+    logger.warn('[SOURCE DOC] Missing OutputBucket setting. Cannot build page image preview URI.');
+  } else if (pageNumber && documentKey) {
+    logger.warn('[SOURCE DOC] Unable to construct page image URI despite having key and page number.');
+  } else {
+    logger.warn(
+      `[SOURCE DOC] Cannot construct page image - documentKey: ${documentKey}, pageNumber: ${pageNumber}, outputBucket: ${settings?.OutputBucket}`,
+    );
   }
 
   const getSourceDocumentType = () => {
@@ -108,7 +200,7 @@ const TransactionDetailDrawer = ({ transaction, visible, onDismiss }) => {
       return;
     }
 
-    if (!sourceDocumentTarget) {
+    if (!pageImageUri && !sourceDocumentTarget) {
       setSourceError('No source document available for this transaction.');
       setIsSourceVisible(true);
       return;
@@ -127,7 +219,9 @@ const TransactionDetailDrawer = ({ transaction, visible, onDismiss }) => {
         throw new Error('Missing AWS credentials for document preview.');
       }
 
-      const url = await generateS3PresignedUrl(sourceDocumentTarget, currentCredentials, {
+      // Prefer page image, fall back to full document
+      const targetUri = pageImageUri || sourceDocumentTarget;
+      const url = await generateS3PresignedUrl(targetUri, currentCredentials, {
         forceInline: true,
       });
       setSourceDocumentUrl(url);
@@ -137,6 +231,72 @@ const TransactionDetailDrawer = ({ transaction, visible, onDismiss }) => {
       setIsSourceVisible(true);
     } finally {
       setIsSourceLoading(false);
+    }
+  };
+
+  const handleOpenFullDocument = async () => {
+    if (!sourceDocumentTarget) {
+      logger.warn('[SOURCE DOC] No source document target available');
+      return;
+    }
+
+    try {
+      if (!currentCredentials) {
+        throw new Error('Missing AWS credentials');
+      }
+
+      logger.info(`[SOURCE DOC] Opening full PDF: ${sourceDocumentTarget}`);
+
+      const url = await generateS3PresignedUrl(sourceDocumentTarget, currentCredentials, {
+        forceInline: true,
+      });
+
+      logger.info(`[SOURCE DOC] Opening PDF in new tab`);
+      const newWindow = window.open(url, '_blank');
+
+      if (!newWindow) {
+        logger.warn('[SOURCE DOC] Popup blocked by browser');
+        setSourceError('Popup blocked. Please allow popups for this site.');
+      }
+    } catch (error) {
+      logger.error('[SOURCE DOC] Failed to open full document:', error);
+      setSourceError(error.message || 'Failed to open document.');
+    }
+  };
+
+  const handleDownloadDocument = async () => {
+    if (!sourceDocumentTarget) {
+      logger.warn('[SOURCE DOC] No source document target available');
+      return;
+    }
+
+    try {
+      if (!currentCredentials) {
+        throw new Error('Missing AWS credentials');
+      }
+
+      logger.info(`[SOURCE DOC] Downloading PDF: ${sourceDocumentTarget}`);
+
+      // Generate URL without forceInline to trigger download
+      const url = await generateS3PresignedUrl(sourceDocumentTarget, currentCredentials, {
+        forceInline: false,
+      });
+
+      // Extract filename from S3 URI
+      const filename = sourceDocumentTarget.split('/').pop() || 'bank-statement.pdf';
+
+      // Create temporary link and trigger download
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      logger.info(`[SOURCE DOC] Download triggered: ${filename}`);
+    } catch (error) {
+      logger.error('[SOURCE DOC] Failed to download document:', error);
+      setSourceError(error.message || 'Failed to download document.');
     }
   };
 
@@ -406,141 +566,110 @@ const TransactionDetailDrawer = ({ transaction, visible, onDismiss }) => {
           </ColumnLayout>
 
           <SpaceBetween size="s" direction="vertical">
-            <Button
-              iconName={isSourceVisible ? 'close' : 'search'}
-              onClick={handleToggleSourceDocument}
-              disabled={!sourceDocumentTarget && !sourceDocumentUrl}
-              loading={isSourceLoading}
-            >
-              {isSourceVisible ? 'Hide Source Document' : 'Show Source Document'}
-            </Button>
-            {!sourceDocumentTarget && !sourceDocumentUrl && (
+            <SpaceBetween size="xs" direction="horizontal">
+              <Button
+                iconName={isSourceVisible ? 'close' : 'search'}
+                onClick={handleToggleSourceDocument}
+                disabled={!pageImageUri && !sourceDocumentTarget && !sourceDocumentUrl}
+                loading={isSourceLoading}
+              >
+                {isSourceVisible ? 'Hide Page Image' : pageNumber ? `View Page ${pageNumber}` : 'View Source Page'}
+              </Button>
+              {sourceDocumentTarget && sourceDocumentType === 'pdf' && (
+                <>
+                  <Button iconName="external" onClick={handleOpenFullDocument} variant="normal">
+                    View PDF in Browser
+                  </Button>
+                  <Button iconName="download" onClick={handleDownloadDocument} variant="normal">
+                    Download PDF
+                  </Button>
+                </>
+              )}
+            </SpaceBetween>
+            {!pageImageUri && !sourceDocumentTarget && !sourceDocumentUrl && (
               <StatusIndicator type="info">No source document stored for this transaction.</StatusIndicator>
             )}
             {isSourceVisible && (
               <Box textAlign="center" padding={{ top: 's' }}>
                 {isSourceLoading && <Spinner />}
                 {!isSourceLoading && sourceError && <StatusIndicator type="error">{sourceError}</StatusIndicator>}
-                {!isSourceLoading &&
-                  !sourceError &&
-                  sourceDocumentUrl &&
-                  (sourceDocumentType === 'image' || sourceDocumentType === 'pdf') && (
-                    <Box>
-                      {/* Thumbnail/Preview */}
-                      {!isFullScreen && (
-                        <Box
-                          onClick={() => setIsFullScreen(true)}
+                {!isSourceLoading && !sourceError && sourceDocumentUrl && (
+                  <Box>
+                    {/* Thumbnail/Preview */}
+                    {!isFullScreen && (
+                      <div
+                        onClick={() => setIsFullScreen(true)}
+                        style={{
+                          cursor: 'pointer',
+                          position: 'relative',
+                          display: 'inline-block',
+                        }}
+                      >
+                        <img
+                          src={sourceDocumentUrl}
+                          alt={`Bank statement page ${pageNumber || ''}`}
+                          crossOrigin="anonymous"
+                          onError={(e) => {
+                            logger.error(`[SOURCE DOC] Image failed to load: ${sourceDocumentUrl}`);
+                            setSourceError('Failed to load page image. The file may not exist or is inaccessible.');
+                          }}
+                          onLoad={() => logger.info(`[SOURCE DOC] Image loaded successfully`)}
                           style={{
-                            cursor: 'pointer',
-                            position: 'relative',
-                            display: 'inline-block',
+                            maxWidth: '100%',
+                            maxHeight: '400px',
+                            borderRadius: '8px',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                            transition: 'transform 0.2s',
+                          }}
+                          onMouseOver={(e) => (e.currentTarget.style.transform = 'scale(1.02)')}
+                          onMouseOut={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+                        />
+                        <div
+                          style={{
+                            position: 'absolute',
+                            bottom: '8px',
+                            right: '8px',
+                            background: 'rgba(0,0,0,0.7)',
+                            color: 'white',
+                            borderRadius: '4px',
+                            fontSize: '12px',
+                            padding: '4px 8px',
+                            pointerEvents: 'none',
                           }}
                         >
-                          {sourceDocumentType === 'image' ? (
-                            <img
-                              src={sourceDocumentUrl}
-                              alt="Bank statement thumbnail"
-                              style={{
-                                maxWidth: '300px',
-                                maxHeight: '200px',
-                                borderRadius: '8px',
-                                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                                transition: 'transform 0.2s',
-                              }}
-                              onMouseOver={(e) => (e.currentTarget.style.transform = 'scale(1.02)')}
-                              onMouseOut={(e) => (e.currentTarget.style.transform = 'scale(1)')}
-                            />
-                          ) : (
-                            <object
-                              data={sourceDocumentUrl}
-                              type="application/pdf"
-                              width="300px"
-                              height="200px"
-                              style={{
-                                border: 'none',
-                                borderRadius: '8px',
-                                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                                pointerEvents: 'none',
-                              }}
-                            >
-                              <Box padding="m" textAlign="center" color="text-body-secondary">
-                                PDF Preview
-                              </Box>
-                            </object>
-                          )}
-                          <Box
-                            position="absolute"
-                            bottom="8px"
-                            right="8px"
-                            padding="xs"
+                          🔍 Click to enlarge
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Full Screen View */}
+                    {isFullScreen && (
+                      <Box>
+                        <SpaceBetween size="s">
+                          <Button iconName="close" onClick={() => setIsFullScreen(false)} variant="primary">
+                            Close
+                          </Button>
+                          <img
+                            src={sourceDocumentUrl}
+                            alt={`Bank statement page ${pageNumber || ''}`}
                             style={{
-                              background: 'rgba(0,0,0,0.7)',
-                              color: 'white',
-                              borderRadius: '4px',
-                              fontSize: '12px',
-                              padding: '4px 8px',
+                              maxWidth: '100%',
+                              height: 'auto',
+                              borderRadius: '8px',
+                              boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
                             }}
-                          >
-                            🔍 Click to expand
-                          </Box>
-                        </Box>
-                      )}
+                          />
+                        </SpaceBetween>
+                      </Box>
+                    )}
 
-                      {/* Full Screen View */}
-                      {isFullScreen && (
-                        <Box>
-                          <SpaceBetween size="s">
-                            <Button iconName="close" onClick={() => setIsFullScreen(false)} variant="primary">
-                              Close Full View
-                            </Button>
-                            {sourceDocumentType === 'image' ? (
-                              <img
-                                src={sourceDocumentUrl}
-                                alt="Bank statement source"
-                                style={{
-                                  maxWidth: '100%',
-                                  maxHeight: '800px',
-                                  borderRadius: '8px',
-                                  boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-                                }}
-                              />
-                            ) : (
-                              <object
-                                data={sourceDocumentUrl}
-                                type="application/pdf"
-                                width="100%"
-                                height="800px"
-                                style={{ border: 'none', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }}
-                              >
-                                <p>
-                                  This browser cannot display the PDF inline.{' '}
-                                  <a href={sourceDocumentUrl} target="_blank" rel="noreferrer">
-                                    Download the file
-                                  </a>{' '}
-                                  instead.
-                                </p>
-                              </object>
-                            )}
-                          </SpaceBetween>
-                        </Box>
-                      )}
-
-                      <Box padding={{ top: 's' }} textAlign="center">
-                        <Box variant="small" color="text-body-secondary">
-                          {isFullScreen ? 'Full size view' : 'Click thumbnail to view full size'}
-                        </Box>
+                    <Box padding={{ top: 's' }} textAlign="center">
+                      <Box variant="small" color="text-body-secondary">
+                        {isFullScreen ? 'Full size view' : `Page ${pageNumber} snapshot`}
                       </Box>
                     </Box>
-                  )}
-                {!isSourceLoading &&
-                  !sourceError &&
-                  sourceDocumentUrl &&
-                  sourceDocumentType !== 'image' &&
-                  sourceDocumentType !== 'pdf' && (
-                    <Button iconName="external" href={sourceDocumentUrl} target="_blank" rel="noreferrer">
-                      Download source document
-                    </Button>
-                  )}
+                  </Box>
+                )}
                 {!isSourceLoading && !sourceError && !sourceDocumentUrl && (
                   <StatusIndicator type="info">No preview available.</StatusIndicator>
                 )}

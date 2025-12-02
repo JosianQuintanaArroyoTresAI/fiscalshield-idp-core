@@ -149,6 +149,8 @@ export const formatInvoiceData = (extractionResult) => {
     hmrcConcern: extractionResult.HMRCConcern || false,
     deductibilityReasoning: extractionResult.DeductibilityReasoning || null,
     documentationRequired: extractionResult.DocumentationRequired || null,
+    // Source page information
+    sourcePage: extractionResult.SourcePage || null,
     // Field-level confidence scores
     confidenceScores: {
       composite: compositeConf,

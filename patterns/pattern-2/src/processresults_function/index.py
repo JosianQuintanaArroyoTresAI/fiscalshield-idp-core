@@ -487,8 +487,16 @@ def handler(event, context):
     # Clear sections list to rebuild from extraction results
     document.sections = []
     validation_errors = []
-    validation_errors = []
     hitl_triggered = False
+    
+    # Initialize counts for validation and metrics
+    # PAGE COUNT = VALIDATION (robust - must match exactly)
+    # INVOICE COUNT = METRIC (informational - helps refine continuation detection)
+    expected_page_count = document.metadata.get('expected_page_count', 0) if document.metadata else 0
+    expected_invoice_count = document.metadata.get('expected_invoice_count', 0) if document.metadata else 0
+    total_pages_extracted = 0
+    total_invoices_extracted = 0
+    section_counts = []  # Track per-section: (section_id, expected_pages, extracted_pages, expected_invoices, extracted_invoices)
 
     # Combine all section results
     for i, result in enumerate(extraction_results):
@@ -502,6 +510,32 @@ def handler(event, context):
                 section = section_document.sections[0]
                 logger.info(f"section: {section}")
                 document.sections.append(section)
+                
+                # Track page and invoice counts for validation/metrics
+                if section.classification == 'invoice':
+                    section_expected_invoices = section.attributes.get('invoice_count', 0) if section.attributes else 0
+                    section_expected_pages = section.attributes.get('page_count', len(section.page_ids)) if section.attributes else len(section.page_ids)
+                    section_extracted_pages = len(section.page_ids)
+                    section_extracted_invoices = result.get('invoices_extracted', 0)
+                    
+                    total_pages_extracted += section_extracted_pages
+                    total_invoices_extracted += section_extracted_invoices
+                    
+                    section_counts.append({
+                        'section_id': section.section_id,
+                        'expected_pages': section_expected_pages,
+                        'extracted_pages': section_extracted_pages,
+                        'expected_invoices': section_expected_invoices,
+                        'extracted_invoices': section_extracted_invoices,
+                        'pages_match': section_expected_pages == section_extracted_pages,
+                        'invoices_match': section_expected_invoices == section_extracted_invoices
+                    })
+                    
+                    logger.info(
+                        f"📊 Section {section.section_id}: "
+                        f"Pages: {section_extracted_pages}/{section_expected_pages} {'✅' if section_expected_pages == section_extracted_pages else '❌'}, "
+                        f"Invoices: {section_extracted_invoices}/{section_expected_invoices} {'✅' if section_expected_invoices == section_extracted_invoices else '⚠️'}"
+                    )
 
                 # Check if A2I should be triggered for this section
                 if enable_hitl == "true" and section.confidence_threshold_alerts:
@@ -594,6 +628,103 @@ def handler(event, context):
         if page.raw_text_uri:
             create_metadata_file(page.raw_text_uri, page.classification, "page")
 
+    # ============================================================================
+    # ============================================================================
+    # VALIDATION: PAGE COUNT (Critical - robust measure that can't be wrong)
+    # METRIC: INVOICE COUNT (Informational - helps refine continuation detection)
+    # ============================================================================
+    if expected_page_count > 0:
+        logger.info("="*80)
+        logger.info("📊 VALIDATION & METRICS")
+        logger.info("="*80)
+        logger.info(f"✅ PRIMARY VALIDATION: Page Count")
+        logger.info(f"   Expected pages (from classification): {expected_page_count}")
+        logger.info(f"   Extracted pages (from extraction):    {total_pages_extracted}")
+        
+        if expected_invoice_count > 0:
+            logger.info(f"")
+            logger.info(f"📈 INFORMATIONAL METRIC: Invoice Count")
+            logger.info(f"   Expected invoices (from classification): ~{expected_invoice_count}")
+            logger.info(f"   Extracted invoices (from extraction):    {total_invoices_extracted}")
+            logger.info(f"   (Invoice count is a metric, not validation - continuation detection can vary)")
+        
+        # Detailed per-section breakdown
+        logger.info("\nPer-section breakdown:")
+        for section_info in section_counts:
+            page_status = "✅" if section_info['pages_match'] else "❌"
+            invoice_status = "✅" if section_info['invoices_match'] else "⚠️"
+            logger.info(
+                f"  {page_status} Section {section_info['section_id']}: "
+                f"Pages {section_info['extracted_pages']}/{section_info['expected_pages']}, "
+                f"Invoices {section_info['extracted_invoices']}/{section_info['expected_invoices']} {invoice_status}"
+            )
+        
+        # PRIMARY VALIDATION: Page count (MUST match exactly)
+        logger.info("")
+        if expected_page_count == total_pages_extracted:
+            logger.info("✅ PAGE VALIDATION PASSED: All expected pages were processed")
+        else:
+            difference = abs(expected_page_count - total_pages_extracted)
+            if total_pages_extracted < expected_page_count:
+                logger.error(
+                    f"❌ PAGE VALIDATION FAILED: Missing {difference} pages! "
+                    f"Expected {expected_page_count}, but only processed {total_pages_extracted}"
+                )
+                validation_errors.append(
+                    f"Page count mismatch: Expected {expected_page_count} pages, "
+                    f"but only processed {total_pages_extracted}. Missing {difference} pages!"
+                )
+            else:
+                logger.error(
+                    f"❌ PAGE VALIDATION FAILED: Processed {difference} extra pages! "
+                    f"Expected {expected_page_count}, but processed {total_pages_extracted}"
+                )
+                validation_errors.append(
+                    f"Page count mismatch: Expected {expected_page_count} pages, "
+                    f"but processed {total_pages_extracted}. Extra {difference} pages!"
+                )
+        
+        # INFORMATIONAL METRIC: Invoice count (helps refine process)
+        if expected_invoice_count > 0:
+            logger.info("")
+            if expected_invoice_count == total_invoices_extracted:
+                logger.info("✅ INVOICE METRIC: Exact match between classification and extraction")
+            else:
+                difference = abs(expected_invoice_count - total_invoices_extracted)
+                if total_invoices_extracted < expected_invoice_count:
+                    logger.warning(
+                        f"⚠️  INVOICE METRIC: Extracted {difference} fewer invoices than expected "
+                        f"(~{expected_invoice_count} expected, {total_invoices_extracted} extracted). "
+                        f"This suggests some multi-page invoices in the document. "
+                        f"Classification continuation detection can be refined."
+                    )
+                else:
+                    logger.warning(
+                        f"⚠️  INVOICE METRIC: Extracted {difference} more invoices than expected "
+                        f"(~{expected_invoice_count} expected, {total_invoices_extracted} extracted). "
+                        f"Classification may have under-detected continuation pages."
+                    )
+                logger.info(
+                    "   Note: Invoice count variance is normal - helps refine continuation detection. "
+                    "Page count is the validation that matters."
+                )
+        
+        # Store validation results in document metadata
+        if not document.metadata:
+            document.metadata = {}
+        document.metadata['validation'] = {
+            'expected_page_count': expected_page_count,
+            'extracted_page_count': total_pages_extracted,
+            'page_validation_passed': expected_page_count == total_pages_extracted,
+            'missing_pages': max(0, expected_page_count - total_pages_extracted),
+            'extra_pages': max(0, total_pages_extracted - expected_page_count),
+            'expected_invoice_count': expected_invoice_count,
+            'extracted_invoice_count': total_invoices_extracted,
+            'invoice_count_match': expected_invoice_count == total_invoices_extracted,
+            'section_details': section_counts
+        }
+        logger.info("="*80)
+    
     # Update document status based on HITL requirement
     if hitl_triggered:
         # Set status to HITL_IN_PROGRESS when HITL is triggered

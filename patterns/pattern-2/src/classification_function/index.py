@@ -16,6 +16,8 @@ from idp_common.models import Document, Status
 from idp_common.docs_service import create_document_service
 from idp_common.utils import calculate_lambda_metering, merge_metering_data
 from idp_common.classification.structure_analysis import enhance_classification_with_structure_analysis
+from idp_common.classification.smart_batcher import SmartBatcher
+from idp_common.classification.llm_boundary_detection import DEFAULT_BOUNDARY_MODEL_ID
 
 # Configuration will be loaded in handler function
 region = os.environ["AWS_REGION"]
@@ -133,7 +135,83 @@ def handler(event, context):
     # Classify the document - the service will update the Document directly
     document = service.classify_document(document)
     
-    # NEW: Store classification metadata for drift detection
+    # NEW: Apply smart batching to create optimally-sized sections
+    # This groups pages into cost-efficient batches for parallel extraction
+    enable_smart_batching = config.get("classification", {}).get("enable_smart_batching", True)
+    
+    if enable_smart_batching:
+        logger.info("🔧 Smart batching enabled - creating optimized sections")
+        
+        # Get batch size configuration
+        target_pages = int(os.environ.get('BATCH_TARGET_PAGES', 
+                                          config.get("classification", {}).get("target_pages_per_batch", 10)))
+        max_pages = int(os.environ.get('BATCH_MAX_PAGES',
+                                       config.get("classification", {}).get("max_pages_per_batch", 30)))
+        max_invoices = int(os.environ.get('BATCH_MAX_INVOICES',
+                                          config.get("classification", {}).get("max_invoices_per_batch", 20)))
+        
+        # Initialize smart batcher
+        batcher = SmartBatcher(
+            target_pages_per_batch=target_pages,
+            max_pages_per_batch=max_pages,
+            max_invoices_per_batch=max_invoices,
+            max_statements_per_batch=1  # Bank statements: 1 per section
+        )
+        
+        # Replace sections with optimized batches
+        original_section_count = len(document.sections)
+        document.sections = batcher.create_optimized_sections(
+            pages=document.pages,
+            document_type=user_hint
+        )
+        
+        logger.info(
+            f"✅ Smart batching complete: {original_section_count} original sections → "
+            f"{len(document.sections)} optimized sections"
+        )
+        
+        # Calculate total expected invoice count for validation
+        total_expected_invoices = sum(
+            section.attributes.get('invoice_count', 0) if section.attributes else 0
+            for section in document.sections
+            if section.classification == 'invoice'
+        )
+        
+        # Calculate total page count for validation
+        total_page_count = sum(
+            len(section.page_ids)
+            for section in document.sections
+        )
+        
+        # Store in document metadata
+        # PAGE COUNT = VALIDATION (robust, can't be wrong)
+        # INVOICE COUNT = METRIC (for refinement, continuation detection can be imperfect)
+        if not document.metadata:
+            document.metadata = {}
+        document.metadata['expected_page_count'] = total_page_count  # CRITICAL: Must match extraction
+        document.metadata['expected_invoice_count'] = total_expected_invoices  # INFORMATIONAL: Helps refine process
+        document.metadata['batching_strategy'] = 'smart'
+        
+        logger.info("="*80)
+        logger.info(
+            f"📊 Classification complete: {total_page_count} pages, ~{total_expected_invoices} invoices across "
+            f"{len([s for s in document.sections if s.classification == 'invoice'])} sections"
+        )
+        logger.info(f"   (Page count = VALIDATION, Invoice count = METRIC)")
+        
+        # Log batch details
+        for section in document.sections:
+            invoice_count = section.attributes.get('invoice_count', 0) if section.attributes else 0
+            page_count = section.attributes.get('page_count', len(section.page_ids)) if section.attributes else len(section.page_ids)
+            logger.info(
+                f"  Section {section.section_id}: {section.classification}, "
+                f"{page_count} pages, ~{invoice_count} invoices"
+            )
+        logger.info("="*80)
+    else:
+        logger.info("ℹ️  Smart batching disabled - using default section grouping")
+    
+    # Store classification metadata for drift detection
     if not document.metadata:
         document.metadata = {}
     
@@ -299,81 +377,134 @@ def handler(event, context):
     t1 = time.time()
     logger.info(f"Time taken for classification: {t1-t0:.2f} seconds")
 
-    # NEW: Add structure analysis for invoice sections
-    # This detects invoice boundaries and provides optimization metadata for extraction
+    # NEW: LLM-based boundary detection for invoice sections
+    # Uses Claude Sonnet 3.5 to intelligently detect invoice boundaries
     try:
-        chunk_size = int(os.environ.get('CHUNK_SIZE', '60000'))
-        overlap_size = int(os.environ.get('OVERLAP_SIZE', '5000'))
+        # Get configuration for boundary detection
+        classification_cfg = config.get("classification", {})
+
+        def _safe_float(value, default):
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return default
+
+        def _safe_int(value, default):
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return default
+
+        enable_llm_boundaries = classification_cfg.get("enable_llm_boundary_detection", True)
+        boundary_model_id = classification_cfg.get(
+            "boundary_detection_model", DEFAULT_BOUNDARY_MODEL_ID
+        )
+        use_caching = classification_cfg.get("use_prompt_caching", True)
+        boundary_min_coverage = _safe_float(classification_cfg.get("boundary_min_coverage", 0.92), 0.92)
+        boundary_max_gap_ratio = _safe_float(classification_cfg.get("boundary_max_gap_ratio", 0.12), 0.12)
+        fallback_pages_per_boundary = _safe_int(classification_cfg.get("fallback_pages_per_boundary", 2), 2)
         
-        for section in document.sections:
-            if section.classification.lower() == 'invoice':
-                logger.info(f"🔍 Analyzing structure for invoice section {section.section_id}")
-                
-                # Get section text (combine all pages in section)
-                section_text = ""
-                for page_id in section.page_ids:
-                    if page_id in document.pages:
-                        page = document.pages[page_id]
-                        # Check for parsed_text_uri (Nova OCR) or raw_text_uri (Textract)
-                        text_uri = getattr(page, 'parsed_text_uri', None) or getattr(page, 'raw_text_uri', None)
-                        if text_uri:
-                            try:
-                                from idp_common import s3
-                                page_text = s3.get_text_content(text_uri)
-                                section_text += f"\n[PAGE:{page_id}]\n{page_text}"
-                            except Exception as e:
-                                logger.warning(f"Failed to load text for page {page_id}: {e}")
-                
-                if section_text:
-                    logger.info(f"Section text length: {len(section_text)} chars")
+        if not enable_llm_boundaries:
+            logger.info("⏭️  LLM boundary detection disabled in config")
+        else:
+            logger.info(f"🔍 LLM boundary detection enabled (model: {boundary_model_id})")
+            
+            # Import LLM boundary detector
+            from idp_common.classification.llm_boundary_detection import (
+                LLMBoundaryDetector,
+                get_section_text
+            )
+            
+            # Initialize detector
+            detector = LLMBoundaryDetector(
+                region=region,
+                model_id=boundary_model_id,
+                use_caching=use_caching,
+                min_coverage=boundary_min_coverage,
+                max_gap_ratio=boundary_max_gap_ratio,
+                fallback_pages_per_boundary=fallback_pages_per_boundary
+            )
+            
+            # Process each invoice section
+            for section in document.sections:
+                if section.classification.lower() == 'invoice':
+                    logger.info(f"🔍 Detecting boundaries for invoice section {section.section_id}")
                     
-                    # Initialize attributes dict if not exists
-                    if not section.attributes:
-                        section.attributes = {}
+                    # Get section text (combine all pages with PAGE markers)
+                    section_text = get_section_text(section, document.pages)
                     
-                    # Run boundary detection using PAGE markers (PRIMARY strategy)
-                    try:
-                        from idp_common.classification.structure_analysis import InvoiceBoundaryDetector
+                    if section_text:
+                        logger.info(f"📄 Section text length: {len(section_text)} chars")
                         
-                        detector = InvoiceBoundaryDetector(
-                            chunk_size=chunk_size,
-                            overlap_size=overlap_size
-                        )
+                        # Initialize attributes dict if not exists
+                        if not section.attributes:
+                            section.attributes = {}
                         
-                        # Try PAGE-marker-based detection first (most reliable)
-                        boundaries = detector.detect_boundaries_page_based(section_text)
-                        
-                        if boundaries:
-                            logger.info(f"✅ PAGE-marker strategy succeeded: {len(boundaries)} boundaries detected")
-                            section.attributes['boundaries'] = boundaries
-                            section.attributes['boundary_strategy'] = 'page_markers'
-                        else:
-                            logger.info(f"⚠️ PAGE-marker strategy found no boundaries, extraction will use overlap chunking")
-                            section.attributes['boundary_strategy'] = 'none'
-                        
-                        # Add metadata for extraction Lambda
-                        section.attributes['structure_hint'] = {
-                            'section_text_length': len(section_text),
-                            'chunk_size': chunk_size,
-                            'overlap_size': overlap_size,
-                            'boundaries_detected': len(boundaries) if boundaries else 0
-                        }
-                        
-                        logger.info(
-                            f"✅ Added boundaries to section {section.section_id} "
-                            f"({len(boundaries) if boundaries else 0} invoices detected)"
-                        )
-                    except Exception as e:
-                        logger.warning(f"Boundary detection failed: {e}, extraction will use overlap chunking")
-                        section.attributes['boundary_strategy'] = 'error'
-                        section.attributes['structure_hint'] = {
-                            'section_text_length': len(section_text),
-                            'chunk_size': chunk_size,
-                            'overlap_size': overlap_size,
-                            'error': str(e)
-                        }
-                else:
-                    logger.warning(f"No text found for invoice section {section.section_id}")
+                        # Run LLM boundary detection
+                        try:
+                            boundaries = detector.detect_invoice_boundaries(
+                                section_text=section_text,
+                                section_pages=section.page_ids
+                            )
+
+                            validation_passed = False
+                            validation_reason = None
+                            if boundaries:
+                                validation_passed = detector.validate_boundaries(boundaries, section_text)
+                                if not validation_passed:
+                                    validation_reason = detector.last_validation_error or "validation_failed"
+                            else:
+                                validation_reason = "llm_returned_no_boundaries"
+
+                            if validation_passed:
+                                section.attributes['boundaries'] = boundaries
+                                section.attributes['boundary_strategy'] = 'llm_detected'
+                                section.attributes['invoice_count'] = len(boundaries)
+                                section.attributes['boundary_model'] = boundary_model_id
+                                metrics.put_metric("LLMBoundaryValidationPassed", len(boundaries))
+                                logger.info(
+                                    f"✅ Detected {len(boundaries)} invoices in section {section.section_id}"
+                                )
+                            else:
+                                metrics.put_metric("LLMBoundaryValidationFailed", 1)
+                                logger.warning(
+                                    f"⚠️ Boundary detection/validation failed for section {section.section_id}"
+                                )
+                                section.attributes['boundary_strategy'] = 'validation_failed'
+                                section.attributes['invoice_count'] = 0
+                                if validation_reason:
+                                    section.attributes['boundary_failure_reason'] = validation_reason
+
+                                fallback_boundaries = detector.generate_page_chunk_fallback(
+                                    section_text=section_text,
+                                    section_pages=section.page_ids,
+                                    max_pages_per_boundary=fallback_pages_per_boundary
+                                )
+
+                                if fallback_boundaries:
+                                    section.attributes['boundaries'] = fallback_boundaries
+                                    section.attributes['boundary_strategy'] = 'fallback_page_chunks'
+                                    section.attributes['invoice_count'] = len(fallback_boundaries)
+                                    section.attributes['boundary_model'] = boundary_model_id
+                                    section.attributes['boundary_failure_reason'] = validation_reason or 'llm_unavailable'
+                                    metrics.put_metric("LLMBoundaryFallbackUsed", len(fallback_boundaries))
+                                    logger.info(
+                                        f"🛟 Applied fallback boundaries for section {section.section_id}"
+                                    )
+                                else:
+                                    logger.error(
+                                        f"❌ Fallback boundary generation failed for section {section.section_id}"
+                                    )
+                                    section.attributes['boundary_strategy'] = 'fallback_failed'
+                                    section.attributes['boundary_failure_reason'] = validation_reason or 'fallback_failed'
+                                
+                        except Exception as e:
+                            logger.error(f"❌ Error in LLM boundary detection: {str(e)}")
+                            section.attributes['boundary_strategy'] = 'error'
+                            section.attributes['error'] = str(e)
+                    else:
+                        logger.warning(f"No text found for invoice section {section.section_id}")
+                        section.attributes['boundary_strategy'] = 'no_text'
     
     except Exception as e:
         logger.warning(f"Structure analysis enhancement failed (non-critical): {e}")

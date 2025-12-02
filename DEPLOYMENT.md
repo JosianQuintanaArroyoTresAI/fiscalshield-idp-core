@@ -1,249 +1,263 @@
-# Deployment Guide
-
-## Quick Deploy (Development)
-
-```bash
-# Complete deployment (recommended)
-./scripts/deploy-dev-complete.sh
-
-# Lambda-only updates (fast iteration)
-./scripts/force-update-lambdas.sh
-```
-
-**Time:** 30 seconds (Lambda only) to 10 minutes (full deployment)
+# Production Deployment Checklist - POC Migration Phase 3
+**Date:** November 8, 2025  
+**Version:** 3.0  
+**Branch:** main (commit: 65fbf31a)
 
 ---
 
-## Production Deployment
+## ✅ Pre-Deployment Verification
 
-### 1. Create Pull Request
+### **Code Status**
+- [x] All changes merged from dev to main
+- [x] No differences between dev and main branches
+- [x] Latest commit: `65fbf31a - Merge pull request #5`
+- [x] Migration guide updated and committed
+- [x] All key files present:
+  - `src/ui/src/contexts/company.js` ✅
+  - `src/ui/src/components/company-intelligence/CompanyAnalysis.jsx` ✅
+  - `src/ui/src/components/client-takeon/ClientTakeOnAnalysis.jsx` ✅
+  - `src/ui/src/services/analysisStack.js` ✅
 
-**GitHub Web UI** (Recommended):
-1. Go to: https://github.com/JosianQuintanaArroyoTresAI/fiscalshield-idp-core/compare/main...dev
-2. Click "Create pull request"
-3. Title: Release summary (e.g., "Core Architecture Complete")
-4. Add description with changes
-5. Click "Create pull request"
+### **Feature Completeness**
+- [x] Phase 1: CompanyProvider context (commit `1b6c1c63`)
+- [x] Phase 2: Page structure and navigation (commit `42fcccf8`)
+- [x] Phase 3.1: Client Take-On Analysis (commit `e2554bbe`)
+- [x] Phase 3.2: Hybrid card layout (commit `95578d29`)
+- [x] Phase 3.3: Merged implementation (commit `38d6e2fc`)
 
-**GitHub CLI**:
+---
+
+## 🚀 Deployment Steps
+
+### **1. Verify CI/CD Pipeline**
 ```bash
-gh pr create --base main --head dev --title "Release: [Summary]" --body "Description"
+# Check GitHub Actions status
+# URL: https://github.com/JosianQuintanaArroyoTresAI/fiscalshield-idp-core/actions
+```
+- [ ] Latest workflow run successful
+- [ ] No failing tests
+- [ ] Build completed without errors
+
+### **2. Deploy to Production**
+The merge to main should automatically trigger CI/CD deployment. If manual deployment is needed:
+
+```bash
+# Option A: CI/CD should auto-deploy from main branch
+# Wait for GitHub Actions to complete
+
+# Option B: Manual deployment (if needed)
+cd /home/josian/git/fiscalshield-idp-core
+git checkout main
+git pull origin main
+
+# Deploy pattern 2 stack (if infrastructure changed)
+./deploy-pattern2-prod.sh
+
+# Or use complete deployment script
+cd scripts
+./deploy-prod-complete.sh
 ```
 
-### 2. Wait for PR Validation
-
-GitHub Actions automatically runs:
-- Python linting (ruff)
-- Test suite with coverage
-- CloudFormation validation
-- UI checks
-
-**Time:** 5-10 minutes
-
-### 3. Merge PR
-
-- Review all checks are green ✅
-- Click "Merge pull request"
-- Confirm merge
-
-### 4. Deploy to Production
-
-**Via GitHub Actions**:
-1. Go to: https://github.com/JosianQuintanaArroyoTresAI/fiscalshield-idp-core/actions
-2. Click "Deploy to Production"
-3. Click "Run workflow"
-4. Type: `DEPLOY`
-5. Click "Run workflow"
-
-**Monitor:**
-- GitHub Actions: Progress logs
-- CloudFormation: https://console.aws.amazon.com/cloudformation
-- **Time:** 15-20 minutes
-
-### 5. Post-Deployment Setup
-
+### **3. Monitor Deployment**
 ```bash
-# Get User Pool ID
-USER_POOL_ID=$(aws cloudformation describe-stack-resource \
-  --stack-name fiscalshield-idp-prod \
-  --logical-resource-id CognitoUserPool \
-  --region eu-central-1 \
-  --query 'StackResourceDetail.PhysicalResourceId' \
+# Check CloudFormation stacks
+aws cloudformation describe-stacks \
+  --stack-name fiscalshield-idp-prod-PATTERN2STACK \
+  --query 'Stacks[0].StackStatus' \
+  --output text
+
+# Check if UPDATE_COMPLETE or CREATE_COMPLETE
+```
+
+---
+
+## 🧪 Post-Deployment Verification
+
+### **Frontend Verification**
+- [ ] Navigate to production URL
+- [ ] Login with test credentials
+- [ ] Navigate to Company Select
+- [ ] Select a company (e.g., 11087779 or TESCO)
+- [ ] Click "View Company Intelligence"
+
+### **Company Analysis Page - Overview Tab**
+- [ ] Page loads without errors
+- [ ] 4 compact risk cards display:
+  - [ ] Overall Risk card (shows risk level with color)
+  - [ ] Adverse Media card (shows findings count)
+  - [ ] Director Screening card (shows sanctions + PEP count)
+  - [ ] Company Status card (shows active/inactive)
+- [ ] Risk scores load from Analysis Stack
+- [ ] Color coding is correct (red/orange/green)
+- [ ] Company data section displays below cards
+
+### **Company Analysis Page - AML Report Tab**
+- [ ] Click "AML Report" tab
+- [ ] Tab switches without error
+- [ ] Analysis Summary cards display (4 cards):
+  - [ ] Red Flags count
+  - [ ] Recommendations count
+  - [ ] Mitigating Factors count
+  - [ ] Enhanced DD status
+- [ ] Detailed Intelligence section displays:
+  - [ ] Overall Summary
+  - [ ] Red Flags list (if any)
+  - [ ] Recommendations list (if any)
+  - [ ] Mitigating Factors list (if any)
+- [ ] Category Analysis sections display:
+  - [ ] Governance insights
+  - [ ] AML/Sanctions insights
+  - [ ] Reputational insights
+  - [ ] Financial insights
+
+### **AML Report Generation**
+- [ ] Click "Generate Full AML Report" button
+- [ ] Loading state displays correctly
+- [ ] Success alert appears after generation
+- [ ] Download button appears in alert
+- [ ] Click download button
+- [ ] PDF downloads successfully
+- [ ] Open PDF and verify content
+
+### **Browser Console Check**
+- [ ] Open browser DevTools (F12)
+- [ ] Check Console tab - no errors
+- [ ] Check Network tab - all API calls successful (200/201 status)
+- [ ] No 404 or 500 errors
+
+### **Responsive Design**
+- [ ] Test on desktop (1920x1080)
+- [ ] Test on laptop (1366x768)
+- [ ] Test on tablet view (resize browser)
+- [ ] All cards display correctly at different sizes
+
+---
+
+## 🔍 API Verification
+
+### **Analysis Stack Endpoints**
+```bash
+# Get Analysis Stack API URL from CloudFormation
+ANALYSIS_API=$(aws cloudformation describe-stacks \
+  --stack-name fiscalshield-analysis-prod \
+  --query 'Stacks[0].Outputs[?OutputKey==`ApiUrl`].OutputValue' \
   --output text)
 
-# Create Cognito Groups
-aws cognito-idp create-group \
-  --user-pool-id $USER_POOL_ID \
-  --group-name Admin \
-  --description "System administrators" \
-  --precedence 0 \
-  --region eu-central-1
+echo "Analysis API URL: $ANALYSIS_API"
 
-aws cognito-idp create-group \
-  --user-pool-id $USER_POOL_ID \
-  --group-name Users \
-  --description "Regular users" \
-  --precedence 1 \
-  --region eu-central-1
+# Test health endpoint
+curl ${ANALYSIS_API}/health
 
-# Assign admin user
-ADMIN_EMAIL="josian@protonmail.com"
-aws cognito-idp admin-add-user-to-group \
-  --user-pool-id $USER_POOL_ID \
-  --username $ADMIN_EMAIL \
-  --group-name Admin \
-  --region eu-central-1
+# Test intelligence endpoint (replace with real company number)
+curl ${ANALYSIS_API}/company/11087779/intelligence
 ```
 
-### 6. Smoke Test Checklist
-
-- [ ] CloudFormation status: `UPDATE_COMPLETE`
-- [ ] Cognito groups exist (Admin, Users)
-- [ ] Admin user can login
-- [ ] Document upload works
-- [ ] Processing completes successfully
-- [ ] No errors in CloudWatch logs (15 minutes)
+Expected responses:
+- [ ] `/health` returns 200 OK
+- [ ] `/company/{id}/intelligence` returns 200 with data
+- [ ] No 500 errors or timeouts
 
 ---
 
-## Development Scenarios
+## 📋 Stakeholder Demo Preparation
 
-### Daily Development
-```bash
-# After any code changes
-./scripts/deploy-dev-complete.sh
-```
+### **Demo Environment**
+- [ ] Production URL accessible
+- [ ] Test company data available (e.g., 11087779, TESCO)
+- [ ] Analysis Stack has intelligence data for demo companies
+- [ ] PDF generation working
 
-### Fast Lambda Iteration
-```bash
-# Make Lambda code changes, then:
-./scripts/force-update-lambdas.sh
+### **Demo Script Ready**
+- [ ] Company Select → Pick company
+- [ ] Overview Tab → Show 4 risk cards
+- [ ] AML Report Tab → Show detailed intelligence
+- [ ] Generate Report → Download PDF
+- [ ] Have backup screenshots ready
 
-# Update specific functions:
-./scripts/force-update-lambdas.sh upload_resolver queue_sender
-```
-
-### Infrastructure Changes Only
-```bash
-# If you only changed template.yaml
-./deploy-pattern2-dev.sh
-```
-
-### Test Build Without Deploying
-```bash
-./scripts/publish-dev.sh
-```
+### **Backup Plan**
+- [ ] Screenshots of working deployment
+- [ ] Video recording of features (optional)
+- [ ] Rollback plan documented
 
 ---
 
-## Rollback Plan
+## 🐛 Rollback Plan (If Issues Found)
 
-### Quick Rollback (Production)
-
+### **Quick Rollback**
 ```bash
-# Via Git
+# Revert to previous main commit
 git checkout main
-git revert -m 1 HEAD
+git reset --hard c3924a64  # Previous stable commit before merge
+git push origin main --force
+
+# Or revert the merge commit
+git revert 65fbf31a -m 1
 git push origin main
-
-# Then re-run GitHub Actions deployment
 ```
 
-### CloudFormation Rollback
-
+### **CloudFormation Rollback**
 ```bash
-# Get previous template from S3
-aws s3 ls s3://fiscalshield-prod-eu-central-1/idp/ --recursive --human-readable
-
-# Update stack with previous template
-aws cloudformation update-stack \
-  --stack-name fiscalshield-idp-prod \
-  --template-url https://s3.eu-central-1.amazonaws.com/fiscalshield-prod-eu-central-1/idp/idp-main-PREVIOUS-VERSION.yaml \
-  --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
-  --region eu-central-1
+# If stack update fails, it auto-rolls back
+# Manual rollback if needed:
+aws cloudformation cancel-update-stack \
+  --stack-name fiscalshield-idp-prod-PATTERN2STACK
 ```
 
 ---
 
-## Troubleshooting
+## 📊 Success Criteria
 
-### "Docker daemon not running"
-```bash
-sudo systemctl start docker  # Linux
-# Or start Docker Desktop on Mac/Windows
+### **Must Have (Blocking)**
+- [ ] ✅ Company Analysis page loads
+- [ ] ✅ Overview tab displays 4 risk cards
+- [ ] ✅ AML Report tab displays intelligence
+- [ ] ✅ No console errors
+- [ ] ✅ Analysis Stack API responds
+
+### **Should Have (Non-blocking)**
+- [ ] ✅ PDF generation works
+- [ ] ✅ All card data populates correctly
+- [ ] ✅ Color coding accurate
+- [ ] ✅ Responsive design works
+
+### **Nice to Have**
+- [ ] Fast load times (< 2 seconds)
+- [ ] Smooth tab transitions
+- [ ] Professional appearance
+
+---
+
+## 📝 Post-Deployment Notes
+
+### **Issues Found:**
+```
+[Document any issues discovered during verification]
 ```
 
-### "Stack in ROLLBACK_COMPLETE"
-```bash
-aws cloudformation delete-stack --stack-name fiscalshield-idp-dev --region eu-central-1
-aws cloudformation wait stack-delete-complete --stack-name fiscalshield-idp-dev --region eu-central-1
-./scripts/deploy-dev-complete.sh
+### **Fixes Applied:**
+```
+[Document any hotfixes deployed]
 ```
 
-### "No changes detected" but code changed
-```bash
-# Force Lambda update
-./scripts/force-update-lambdas.sh
+### **Stakeholder Feedback:**
 ```
-
-### Verify Deployment
-```bash
-# Check stack status
-aws cloudformation describe-stacks --stack-name fiscalshield-idp-dev --region eu-central-1
-
-# Watch logs
-aws logs tail /aws/lambda/fiscalshield-idp-dev-UploadResolverFunction-* --follow
+[Record feedback from demo]
 ```
 
 ---
 
-## Monitoring
+## ✅ Final Sign-Off
 
-```bash
-# CloudFormation Console
-https://console.aws.amazon.com/cloudformation/home?region=eu-central-1
+- [ ] All verification steps completed
+- [ ] No critical errors
+- [ ] Stakeholder demo successful
+- [ ] Production deployment approved
 
-# Check specific Lambda logs
-aws logs tail /aws/lambda/fiscalshield-idp-dev-FUNCTION-NAME --follow
-
-# List all Lambda functions in stack
-aws cloudformation describe-stack-resources \
-  --stack-name fiscalshield-idp-dev \
-  --region eu-central-1 \
-  --query 'StackResources[?ResourceType==`AWS::Lambda::Function`].PhysicalResourceId'
-```
+**Deployed By:** _________________  
+**Date/Time:** _________________  
+**Approved By:** _________________  
 
 ---
 
-## Time Estimates
-
-| Operation | Duration | When to Use |
-|-----------|----------|-------------|
-| `deploy-dev-complete.sh` | 5-10 min | Full deployment |
-| `force-update-lambdas.sh` | 30 sec | Lambda code only |
-| Production deployment | 15-20 min | Release to prod |
-| Post-deployment setup | 2-3 min | Initial prod setup |
-
----
-
-## Best Practices
-
-✅ **DO:**
-- Use `deploy-dev-complete.sh` for most deployments
-- Use `force-update-lambdas.sh` for rapid Lambda iteration
-- Test in dev before deploying to prod
-- Monitor logs after deployment
-
-❌ **DON'T:**
-- Deploy to prod without PR validation
-- Skip smoke tests after production deployment
-- Modify Lambda code directly in AWS console
-
----
-
-## Additional Resources
-
-- **CI/CD Setup:** `docs/cicd/CICD_SETUP.md`
-- **Configuration Reload:** `docs/cicd/CONFIGURATION_RELOAD_GUIDE.md`
-- **Scripts README:** `scripts/README.md`
-- **Deployment History:** `docs/archive/deployment-history/`
+**Status:** Ready for Production Deployment  
+**Next Steps:** Execute deployment and run verification checklist

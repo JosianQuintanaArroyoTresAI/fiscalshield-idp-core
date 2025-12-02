@@ -363,6 +363,9 @@ Resources:
       BuildProjectName: !Ref Pattern2DockerBuildProject
       # Force rebuild when source changes (filename includes content hash)
       CodeLocation: !Sub "arn:${AWS::Partition}:s3:::${ArtifactBucket}/${ArtifactPrefix}/${Pattern2SourceZipfile}"
+      # Force rebuild on every deployment by including ImageVersion (which changes on every publish)
+      # This ensures code changes are always deployed even if ZIP hash collides
+      ImageVersion: !Ref ImageVersion
 
   Pattern2EcrRepositoryCleanup:
     Type: Custom::ECRRepositoryCleanup
@@ -1731,10 +1734,10 @@ Resources:
           EXTRACTION_RESULTS_TABLE: !Ref ExtractionResultsTable
           CONFIGURATION_TABLE: !Ref ConfigurationTable
           TRACKING_TABLE: !Ref TrackingTable
-          BEDROCK_MODEL_ID: "anthropic.claude-3-haiku-20240307-v1:0"
-          BEDROCK_INFERENCE_PROFILE_ARN: "arn:aws:bedrock:eu-central-1:864899848062:inference-profile/eu.anthropic.claude-3-haiku-20240307-v1:0"
-          FALLBACK_BEDROCK_MODEL_ID: "anthropic.claude-3-7-sonnet-20250219-v1:0,anthropic.claude-3-5-sonnet-20240620-v1:0"
-          FALLBACK_BEDROCK_INFERENCE_PROFILE_ARN: "arn:aws:bedrock:eu-central-1:864899848062:inference-profile/eu.anthropic.claude-3-7-sonnet-20250219-v1:0,arn:aws:bedrock:eu-central-1:864899848062:inference-profile/eu.anthropic.claude-3-5-sonnet-20240620-v1:0"
+          BEDROCK_MODEL_ID: "anthropic.claude-3-7-sonnet-20250219-v1:0"
+          BEDROCK_INFERENCE_PROFILE_ARN: "arn:aws:bedrock:eu-central-1:864899848062:inference-profile/eu.anthropic.claude-3-7-sonnet-20250219-v1:0"
+          FALLBACK_BEDROCK_MODEL_ID: "anthropic.claude-3-5-sonnet-20240620-v1:0"
+          FALLBACK_BEDROCK_INFERENCE_PROFILE_ARN: "arn:aws:bedrock:eu-central-1:864899848062:inference-profile/eu.anthropic.claude-3-5-sonnet-20240620-v1:0"
           BEDROCK_MAX_RETRIES: "6"
           BEDROCK_BACKOFF_BASE_SECONDS: "2.0"
           BEDROCK_BACKOFF_MAX_SECONDS: "45.0"

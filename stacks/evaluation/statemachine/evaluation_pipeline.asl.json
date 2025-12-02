@@ -80,7 +80,7 @@
         {
           "Variable": "$.batchStatus.status",
           "StringEquals": "COMPLETED",
-          "Next": "CompareResults"
+          "Next": "PrepareBatchComparison"
         },
         {
           "Variable": "$.batchStatus.status",
@@ -89,6 +89,18 @@
         }
       ],
       "Default": "WaitForBatchCompletion"
+    },
+    
+    "PrepareBatchComparison": {
+      "Type": "Pass",
+      "Comment": "Prepare data for batch comparison",
+      "Parameters": {
+        "evaluationId.$": "$.samplingResult.batchMetadata.evaluationId",
+        "mode": "batch",
+        "resultsLocation.$": "$.batchStatus.results_location"
+      },
+      "ResultPath": "$.comparisonInput",
+      "Next": "CompareResults"
     },
     
     "DirectReEvaluation": {
@@ -100,7 +112,7 @@
         "batchMetadata.$": "$.samplingResult.batchMetadata"
       },
       "ResultPath": "$.reEvaluationResult",
-      "Next": "CompareResults",
+      "Next": "PrepareDirectComparison",
       "Catch": [
         {
           "ErrorEquals": ["States.ALL"],
@@ -110,13 +122,26 @@
       ]
     },
     
+    "PrepareDirectComparison": {
+      "Type": "Pass",
+      "Comment": "Prepare data for direct comparison",
+      "Parameters": {
+        "evaluationId.$": "$.samplingResult.batchMetadata.evaluationId",
+        "mode": "direct",
+        "resultsLocation.$": "$.reEvaluationResult.result.resultsLocation"
+      },
+      "ResultPath": "$.comparisonInput",
+      "Next": "CompareResults"
+    },
+    
     "CompareResults": {
       "Type": "Task",
       "Resource": "${ComparatorFunctionArn}",
       "Comment": "Compare baseline vs evaluation results field-by-field",
       "Parameters": {
-        "evaluationId.$": "$.samplingResult.batchMetadata.evaluationId",
-        "mode.$": "$.mode"
+        "evaluationId.$": "$.comparisonInput.evaluationId",
+        "mode.$": "$.comparisonInput.mode",
+        "resultsLocation.$": "$.comparisonInput.resultsLocation"
       },
       "ResultPath": "$.comparisonResult",
       "Next": "EvaluationComplete"

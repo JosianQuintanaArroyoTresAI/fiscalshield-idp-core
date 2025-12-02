@@ -224,18 +224,39 @@ classification:
   trust_user_hint: false  # Run LLM classification even with user hints to collect validation metrics
   validate_hint_on_mismatch: true
   
+  # Smart Batching Configuration
+  # Groups classified pages into optimally-sized sections for cost-efficient parallel extraction
+  enable_smart_batching: true
+  target_pages_per_batch: 10      # Ideal pages per section (flexible to include complete invoices)
+  max_pages_per_batch: 30         # Hard limit to prevent timeouts
+  max_invoices_per_batch: 20      # Maximum invoices in one batch
+  max_statements_per_batch: 1     # Bank statements: always 1 per section
+  
+  # LLM Boundary Detection Configuration
+  # Uses Claude to intelligently detect document boundaries within sections
+  # This replaces regex-based chunking with semantic understanding
+  enable_llm_boundary_detection: true
+  boundary_detection_model: "arn:aws:bedrock:eu-central-1:864899848062:inference-profile/eu.anthropic.claude-3-5-sonnet-20240620-v1:0"  # Sonnet 3.5 for accuracy
+  use_prompt_caching: false  # Inference profiles don't support prompt caching yet
+  boundary_min_coverage: 0.92          # Require 92% text coverage per section (Phase 2 default)
+  boundary_max_gap_ratio: 0.12         # Largest uncovered span allowed (fraction of section text)
+  fallback_pages_per_boundary: 2       # Deterministic fallback chunk size when LLM output is invalid
+  
+  # Page count validation (enforced in queue_sender Lambda)
+  max_pages: 500  # Maximum pages allowed per uploaded PDF file
+  
   image:
     target_height: ""
     target_width: ""
   
-  model: arn:aws:bedrock:eu-central-1:864899848062:inference-profile/eu.anthropic.claude-3-haiku-20240307-v1:0
+  model: arn:aws:bedrock:eu-central-1:864899848062:inference-profile/eu.amazon.nova-pro-v1:0
   fallback_models:
     - arn:aws:bedrock:eu-central-1:864899848062:inference-profile/eu.anthropic.claude-3-7-sonnet-20250219-v1:0
     - arn:aws:bedrock:eu-central-1:864899848062:inference-profile/eu.anthropic.claude-3-5-sonnet-20240620-v1:0
   
   temperature: "0.0"
   top_p: "0.1"
-  max_tokens: "16384"
+  max_tokens: "8000"
   top_k: "5"
   
   system_prompt: >-
@@ -309,9 +330,48 @@ classification:
        MEDIUM (0.70-0.89): Most features match, minor ambiguity or missing secondary features
        LOW (0.0-0.69): Limited features, conflicting signals, or poor image quality
     
-    5. DOCUMENT BOUNDARY:
-       - "start": First page of new document (has header, logo, document number)
-       - "continue": Continuation page (lacks header, shows "Page 2 of 3", continues from previous)
+    5. DOCUMENT BOUNDARY (CRITICAL FOR ACCURATE BATCHING):
+       This flag determines whether a page starts a NEW document or continues the previous one.
+       Accurate boundary detection enables optimal parallel processing.
+       
+       ⚠️ CRITICAL RULE: When classifying EACH PAGE INDEPENDENTLY, you must determine if this page
+       starts a NEW invoice or continues the PREVIOUS invoice. Look for continuation signals!
+       
+       For INVOICES - Set "continue" when you see ANY of these signals:
+       ✓ **NO invoice header/title** at top of page (no "INVOICE", "TAX INVOICE", "RECEIPT")
+       ✓ **NO "Bill To:" or "To:" section** (new invoices always have recipient details)
+       ✓ **NO company logo/letterhead** at top (continuation pages are plain)
+       ✓ **Mid-table content** - Description/Qty/Price columns continuing from previous page
+       ✓ **Page number indicators**: "Page 2 of 3", "Continued from page X", "Page 2"
+       ✓ **Terms & conditions** at bottom (usually last page of invoice)
+       ✓ **Footer text only** - payment instructions, disclaimers, thank you notes
+       ✓ **Same invoice number visible** as previous page (if you can infer context)
+       
+       For INVOICES - Set "start" ONLY when you see CLEAR SIGNALS of a NEW invoice:
+       ✓ NEW "Invoice Number:" or "Invoice #XXX" in header area
+       ✓ NEW "Bill To:" or "To:" section (indicates new customer/recipient)
+       ✓ Company logo/letterhead at TOP of page (fresh invoice header)
+       ✓ Fresh invoice header text: "INVOICE", "TAX INVOICE", "RECEIPT" at top
+       ✓ New invoice date in header area (not buried in footer)
+       ✓ Line items table starting from beginning (not mid-table continuation)
+       
+       **DEFAULT BEHAVIOR - CRITICAL**:
+       - If page has NO clear invoice header/logo/recipient → prefer "continue"
+       - If page looks like middle of a table → definitely "continue"
+       - If page has footer/terms only → definitely "continue"
+       - Only use "start" when you see CLEAR NEW INVOICE SIGNALS
+       - **When uncertain, prefer "continue" to avoid splitting multi-page invoices**
+       
+       For BANK STATEMENTS - Set "start" when you see:
+       ✓ Bank logo and statement header
+       ✓ "Statement Period: DD/MM/YYYY - DD/MM/YYYY"
+       ✓ New account number or statement date range
+       
+       For BANK STATEMENTS - Set "continue" when you see:
+       ✓ Transaction list continuation
+       ✓ Same account number, continued transaction table
+       
+       **REMEMBER**: You see ONE page at a time. Look for absence of invoice header signals!
     
     6. CRITICAL: Only use document types explicitly listed in <document-types> section above
     </classification-instructions>
@@ -333,12 +393,37 @@ classification:
     </disambiguation-rules>
 
     <output-format>
+    ⚠️  CRITICAL: You MUST respond with ONLY valid JSON. No additional text before or after the JSON object.
+    ⚠️  Your response must START with { and END with } - nothing else!
+    ⚠️  Do NOT write explanations, comments, or markdown - ONLY the JSON object!
+    
+    Expected JSON structure:
     {
       "classification_reason": "Detailed reasoning with specific visual and textual evidence that led to this classification. List the KEY IDENTIFIERS found and explain why confidence is high/medium/low.",
       "class": "exact_document_type_from_list",
       "confidence": 0.95,
-      "document_boundary": "start or continue"
+      "document_boundary": "start"
     }
+    
+    Field requirements:
+    - "class": MUST be exactly "invoice" or "bank-statement" (lowercase, hyphen for bank statement)
+    - "confidence": Number between 0.0 and 1.0
+    - "document_boundary": MUST be exactly "start" or "continue" (lowercase)
+    - "classification_reason": Brief explanation (1-2 sentences)
+    
+    INCORRECT examples (DO NOT USE - these will cause parsing errors):
+    ❌ "Class": "Invoice" (wrong case and capitalization)
+    ❌ "class": "bank statement" (use hyphen: "bank-statement")
+    ❌ "document_boundary": "Start" (must be lowercase: "start")
+    ❌ Adding explanatory text outside the JSON object
+    ❌ Here is my analysis: {...} (no text before the JSON!)
+    ❌ ```json\n{...}\n``` (no markdown code blocks!)
+    ❌ Let me classify this page. {...} (no explanatory text!)
+    
+    CORRECT example (THIS IS EXACTLY WHAT YOU MUST RETURN):
+    ✅ {"classification_reason": "Clear invoice with invoice number INV-123, itemized charges, and VAT breakdown", "class": "invoice", "confidence": 0.95, "document_boundary": "start"}
+    
+    Remember: Your entire response must be parseable as JSON. Test mentally: can I call JSON.parse() on my response?
     </output-format>
 
     <<CACHEPOINT>>
@@ -358,9 +443,14 @@ classification:
     3. Applying <disambiguation-rules> if choosing between invoice and bank-statement
     4. Selecting ONLY from document types in <document-types>
     5. Providing confidence score based on strength of evidence
-    6. Outputting in exact JSON format specified in <output-format>
+    6. Outputting in EXACT JSON format specified in <output-format>
     
-    REMEMBER: The class field must be EXACTLY "invoice" or "bank-statement" (lowercase with hyphen).
+    CRITICAL FORMATTING RULES:
+    - Output ONLY the JSON object, nothing else
+    - Use exact lowercase values: "invoice" or "bank-statement" for class
+    - Use exact lowercase values: "start" or "continue" for document_boundary
+    - Ensure valid JSON syntax (proper quotes, commas, braces)
+    - Do NOT add explanatory text before or after the JSON
     </final-instructions>
 
 # Extraction Configuration

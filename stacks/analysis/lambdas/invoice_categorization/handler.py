@@ -218,11 +218,11 @@ JSON (no markdown):
         "test_3": {{"result": "NOT_APPLICABLE|BUSINESS_TRAVEL|COMMUTING", "reasoning": "if applicable", "confidence": "if applicable"}},
         "test_4": {{"result": "NOT_APPLICABLE|WORK_RELATED|PERSONAL_DEVELOPMENT", "reasoning": "if applicable", "confidence": "if applicable"}},
         "test_5": {{"result": "NOT_APPLICABLE|PENALTIES|DEPRECIATION", "reasoning": "if applicable", "confidence": "if applicable"}},
-                "test_6": {"result": "NOT_APPLICABLE|APPORTIONABLE|NO_MIXED_USE", "business_pct": 0-100, "reasoning": "if applicable", "confidence": "if applicable", "documentation_needed": "... or null"},
-        "test_7": {{"result": "PASS|FAIL", "reasoning": "...", "confidence": "HIGH|MEDIUM|LOW"}},
-                "addback_amount": "0.00",
-                "addback_reason": "... or null"
-      }}
+        "test_6": {{"result": "NOT_APPLICABLE|APPORTIONABLE|NO_MIXED_USE", "business_pct": 0-100, "reasoning": "if applicable", "confidence": "if applicable", "documentation_needed": "... or null"}},
+        "test_7": {{"result": "PASS|FAIL", "reasoning": "...", "confidence": "HIGH|MEDIUM|LOW"}}
+      }},
+      "addback_amount": "0.00",
+      "addback_reason": "... or null"
     }}
   ]
 }}"""

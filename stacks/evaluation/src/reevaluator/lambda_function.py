@@ -147,6 +147,113 @@ def fetch_document_image(s3_uri: str) -> bytes:
         raise
 
 
+def run_classification_with_evaluation_model(
+    document_bytes: bytes,
+    evaluation_model_id: str
+) -> Dict[str, Any]:
+    """
+    Run document classification using evaluation model.
+    
+    Args:
+        document_bytes: Document image bytes
+        evaluation_model_id: Model to use for classification
+        
+    Returns:
+        Classification result with document type and confidence
+    """
+    bedrock = get_bedrock_client()
+    
+    # Encode image to base64
+    image_base64 = base64.b64encode(document_bytes).decode("utf-8")
+    
+    # Determine content type
+    content_type = "image/png"
+    if document_bytes.startswith(b"%PDF"):
+        content_type = "application/pdf"
+    elif document_bytes.startswith(b"\xff\xd8\xff"):
+        content_type = "image/jpeg"
+    
+    # Classification prompt
+    classification_prompt = """Analyze this document image and classify it into one of these categories:
+
+- invoice: Commercial invoices, bills, payment requests
+- bank_statement: Bank statements showing transactions
+- receipt: Purchase receipts, cash register receipts
+- contract: Legal contracts, agreements
+- payslip: Salary slips, wage statements
+- expense_claim: Expense claim forms
+- tax_document: Tax forms, VAT returns
+- other: Other document types
+
+Return ONLY the document type (lowercase, underscore-separated) without any additional explanation.
+If you're unsure, provide your best classification."""
+
+    # Prepare request body
+    request_body = {
+        "anthropic_version": "bedrock-2023-05-31",
+        "max_tokens": 50,
+        "temperature": 0.0,
+        "system": "You are an expert document classifier. Analyze document images and classify them accurately into predefined categories.",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": content_type,
+                            "data": image_base64
+                        }
+                    },
+                    {
+                        "type": "text",
+                        "text": classification_prompt
+                    }
+                ]
+            }
+        ]
+    }
+    
+    logger.info(f"Invoking {evaluation_model_id} for classification")
+    
+    try:
+        # Invoke Bedrock model
+        response = bedrock.invoke_model(
+            modelId=evaluation_model_id,
+            body=json.dumps(request_body),
+            contentType="application/json",
+            accept="application/json"
+        )
+        
+        # Parse response
+        response_body = json.loads(response["body"].read())
+        
+        # Extract text from response
+        content_blocks = response_body.get("content", [])
+        classified_type = ""
+        for block in content_blocks:
+            if block.get("type") == "text":
+                classified_type = block.get("text", "").strip().lower()
+                break
+        
+        logger.info(f"Classification result: {classified_type}")
+        
+        return {
+            "document_type": classified_type,
+            "confidence": 1.0,  # High confidence for evaluation model
+            "model_id": evaluation_model_id
+        }
+    
+    except Exception as e:
+        logger.exception(f"Classification failed: {e}")
+        return {
+            "document_type": "unknown",
+            "confidence": 0.0,
+            "error": str(e)
+        }
+
+
 def run_extraction_with_evaluation_model(
     document_bytes: bytes,
     document_type: str,
@@ -278,6 +385,7 @@ def store_evaluation_result(
     section_id: str,
     baseline_extraction_uri: str,
     evaluation_extraction: Dict[str, Any],
+    evaluation_classification: Dict[str, Any],
     metadata: Dict[str, Any]
 ) -> None:
     """
@@ -289,7 +397,8 @@ def store_evaluation_result(
         section_id: Section identifier
         baseline_extraction_uri: S3 URI of original extraction
         evaluation_extraction: New extraction result
-        metadata: Additional metadata (confidence tier, etc.)
+        evaluation_classification: Classification result from evaluation model
+        metadata: Additional metadata (confidence tier, classification validation, etc.)
     """
     # Store in S3 for comparator to use
     result_key = f"evaluation-results/{evaluation_id}/{document_id}_{section_id}.json"
@@ -300,6 +409,7 @@ def store_evaluation_result(
         "sectionId": section_id,
         "baselineUri": baseline_extraction_uri,
         "evaluationExtraction": evaluation_extraction,
+        "evaluationClassification": evaluation_classification,
         "metadata": metadata
     }
     
@@ -469,7 +579,13 @@ def process_batch_direct(
             # Step 2: Fetch original image
             document_bytes = fetch_document_image(original_doc_uri)
             
-            # Step 3: Run extraction with evaluation model
+            # Step 3: Run classification with evaluation model
+            evaluation_classification = run_classification_with_evaluation_model(
+                document_bytes,
+                EVALUATION_MODEL_ID
+            )
+            
+            # Step 4: Run extraction with evaluation model
             evaluation_extraction = run_extraction_with_evaluation_model(
                 document_bytes,
                 document_type,
@@ -483,10 +599,12 @@ def process_batch_direct(
                 section_id=section_id,
                 baseline_extraction_uri=s3_object,
                 evaluation_extraction=evaluation_extraction,
+                evaluation_classification=evaluation_classification,
                 metadata={
                     "confidenceTier": item.get("confidenceTier"),
                     "originalConfidence": item.get("originalConfidence"),
-                    "documentType": document_type
+                    "documentType": document_type,
+                    "classificationValidation": item.get("classificationValidation")  # Include user/model classification
                 }
             )
             

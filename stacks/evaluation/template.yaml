@@ -275,6 +275,15 @@ Resources:
                 Resource:
                   - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${StackName}-TrackingTable*"
               
+              # Read from ValidationRequestsTable (for classification metrics)
+              - Effect: Allow
+                Action:
+                  - dynamodb:Query
+                  - dynamodb:GetItem
+                Resource:
+                  - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${StackName}-ValidationRequestsTable*"
+                  - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${StackName}-ValidationRequestsTable*/index/*"
+              
               # Write to evaluation tables
               - Effect: Allow
                 Action:
@@ -368,10 +377,13 @@ Resources:
                 Action:
                   - s3:GetObject
                   - s3:PutObject
+                Resource:
+                  - !Sub "${EvaluationDataBucket.Arn}/*"
+              - Effect: Allow
+                Action:
                   - s3:ListBucket
                 Resource:
                   - !GetAtt EvaluationDataBucket.Arn
-                  - !Sub "${EvaluationDataBucket.Arn}/*"
 
   # =========================================================================
   # LAMBDA FUNCTIONS

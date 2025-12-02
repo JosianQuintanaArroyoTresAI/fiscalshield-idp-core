@@ -120,8 +120,8 @@ Parameters:
     AllowedValues:
       - "lending-package-sample"
       - "bank-statement-sample"
-      - "default"
       # Removed: rvl-cdip-package-sample (academic research config, not for financial documents)
+      # Removed: "default" (not a valid config preset - use lending-package-sample instead)
     Description: >-
       Select the configuration preset for Pattern 2. Use 'lending-package-sample' for financial documents (invoices, bank statements). See https://github.com/aws-samples/sample-genai-idp/blob/main/config_library/README.md. Note: Custom configuration overrides the selected pattern configuration when provided.
 
@@ -1205,9 +1205,12 @@ Resources:
               - "x-amz-date"
               - "Authorization"
               - "x-amz-security-token"
+              - "*"
             AllowedMethods:
+              - GET
               - PUT
               - POST
+              - HEAD
             AllowedOrigins:
               - !Sub "https://${CloudFrontDistribution.DomainName}"
               # For local development only
@@ -1215,6 +1218,8 @@ Resources:
             ExposedHeaders:
               - "ETag"
               - "x-amz-server-side-encryption"
+              - "Content-Length"
+              - "Content-Type"
             MaxAge: 3000
       BucketEncryption:
         ServerSideEncryptionConfiguration:
@@ -1272,9 +1277,12 @@ Resources:
               - "x-amz-date"
               - "Authorization"
               - "x-amz-security-token"
+              - "*"
             AllowedMethods:
+              - GET
               - PUT
               - POST
+              - HEAD
             AllowedOrigins:
               - !Sub "https://${CloudFrontDistribution.DomainName}"
               # For local development only
@@ -1282,6 +1290,8 @@ Resources:
             ExposedHeaders:
               - "ETag"
               - "x-amz-server-side-encryption"
+              - "Content-Length"
+              - "Content-Type"
             MaxAge: 3000
       BucketEncryption:
         ServerSideEncryptionConfiguration:
@@ -1339,9 +1349,12 @@ Resources:
               - "x-amz-date"
               - "Authorization"
               - "x-amz-security-token"
+              - "*"
             AllowedMethods:
+              - GET
               - PUT
               - POST
+              - HEAD
             AllowedOrigins:
               - !Sub "https://${CloudFrontDistribution.DomainName}"
               # For local development only
@@ -1349,6 +1362,8 @@ Resources:
             ExposedHeaders:
               - "ETag"
               - "x-amz-server-side-encryption"
+              - "Content-Length"
+              - "Content-Type"
             MaxAge: 3000
       BucketEncryption:
         ServerSideEncryptionConfiguration:
@@ -1449,9 +1464,12 @@ Resources:
               - "x-amz-date"
               - "Authorization"
               - "x-amz-security-token"
+              - "*"
             AllowedMethods:
+              - GET
               - PUT
               - POST
+              - HEAD
             AllowedOrigins:
               - !Sub "https://${CloudFrontDistribution.DomainName}"
               # For local development only
@@ -1459,6 +1477,8 @@ Resources:
             ExposedHeaders:
               - "ETag"
               - "x-amz-server-side-encryption"
+              - "Content-Length"
+              - "Content-Type"
             MaxAge: 3000
       BucketEncryption:
         ServerSideEncryptionConfiguration:
@@ -1514,9 +1534,12 @@ Resources:
               - "x-amz-date"
               - "Authorization"
               - "x-amz-security-token"
+              - "*"
             AllowedMethods:
+              - GET
               - PUT
               - POST
+              - HEAD
             AllowedOrigins:
               - !Sub "https://${CloudFrontDistribution.DomainName}"
               # For local development only
@@ -1524,6 +1547,8 @@ Resources:
             ExposedHeaders:
               - "ETag"
               - "x-amz-server-side-encryption"
+              - "Content-Length"
+              - "Content-Type"
             MaxAge: 3000
       BucketEncryption:
         ServerSideEncryptionConfiguration:
@@ -2785,6 +2810,7 @@ Resources:
           APPSYNC_API_URL: !GetAtt GraphQLApi.GraphQLUrl
           DATA_RETENTION_IN_DAYS: !Ref DataRetentionInDays
           OUTPUT_BUCKET: !Ref OutputBucket
+          MAX_PAGES: "500"  # Maximum page limit for uploaded PDFs
       Policies:
         - SQSSendMessagePolicy:
             QueueName: !GetAtt DocumentQueue.QueueName

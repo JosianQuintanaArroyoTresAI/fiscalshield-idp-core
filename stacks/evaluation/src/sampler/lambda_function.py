@@ -92,6 +92,40 @@ def discover_extraction_table() -> str:
         raise
 
 
+def discover_table(pattern: str) -> str:
+    """
+    Discover a DynamoDB table by pattern.
+    
+    Args:
+        pattern: Pattern to match in table name (e.g., 'fiscalshield-idp-dev-ValidationRequestsTable')
+        
+    Returns:
+        Full table name with CloudFormation suffix
+        
+    Raises:
+        ValueError: If table not found
+    """
+    client = boto3.client("dynamodb")
+    try:
+        response = client.list_tables()
+        
+        matching_tables = [
+            name for name in response.get("TableNames", [])
+            if pattern in name
+        ]
+        
+        if matching_tables:
+            table_name = matching_tables[0]
+            logger.info(f"Discovered table matching '{pattern}': {table_name}")
+            return table_name
+        else:
+            raise ValueError(f"No table found matching pattern: {pattern}")
+    
+    except Exception as e:
+        logger.error(f"Failed to discover table '{pattern}': {e}")
+        raise
+
+
 def query_recent_extractions(
     table_name: str,
     lookback_days: int = 1
@@ -226,10 +260,18 @@ def prepare_evaluation_batch(
         sampled_items["high_confidence"]
     )
     
+    # Discover validation table for classification data
+    validation_table_name = None
+    try:
+        validation_table_name = discover_table(f"{STACK_NAME}-ValidationRequestsTable")
+        logger.info(f"Found validation table: {validation_table_name}")
+    except Exception as e:
+        logger.warning(f"Validation table not found (classification metrics will be skipped): {e}")
+    
     # Create batch manifest
     batch_manifest = []
     for item in all_samples:
-        batch_manifest.append({
+        manifest_item = {
             "documentId": item["DocumentId"],
             "sectionId": item.get("SectionId", "1"),
             "documentType": item.get("DocumentType", "INVOICE"),
@@ -241,7 +283,35 @@ def prepare_evaluation_batch(
                 else "medium" if item in sampled_items["medium_confidence"]
                 else "high"
             )
-        })
+        }
+        
+        # Fetch classification validation data if available
+        if validation_table_name:
+            try:
+                validation_table = dynamodb.Table(validation_table_name)
+                doc_id = item.get("DocumentId", "")
+                
+                # Query validation table for this document using GSI1-DocumentValidations
+                response = validation_table.query(
+                    IndexName="GSI1-DocumentValidations",
+                    KeyConditionExpression=Key("DocumentId").eq(doc_id),
+                    Limit=1,  # Get most recent validation
+                    ScanIndexForward=False  # Sort descending by CreatedAt
+                )
+                
+                if response.get("Items"):
+                    validation_item = response["Items"][0]  # Get most recent
+                    manifest_item["classificationValidation"] = {
+                        "userClassification": validation_item.get("UserSelection"),
+                        "modelClassification": validation_item.get("ModelPrediction"),
+                        "modelConfidence": float(validation_item.get("ModelConfidence", 0)),
+                        "validationMatch": validation_item.get("ValidationMatch", False)
+                    }
+                    logger.info(f"Found classification validation for {doc_id}: user={validation_item.get('UserSelection')}, model={validation_item.get('ModelPrediction')}")
+            except Exception as e:
+                logger.warning(f"Could not fetch validation data for {item.get('DocumentId')}: {e}")
+        
+        batch_manifest.append(manifest_item)
     
     # Upload manifest to S3
     manifest_key = f"batch-inputs/{evaluation_id}/manifest.jsonl"

@@ -4,6 +4,32 @@
 """
 Invoice Extraction Lambda
 Processes invoice sections and writes individual invoice records to DynamoDB
+
+ARCHITECTURE (Post-SmartBatcher):
+=============================
+1. OCR Lambda: Converts PDF pages to text (Textract/Nova)
+2. Classification Lambda: 
+   - Parallel page classification (Claude 3 Haiku, 20 workers)
+   - SmartBatcher groups pages into optimal sections (10 pages/batch, complete invoices only)
+   - Each section = 3-5 invoices typically, max 30 pages
+3. Step Functions Map: Parallelizes extraction (MaxConcurrency: 10)
+4. THIS Lambda (Extraction): 
+   - Loads section text (already batched optimally)
+   - Single Bedrock call per section (batch extraction - cost-efficient!)
+   - Parses multiple invoices from response
+   - Writes to DynamoDB
+
+KEY DESIGN DECISIONS:
+- SmartBatcher ensures sections contain ONLY complete invoices
+- No overlap between sections → no deduplication needed
+- Batch extraction: Extract multiple invoices in 1 API call (lower cost)
+- Parallel processing: Step Functions Map handles concurrency
+- Simple extraction flow: Load text → Bedrock → Parse → Write
+
+DEPRECATED: ChunkedInvoiceExtractor (kept for backward compatibility)
+- Was used when classification couldn't batch properly
+- Now SmartBatcher handles batching in classification stage
+- Only enable USE_CHUNKED_EXTRACTION for edge cases (100+ invoices in one file)
 """
 
 import json
@@ -753,10 +779,21 @@ if not BEDROCK_MODEL_CHAIN:
     raise ValueError("At least one Bedrock model must be configured via BEDROCK_MODEL_ID")
 
 # Chunking configuration (Phase 3)
+# NOTE: With SmartBatcher in classification, sections now contain optimal batches of complete invoices
+# - Typical batch: 10 pages (~3-5 invoices)
+# - Max batch: 30 pages (safety limit)
+# - Each section = 1 Bedrock API call (cost-efficient batch extraction)
+# 
+# CHUNKED_EXTRACTION is now DEPRECATED for most use cases:
+# - SmartBatcher in classification already creates optimal batches
+# - Only enable if you have sections with 100+ invoices (edge case)
+# - Default: false (let SmartBatcher handle batching)
 USE_CHUNKED_EXTRACTION = os.environ.get('USE_CHUNKED_EXTRACTION', 'false').lower() == 'true'
-CHUNK_SIZE = int(os.environ.get('CHUNK_SIZE', '60000'))  # Optimized: ~15k tokens (vs 15k chars = 3.75k tokens)
-OVERLAP_SIZE = int(os.environ.get('OVERLAP_SIZE', '5000'))  # Covers 3-page invoices with minimal duplicates
-USE_SEMANTIC_CHUNKING = os.environ.get('USE_SEMANTIC_CHUNKING', 'true').lower() == 'true'  # Invoice boundary detection
+CHUNK_SIZE = int(os.environ.get('CHUNK_SIZE', '60000'))  # Legacy: ~15k tokens (only used if chunking enabled)
+OVERLAP_SIZE = int(os.environ.get('OVERLAP_SIZE', '5000'))  # Legacy: Covers 3-page invoices
+USE_SEMANTIC_CHUNKING = os.environ.get('USE_SEMANTIC_CHUNKING', 'true').lower() == 'true'  # Legacy: Invoice boundary detection
+PAGE_CHUNK_SIZE = int(os.environ.get('PAGE_CHUNK_SIZE', '10'))  # New: Path 2 chunk size (pages)
+MAX_SECTION_CHAR_THRESHOLD = int(os.environ.get('MAX_SECTION_CHAR_THRESHOLD', '120000'))  # Guardrail before chunking
 USE_PROMPT_CACHING = os.environ.get('USE_PROMPT_CACHING', 'true').lower() == 'true'  # 60-70% cost savings
 
 # Initialize AWS clients
@@ -765,6 +802,7 @@ bedrock_runtime = boto3.client('bedrock-runtime', region_name=AWS_REGION)
 extraction_table = dynamodb.Table(EXTRACTION_RESULTS_TABLE)
 config_table = dynamodb.Table(CONFIGURATION_TABLE)
 tracking_table = dynamodb.Table(TRACKING_TABLE) if TRACKING_TABLE else None
+s3_client = boto3.client('s3', region_name=AWS_REGION)
 
 
 THROTTLING_ERROR_CODES = {"ThrottlingException", "TooManyRequestsException"}
@@ -817,6 +855,253 @@ def create_chunks_from_boundaries(text: str, boundaries: List[Dict[str, Any]]) -
         chunks.append(chunk)
     
     return chunks
+
+
+PAGE_MARKER_PATTERN = re.compile(r'\[PAGE:(\d+)\]')
+
+
+def normalize_boundaries(
+    raw_boundaries: List[Dict[str, Any]],
+    text_length: int
+) -> List[Dict[str, Any]]:
+    """Normalize boundary dictionaries from classification for local slicing."""
+    normalized: List[Dict[str, Any]] = []
+
+    for idx, boundary in enumerate(raw_boundaries):
+        start = boundary.get('start')
+        end = boundary.get('end')
+
+        if start is None:
+            start = boundary.get('start_char') or boundary.get('start_index') or 0
+        if end is None:
+            end = boundary.get('end_char') or boundary.get('end_index') or text_length
+
+        try:
+            start = int(start)
+            end = int(end)
+        except (TypeError, ValueError):
+            log_with_timestamp(
+                f"⚠️ Skipping boundary {idx} due to invalid offsets: start={start}, end={end}"
+            )
+            continue
+
+        if start < 0 or end <= start:
+            log_with_timestamp(
+                f"⚠️ Skipping boundary {idx} due to non-positive span: start={start}, end={end}"
+            )
+            continue
+
+        if end > text_length:
+            end = text_length
+
+        pages = (
+            boundary.get('pages')
+            or boundary.get('page_numbers')
+            or boundary.get('page_ids')
+            or []
+        )
+
+        normalized.append({
+            'id': boundary.get('id', idx + 1),
+            'start': start,
+            'end': end,
+            'pages': pages,
+            'confidence': boundary.get('confidence', 'unknown'),
+            'start_indicator': boundary.get('start_indicator'),
+            'end_indicator': boundary.get('end_indicator')
+        })
+
+    return normalized
+
+
+def split_section_text_into_pages(
+    section_text: str,
+    fallback_pages: List[str]
+) -> List[Dict[str, Any]]:
+    """Split section text into per-page snippets using [PAGE:N] markers when available."""
+    page_entries: List[Dict[str, Any]] = []
+    matches = list(PAGE_MARKER_PATTERN.finditer(section_text))
+
+    if matches:
+        for idx, match in enumerate(matches):
+            start = match.start()
+            end = matches[idx + 1].start() if idx + 1 < len(matches) else len(section_text)
+            page_text = section_text[start:end]
+            try:
+                page_number = int(match.group(1))
+            except ValueError:
+                page_number = idx + 1
+
+            page_entries.append({
+                'page_number': page_number,
+                'text': page_text
+            })
+
+        return page_entries
+
+    # Fallback: distribute entire text equally among provided page ids
+    if fallback_pages:
+        approx_per_page = max(len(section_text) // max(len(fallback_pages), 1), 1)
+        cursor = 0
+        for idx, page_id in enumerate(fallback_pages):
+            next_cursor = cursor + approx_per_page
+            if idx == len(fallback_pages) - 1:
+                next_cursor = len(section_text)
+
+            page_entries.append({
+                'page_number': idx + 1,
+                'text': section_text[cursor:next_cursor]
+            })
+            cursor = next_cursor
+
+    else:
+        page_entries.append({'page_number': 1, 'text': section_text})
+
+    return page_entries
+
+
+def build_page_chunks(
+    page_texts: List[Dict[str, Any]],
+    pages_per_chunk: int
+) -> List[Dict[str, Any]]:
+    """Group page-level text into fixed-size page chunks without overlap."""
+    if not page_texts:
+        return []
+
+    chunks: List[Dict[str, Any]] = []
+    total_pages = len(page_texts)
+
+    for start in range(0, total_pages, pages_per_chunk):
+        slice_pages = page_texts[start:start + pages_per_chunk]
+        chunk_text = ''.join(entry['text'] for entry in slice_pages)
+        chunk_page_numbers = [entry['page_number'] for entry in slice_pages]
+
+        chunks.append({
+            'chunk_text': chunk_text,
+            'chunk_pages': chunk_page_numbers
+        })
+
+    return chunks
+
+
+def extract_with_precomputed_boundaries(
+    section_text: str,
+    raw_boundaries: List[Dict[str, Any]],
+    prompt_template: str
+) -> List[Dict[str, Any]]:
+    """Extract invoices one-by-one using validated LLM boundaries from classification."""
+    normalized_boundaries = normalize_boundaries(raw_boundaries, len(section_text))
+
+    if not normalized_boundaries:
+        log_with_timestamp("⚠️ No usable pre-computed boundaries after normalization")
+        return []
+
+    log_with_timestamp(
+        f"🎯 Boundary path engaged: {len(normalized_boundaries)} invoices, non-overlapping"
+    )
+
+    invoices: List[Dict[str, Any]] = []
+
+    for idx, boundary in enumerate(normalized_boundaries):
+        invoice_text = section_text[boundary['start']:boundary['end']]
+
+        if not invoice_text.strip():
+            log_with_timestamp(
+                f"⚠️ Boundary {boundary['id']} produced empty text span; skipping"
+            )
+            continue
+
+        log_with_timestamp(
+            f"📄 Extracting boundary {boundary['id']} (chars {boundary['start']}-{boundary['end']})"
+        )
+
+        prompt = prompt_template.format(section_text=invoice_text)
+        xml_response, model_used = invoke_bedrock(
+            prompt,
+            use_caching=USE_PROMPT_CACHING and idx > 0
+        )
+
+        boundary_invoices = parse_invoices_from_xml(xml_response)
+        boundary_invoices = calculate_composite_confidence_and_flags(boundary_invoices)
+
+        for invoice in boundary_invoices:
+            invoice['boundary_id'] = boundary['id']
+            invoice['boundary_confidence'] = boundary.get('confidence')
+            invoice['chunk_pages'] = boundary.get('pages', [])
+            invoice['extraction_strategy'] = 'pre_computed_boundary'
+            invoice['chunk_index'] = idx
+            invoice['model_used'] = model_used
+
+        invoices.extend(boundary_invoices)
+
+    log_with_timestamp(f"✅ Boundary extraction yielded {len(invoices)} invoices")
+    return invoices
+
+
+def extract_with_page_chunks(
+    page_chunks: List[Dict[str, Any]],
+    prompt_template: str
+) -> List[Dict[str, Any]]:
+    """Extract invoices chunk-by-chunk using fixed-size page groups."""
+    if not page_chunks:
+        log_with_timestamp("⚠️ No page chunks generated; skipping chunk-based extraction")
+        return []
+
+    log_with_timestamp(
+        f"🧩 Page chunking path engaged: {len(page_chunks)} chunks at {PAGE_CHUNK_SIZE} pages each"
+    )
+
+    invoices: List[Dict[str, Any]] = []
+
+    for idx, chunk in enumerate(page_chunks):
+        chunk_text = chunk['chunk_text']
+        chunk_pages = chunk['chunk_pages']
+
+        if not chunk_text.strip():
+            log_with_timestamp(f"⚠️ Chunk {idx+1} empty, skipping")
+            continue
+
+        log_with_timestamp(
+            f"📦 Processing chunk {idx+1}/{len(page_chunks)} covering pages {chunk_pages}"
+        )
+
+        prompt = prompt_template.format(section_text=chunk_text)
+        xml_response, model_used = invoke_bedrock(
+            prompt,
+            use_caching=USE_PROMPT_CACHING and idx > 0
+        )
+
+        chunk_invoices = parse_invoices_from_xml(xml_response)
+        chunk_invoices = calculate_composite_confidence_and_flags(chunk_invoices)
+
+        for invoice in chunk_invoices:
+            invoice['chunk_index'] = idx
+            invoice['chunk_pages'] = chunk_pages
+            invoice['extraction_strategy'] = 'page_chunk'
+            invoice['model_used'] = model_used
+
+        invoices.extend(chunk_invoices)
+
+    log_with_timestamp(f"✅ Page chunk extraction yielded {len(invoices)} invoices")
+    return invoices
+
+
+def extract_with_single_batch(
+    section_text: str,
+    prompt_template: str
+) -> List[Dict[str, Any]]:
+    """Default path: single Bedrock call for the entire section."""
+    prompt = prompt_template.format(section_text=section_text)
+    xml_response, model_used = invoke_bedrock(prompt)
+    invoices = parse_invoices_from_xml(xml_response)
+    invoices = calculate_composite_confidence_and_flags(invoices)
+
+    for invoice in invoices:
+        invoice['extraction_strategy'] = 'batch'
+        invoice['model_used'] = model_used
+
+    log_with_timestamp(f"✅ Batch extraction returned {len(invoices)} invoices")
+    return invoices
 
 
 def update_chunk_status(
@@ -2322,7 +2607,6 @@ def lambda_handler(event, context):
 
         if isinstance(document_data, str):
             # Document is S3 URI string - fetch from S3
-            s3_client = boto3.client('s3')
             from urllib.parse import urlparse
             parsed_uri = urlparse(document_data)
             bucket = parsed_uri.netloc
@@ -2337,7 +2621,6 @@ def lambda_handler(event, context):
             s3_uri = document_data['s3_uri']
             log_with_timestamp(f"📦 Document is compressed, fetching from S3: {s3_uri}")
 
-            s3_client = boto3.client('s3')
             from urllib.parse import urlparse
             parsed_uri = urlparse(s3_uri)
             bucket = parsed_uri.netloc
@@ -2408,6 +2691,7 @@ def lambda_handler(event, context):
         # Get section text from OCR results
         section_text = ""
         section_pages = section_data.get('page_ids', [])
+        section_page_texts: List[Dict[str, Any]] = []
 
         log_with_timestamp(f"📄 Section has {len(section_pages)} page IDs: {section_pages}")
 
@@ -2447,7 +2731,13 @@ def lambda_handler(event, context):
                     # Check if page has inline ocr_text
                     if 'ocr_text' in page_data:
                         page_text = page_data['ocr_text']
-                        section_text += page_marker + page_text + "\n"
+                        formatted_page = page_marker + page_text + "\n"
+                        section_text += formatted_page
+                        section_page_texts.append({
+                            'page_id': page_id,
+                            'page_number': page_number,
+                            'text': formatted_page
+                        })
                         log_with_timestamp(f"✅ Added inline text from page {page_id} (page #{page_number}, {len(page_text)} chars)")
 
                     # Otherwise fetch from raw_text_uri
@@ -2460,7 +2750,17 @@ def lambda_handler(event, context):
                         bucket = parsed_uri.netloc
                         key = parsed_uri.path.lstrip('/')
 
-                        s3_obj = s3_client.get_object(Bucket=bucket, Key=key)
+                        try:
+                            s3_obj = s3_client.get_object(Bucket=bucket, Key=key)
+                        except ClientError as error:
+                            error_code = error.response.get('Error', {}).get('Code', 'Unknown')
+                            if error_code == 'NoSuchKey':
+                                log_with_timestamp(
+                                    f"⚠️ raw_text_uri missing for page {page_id}: s3://{bucket}/{key}"
+                                )
+                                continue
+                            raise
+
                         raw_text_data = json.loads(s3_obj['Body'].read().decode('utf-8'))
 
                         log_with_timestamp(f"📋 rawText.json keys: {list(raw_text_data.keys())}")
@@ -2486,7 +2786,13 @@ def lambda_handler(event, context):
                             log_with_timestamp(f"📝 Extracted {len(lines)} lines from Textract Blocks")
 
                         if page_text:
-                            section_text += page_marker + page_text + "\n"
+                            formatted_page = page_marker + page_text + "\n"
+                            section_text += formatted_page
+                            section_page_texts.append({
+                                'page_id': page_id,
+                                'page_number': page_number,
+                                'text': formatted_page
+                            })
                             log_with_timestamp(f"✅ Added text from S3 for page {page_id} (page #{page_number}, {len(page_text)} chars)")
                         else:
                             log_with_timestamp(f"⚠️ No text found in rawText.json for page {page_id}")
@@ -2496,6 +2802,19 @@ def lambda_handler(event, context):
                     log_with_timestamp(f"⚠️ Page {page_id} not found in pages dict")
 
         log_with_timestamp(f"📝 Total section text length: {len(section_text)} chars")
+
+        if not section_page_texts:
+            inferred_pages = split_section_text_into_pages(section_text, section_pages)
+            section_page_texts = [
+                {
+                    'page_id': None,
+                    'page_number': entry['page_number'],
+                    'text': entry['text']
+                }
+                for entry in inferred_pages
+            ]
+
+        log_with_timestamp(f"📑 Captured {len(section_page_texts)} page text snippets for chunking")
 
         log_with_timestamp(f"🚀 Starting invoice extraction for document {document_id}, section {section_id}")
         log_with_timestamp(f"   User: {user_id}, Client: {client_id}")
@@ -2518,60 +2837,55 @@ def lambda_handler(event, context):
 
         # Get extraction prompt (dynamic from ConfigurationTable)
         prompt_template = get_invoice_extraction_prompt()
-        
-        # PHASE 4: Choose extraction strategy
-        # Priority: Pre-computed boundaries > Section size > Standard extraction
-        if USE_CHUNKED_EXTRACTION and (pre_computed_boundaries or len(section_text) > CHUNK_SIZE):
-            if pre_computed_boundaries:
-                log_with_timestamp(
-                    f"✅ Using PRE-COMPUTED boundaries ({len(pre_computed_boundaries)} invoices)"
-                )
-            else:
-                log_with_timestamp(
-                    f"🔄 Section text ({len(section_text)} chars) exceeds chunk size ({CHUNK_SIZE})"
-                )
-            log_with_timestamp("   Using CHUNKED extraction strategy...")
-            
+        section_size = len(section_text)
+        section_page_count = len(section_page_texts)
+
+        invoices: List[Dict[str, Any]] = []
+        all_chunks_complete = False
+        strategy_used = 'batch'
+
+        should_page_chunk = (
+            section_page_count > PAGE_CHUNK_SIZE or section_size > MAX_SECTION_CHAR_THRESHOLD
+        )
+
+        if pre_computed_boundaries:
+            invoices = extract_with_precomputed_boundaries(
+                section_text=section_text,
+                raw_boundaries=pre_computed_boundaries,
+                prompt_template=prompt_template
+            )
+            strategy_used = 'pre_computed_boundary'
+
+        elif should_page_chunk:
+            log_with_timestamp(
+                f"⚠️ Section spans {section_page_count} pages / {section_size} chars; using page chunking"
+            )
+            page_chunks = build_page_chunks(section_page_texts, PAGE_CHUNK_SIZE)
+            invoices = extract_with_page_chunks(page_chunks, prompt_template)
+            strategy_used = 'page_chunk'
+
+        elif USE_CHUNKED_EXTRACTION and section_size > CHUNK_SIZE:
+            log_with_timestamp(
+                f"⚠️ Legacy chunking fallback engaged ({section_size} chars > {CHUNK_SIZE})"
+            )
             result = process_section_with_chunking(
                 section_text=section_text,
                 prompt_template=prompt_template,
                 document_id=document_id,
                 section_id=section_id,
                 user_id=user_id,
-                pre_computed_boundaries=pre_computed_boundaries  # PHASE 4: Pass boundaries from classification
+                pre_computed_boundaries=pre_computed_boundaries
             )
-            
             invoices = result['invoices']
             all_chunks_complete = result['all_chunks_complete']
+            strategy_used = 'legacy_chunking'
+
         else:
-            # Original non-chunked flow (default/fallback)
-            if USE_CHUNKED_EXTRACTION:
-                log_with_timestamp(
-                    f"ℹ️  Section text ({len(section_text)} chars) fits in single chunk"
-                )
-                log_with_timestamp("   Using standard extraction (no chunking needed)")
-            else:
-                log_with_timestamp("ℹ️  Chunked extraction DISABLED (USE_CHUNKED_EXTRACTION=false)")
-                log_with_timestamp("   Using standard extraction")
-            
-            prompt = prompt_template.format(section_text=section_text)
-            
-            # Invoke Bedrock to extract invoices
-            log_with_timestamp("📤 Calling Bedrock for invoice extraction...")
-            xml_response, model_used = invoke_bedrock(prompt)
-            
-            # Parse invoices from XML (hardcoded logic)
-            log_with_timestamp("🔍 Parsing invoices from XML response...")
-            invoices = parse_invoices_from_xml(xml_response)
-            
-            # Calculate confidence scores and HITL flags
-            invoices = calculate_composite_confidence_and_flags(invoices)
-            
-            # Add model metadata to invoices
-            for invoice in invoices:
-                invoice['model_used'] = model_used
-            
-            all_chunks_complete = False  # Non-chunked flow doesn't need deduplication
+            log_with_timestamp(
+                f"ℹ️ Section ({section_page_count} pages, {section_size} chars) fits batch window"
+            )
+            invoices = extract_with_single_batch(section_text, prompt_template)
+            strategy_used = 'batch'
 
         if not invoices:
             log_with_timestamp("⚠️ No valid invoices found in section")
@@ -2605,7 +2919,7 @@ def lambda_handler(event, context):
 
         processing_time = time.time() - start_time
         log_with_timestamp(
-            f"✅ Invoice extraction completed successfully in {processing_time:.2f}s"
+            f"✅ Invoice extraction completed successfully in {processing_time:.2f}s via {strategy_used}"
         )
         log_with_timestamp(f"   Extracted: {len(invoices)} invoices")
         log_with_timestamp(f"   Inserted: {inserted_count} records")

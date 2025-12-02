@@ -1139,12 +1139,22 @@ class ClassificationService:
                 else:
                     # If parsing failed, try to extract classification directly from text
                     doc_type = self._extract_class_from_text(classification_text)
-                    document_boundary = "continue"
+                    # Try to extract document_boundary from text even if JSON parse failed
+                    document_boundary = self._extract_boundary_from_text(classification_text)
+                    logger.warning(
+                        f"JSON parse failed for page {page_id}, extracted from text: "
+                        f"class={doc_type}, boundary={document_boundary}"
+                    )
             except Exception as e:
                 logger.warning(f"Failed to parse structured data from response: {e}")
                 # Try to extract classification directly from text
                 doc_type = self._extract_class_from_text(classification_text)
-                document_boundary = "continue"
+                # Try to extract document_boundary from text even if JSON parse failed
+                document_boundary = self._extract_boundary_from_text(classification_text)
+                logger.warning(
+                    f"Fallback extraction for page {page_id}: "
+                    f"class={doc_type}, boundary={document_boundary}"
+                )
 
             # Validate classification against known document types
             if not doc_type:
@@ -1453,6 +1463,78 @@ class ClassificationService:
                 return text[start_idx:end_idx].strip().strip("\"'")
 
         return ""
+    
+    def _extract_boundary_from_text(self, text: str) -> str:
+        """
+        Extract document_boundary from text if JSON parsing fails.
+        
+        Looks for patterns indicating whether page starts new document or continues previous.
+        Defaults to "start" (safer for invoice batching) if unclear.
+        """
+        text_lower = text.lower()
+        
+        # Explicit boundary patterns
+        boundary_patterns = [
+            "document_boundary",
+            "document boundary",
+            "boundary",
+            "page boundary",
+        ]
+        
+        for pattern in boundary_patterns:
+            if pattern in text_lower:
+                # Extract value after the pattern
+                start_idx = text_lower.find(pattern) + len(pattern)
+                # Skip colon, equals, quotes if present
+                while start_idx < len(text_lower) and text_lower[start_idx] in ': ="\'':
+                    start_idx += 1
+                
+                end_idx = text_lower.find("\n", start_idx)
+                if end_idx == -1:
+                    end_idx = min(start_idx + 20, len(text_lower))  # Max 20 chars
+                
+                boundary_value = text_lower[start_idx:end_idx].strip().strip("\"',. ")
+                
+                # Check if it contains "start" or "continue"
+                if "start" in boundary_value:
+                    return "start"
+                elif "continue" in boundary_value or "continuation" in boundary_value:
+                    return "continue"
+        
+        # Heuristic patterns suggesting "continue"
+        continue_patterns = [
+            "page 2",
+            "page 3",
+            "continued from",
+            "continuation",
+            "(continued)",
+            "...continued",
+        ]
+        
+        for pattern in continue_patterns:
+            if pattern in text_lower:
+                logger.info(f"Detected continuation pattern: '{pattern}'")
+                return "continue"
+        
+        # Heuristic patterns suggesting "start" (new document)
+        start_patterns = [
+            "invoice number",
+            "invoice #",
+            "invoice date",
+            "bill to:",
+            "statement period",
+            "account number",
+            "new invoice",
+        ]
+        
+        for pattern in start_patterns:
+            if pattern in text_lower:
+                logger.info(f"Detected new document pattern: '{pattern}'")
+                return "start"
+        
+        # Default to "start" (safer for invoice batching - prevents all pages being grouped)
+        logger.info("No clear boundary indicator found, defaulting to 'start'")
+        return "start"
 
     def _get_cache_key(self, document: Document) -> str:
         """
