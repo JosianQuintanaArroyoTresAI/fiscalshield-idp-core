@@ -31,7 +31,12 @@ import {
 import { useCompany } from '../../contexts/company';
 import { COMPANY_SELECT_PATH, INVOICE_INSIGHTS_PATH } from '../../routes/constants';
 import GenAIIDPTopNavigation from '../genai-idp-top-navigation';
-import { fetchExtractionResults, formatInvoiceData, DOCUMENT_TYPES, formatCurrency } from '../../services/extractionService';
+import {
+  fetchExtractionResults,
+  formatInvoiceData,
+  DOCUMENT_TYPES,
+  formatCurrency,
+} from '../../services/extractionService';
 
 import '@awsui/global-styles/index.css';
 
@@ -47,47 +52,47 @@ const calculateAnalytics = (invoices) => {
     totalVAT: 0,
     totalNet: 0,
     averageInvoice: 0,
-    
+
     // Deductibility
     fullyDeductible: { count: 0, amount: 0 },
     partiallyDeductible: { count: 0, amount: 0 },
     notDeductible: { count: 0, amount: 0 },
     requiresReview: { count: 0, amount: 0 },
     pendingAnalysis: { count: 0, amount: 0 },
-    
+
     // Risk levels
     highRisk: { count: 0, amount: 0 },
     mediumRisk: { count: 0, amount: 0 },
     lowRisk: { count: 0, amount: 0 },
-    
+
     // Actions
     actionApprove: 0,
     actionReject: 0,
     actionDocumentation: 0,
     actionApportion: 0,
     hitlRequired: 0,
-    
+
     // Financial
     addbackAmount: 0,
     deductibleAmount: 0,
-    
+
     // Suppliers
     supplierSpend: {},
     supplierCount: new Set(),
-    
+
     // Invoice types
     byType: {},
-    
+
     // Quality
     excellentQuality: 0,
     goodQuality: 0,
     acceptableQuality: 0,
     poorQuality: 0,
-    
+
     // Monthly breakdown
     monthlySpend: {},
   };
-  
+
   invoices.forEach((inv) => {
     const rawData = inv.rawData || {};
     const amount = parseFloat(rawData.TotalAmount) || 0;
@@ -95,17 +100,17 @@ const calculateAnalytics = (invoices) => {
     const net = parseFloat(rawData.NetAmount) || amount - vat;
     const addback = parseFloat(rawData.AddbackAmount) || 0;
     const deductPct = parseFloat(rawData.DeductibilityPercentage) || 0;
-    
+
     // Totals
     analytics.totalSpend += amount;
     analytics.totalVAT += vat;
     analytics.totalNet += net;
     analytics.addbackAmount += addback;
-    
+
     // Deductibility status
     const deductStatus = rawData.DeductibilityStatus;
     const analysisStatus = rawData.AnalysisStatus;
-    
+
     if (!analysisStatus || analysisStatus === 'PENDING') {
       analytics.pendingAnalysis.count++;
       analytics.pendingAnalysis.amount += amount;
@@ -116,7 +121,7 @@ const calculateAnalytics = (invoices) => {
     } else if (deductStatus === 'PARTIALLY_DEDUCTIBLE') {
       analytics.partiallyDeductible.count++;
       analytics.partiallyDeductible.amount += amount;
-      analytics.deductibleAmount += (amount * deductPct / 100);
+      analytics.deductibleAmount += (amount * deductPct) / 100;
     } else if (deductStatus === 'NOT_DEDUCTIBLE') {
       analytics.notDeductible.count++;
       analytics.notDeductible.amount += amount;
@@ -124,7 +129,7 @@ const calculateAnalytics = (invoices) => {
       analytics.requiresReview.count++;
       analytics.requiresReview.amount += amount;
     }
-    
+
     // Risk levels
     const hmrcRisk = rawData.HMRCRisk;
     if (hmrcRisk === 'HIGH') {
@@ -137,16 +142,16 @@ const calculateAnalytics = (invoices) => {
       analytics.lowRisk.count++;
       analytics.lowRisk.amount += amount;
     }
-    
+
     // Recommended actions
     const action = rawData.RecommendedAction;
     if (action === 'APPROVE') analytics.actionApprove++;
     else if (action === 'REJECT') analytics.actionReject++;
     else if (action === 'REQUEST_DOCUMENTATION') analytics.actionDocumentation++;
     else if (action === 'APPORTION') analytics.actionApportion++;
-    
+
     if (rawData.HITLRequired) analytics.hitlRequired++;
-    
+
     // Supplier breakdown
     const supplier = rawData.SupplierName || rawData.VendorName || 'Unknown';
     if (!analytics.supplierSpend[supplier]) {
@@ -160,7 +165,7 @@ const calculateAnalytics = (invoices) => {
       analytics.supplierSpend[supplier].notDeductible += amount;
     }
     analytics.supplierCount.add(supplier);
-    
+
     // Invoice type breakdown
     const invType = rawData.InvoiceType || 'UNKNOWN';
     if (!analytics.byType[invType]) {
@@ -168,14 +173,14 @@ const calculateAnalytics = (invoices) => {
     }
     analytics.byType[invType].count++;
     analytics.byType[invType].amount += amount;
-    
+
     // Quality tier
     const quality = rawData.QualityTier;
     if (quality === 'EXCELLENT') analytics.excellentQuality++;
     else if (quality === 'GOOD') analytics.goodQuality++;
     else if (quality === 'ACCEPTABLE') analytics.acceptableQuality++;
     else analytics.poorQuality++;
-    
+
     // Monthly breakdown
     const invoiceDate = rawData.InvoiceDate;
     if (invoiceDate) {
@@ -190,12 +195,10 @@ const calculateAnalytics = (invoices) => {
       }
     }
   });
-  
+
   // Averages
-  analytics.averageInvoice = analytics.totalInvoices > 0 
-    ? analytics.totalSpend / analytics.totalInvoices 
-    : 0;
-  
+  analytics.averageInvoice = analytics.totalInvoices > 0 ? analytics.totalSpend / analytics.totalInvoices : 0;
+
   return analytics;
 };
 
@@ -206,14 +209,19 @@ const calculateAnalytics = (invoices) => {
 const MetricCard = ({ title, value, description, trend, trendDirection, variant = 'default', icon }) => {
   const getVariantColor = () => {
     switch (variant) {
-      case 'success': return 'text-status-success';
-      case 'warning': return 'text-status-warning';
-      case 'error': return 'text-status-error';
-      case 'info': return 'text-status-info';
-      default: return 'text-body-secondary';
+      case 'success':
+        return 'text-status-success';
+      case 'warning':
+        return 'text-status-warning';
+      case 'error':
+        return 'text-status-error';
+      case 'info':
+        return 'text-status-info';
+      default:
+        return 'text-body-secondary';
     }
   };
-  
+
   return (
     <Container>
       <SpaceBetween size="xxs">
@@ -245,38 +253,38 @@ const MetricCard = ({ title, value, description, trend, trendDirection, variant 
 const InvoiceAnalysisDashboard = () => {
   const history = useHistory();
   const { activeCompany, isCompanySelected } = useCompany();
-  
+
   const [loading, setLoading] = useState(true);
   const [invoices, setInvoices] = useState([]);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
-  
+
   // Table state
   const [filterText, setFilterText] = useState('');
   const [selectedRiskFilter, setSelectedRiskFilter] = useState(null);
   const [selectedStatusFilter, setSelectedStatusFilter] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 20;
-  
+
   useEffect(() => {
     if (!isCompanySelected) {
       history.push(COMPANY_SELECT_PATH);
       return;
     }
-    
+
     loadInvoices();
   }, [isCompanySelected, activeCompany]);
-  
+
   const loadInvoices = async () => {
     if (!activeCompany?.companyNumber) return;
-    
+
     setLoading(true);
     setError(null);
-    
+
     try {
       console.log('[INVOICE ANALYSIS] Loading invoices for:', activeCompany.companyNumber);
       const result = await fetchExtractionResults(activeCompany.companyNumber, DOCUMENT_TYPES.INVOICE, 500);
-      
+
       const formattedInvoices = result.items.map(formatInvoiceData);
       console.log('[INVOICE ANALYSIS] Loaded invoices:', formattedInvoices.length);
       setInvoices(formattedInvoices);
@@ -287,18 +295,18 @@ const InvoiceAnalysisDashboard = () => {
       setLoading(false);
     }
   };
-  
+
   // Calculate analytics from loaded invoices
   const analytics = useMemo(() => calculateAnalytics(invoices), [invoices]);
-  
+
   // Filter invoices for action queue
   const actionItems = useMemo(() => {
-    return invoices.filter(inv => {
+    return invoices.filter((inv) => {
       const rawData = inv.rawData || {};
       const action = rawData.RecommendedAction;
       const hmrcRisk = rawData.HMRCRisk;
       const hitl = rawData.HITLRequired;
-      
+
       // Apply filters
       if (selectedRiskFilter && hmrcRisk !== selectedRiskFilter.value) return false;
       if (selectedStatusFilter && rawData.DeductibilityStatus !== selectedStatusFilter.value) return false;
@@ -308,18 +316,23 @@ const InvoiceAnalysisDashboard = () => {
         const desc = (rawData.Description || '').toLowerCase();
         if (!supplier.includes(searchLower) && !desc.includes(searchLower)) return false;
       }
-      
-      return action === 'REJECT' || action === 'REQUEST_DOCUMENTATION' || 
-             action === 'APPORTION' || hitl || hmrcRisk === 'HIGH';
+
+      return (
+        action === 'REJECT' ||
+        action === 'REQUEST_DOCUMENTATION' ||
+        action === 'APPORTION' ||
+        hitl ||
+        hmrcRisk === 'HIGH'
+      );
     });
   }, [invoices, filterText, selectedRiskFilter, selectedStatusFilter]);
-  
+
   // Paginated action items
   const paginatedActionItems = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
     return actionItems.slice(start, start + pageSize);
   }, [actionItems, currentPage, pageSize]);
-  
+
   // Top suppliers sorted by spend
   const topSuppliers = useMemo(() => {
     return Object.entries(analytics.supplierSpend)
@@ -327,7 +340,7 @@ const InvoiceAnalysisDashboard = () => {
       .sort((a, b) => b.amount - a.amount)
       .slice(0, 15);
   }, [analytics]);
-  
+
   // Monthly data for chart
   const monthlyChartData = useMemo(() => {
     return Object.entries(analytics.monthlySpend)
@@ -338,7 +351,7 @@ const InvoiceAnalysisDashboard = () => {
         deductible: data.deductible,
       }));
   }, [analytics]);
-  
+
   if (loading) {
     return (
       <>
@@ -352,35 +365,37 @@ const InvoiceAnalysisDashboard = () => {
       </>
     );
   }
-  
+
   if (!activeCompany) {
     return null;
   }
-  
+
   // ============================================================================
   // TAB: EXECUTIVE OVERVIEW
   // ============================================================================
-  
+
   const renderOverviewTab = () => {
-    const analyzedPct = analytics.totalInvoices > 0 
-      ? ((analytics.totalInvoices - analytics.pendingAnalysis.count) / analytics.totalInvoices * 100).toFixed(0)
-      : 0;
-    
-    const deductiblePct = analytics.totalSpend > 0 
-      ? (analytics.deductibleAmount / analytics.totalSpend * 100).toFixed(1)
-      : 0;
-    
+    const analyzedPct =
+      analytics.totalInvoices > 0
+        ? (((analytics.totalInvoices - analytics.pendingAnalysis.count) / analytics.totalInvoices) * 100).toFixed(0)
+        : 0;
+
+    const deductiblePct =
+      analytics.totalSpend > 0 ? ((analytics.deductibleAmount / analytics.totalSpend) * 100).toFixed(1) : 0;
+
     const taxAtRisk = analytics.addbackAmount * 0.25; // Assuming 25% corp tax rate
-    
+
     return (
       <SpaceBetween size="l">
         {/* Key Metrics Row */}
-        <Grid gridDefinition={[
-          { colspan: { default: 12, xs: 6, s: 3 } },
-          { colspan: { default: 12, xs: 6, s: 3 } },
-          { colspan: { default: 12, xs: 6, s: 3 } },
-          { colspan: { default: 12, xs: 6, s: 3 } },
-        ]}>
+        <Grid
+          gridDefinition={[
+            { colspan: { default: 12, xs: 6, s: 3 } },
+            { colspan: { default: 12, xs: 6, s: 3 } },
+            { colspan: { default: 12, xs: 6, s: 3 } },
+            { colspan: { default: 12, xs: 6, s: 3 } },
+          ]}
+        >
           <MetricCard
             title="Total Spend"
             value={formatCurrency(analytics.totalSpend, 'GBP')}
@@ -405,21 +420,21 @@ const InvoiceAnalysisDashboard = () => {
             variant="error"
           />
         </Grid>
-        
+
         {/* Analysis Progress */}
         {analytics.pendingAnalysis.count > 0 && (
           <Alert type="info" header={`Analysis Progress: ${analyzedPct}% Complete`}>
             <Box>
-              {analytics.totalInvoices - analytics.pendingAnalysis.count} of {analytics.totalInvoices} invoices 
-              have been analyzed for tax compliance. {analytics.pendingAnalysis.count} invoices 
-              (£{analytics.pendingAnalysis.amount.toLocaleString()}) are pending analysis.
+              {analytics.totalInvoices - analytics.pendingAnalysis.count} of {analytics.totalInvoices} invoices have
+              been analyzed for tax compliance. {analytics.pendingAnalysis.count} invoices (£
+              {analytics.pendingAnalysis.amount.toLocaleString()}) are pending analysis.
             </Box>
             <Box padding={{ top: 's' }}>
               <ProgressBar value={parseInt(analyzedPct)} />
             </Box>
           </Alert>
         )}
-        
+
         {/* Deductibility & Risk Charts */}
         <ColumnLayout columns={2} variant="text-grid">
           <Container header={<Header variant="h3">Tax Deductibility Breakdown</Header>}>
@@ -430,12 +445,14 @@ const InvoiceAnalysisDashboard = () => {
                 { title: 'Not Deductible', value: analytics.notDeductible.count, color: '#d91515' },
                 { title: 'Requires Review', value: analytics.requiresReview.count, color: '#8d6605' },
                 { title: 'Pending Analysis', value: analytics.pendingAnalysis.count, color: '#879596' },
-              ].filter(d => d.value > 0)}
+              ].filter((d) => d.value > 0)}
               detailPopoverContent={(datum, sum) => [
                 { key: 'Count', value: datum.value },
                 { key: 'Percentage', value: `${((datum.value / sum) * 100).toFixed(1)}%` },
               ]}
-              segmentDescription={(datum, sum) => `${datum.value} invoices (${((datum.value / sum) * 100).toFixed(0)}%)`}
+              segmentDescription={(datum, sum) =>
+                `${datum.value} invoices (${((datum.value / sum) * 100).toFixed(0)}%)`
+              }
               size="medium"
               hideFilter
               hideLegend={false}
@@ -443,14 +460,17 @@ const InvoiceAnalysisDashboard = () => {
               empty={<Box textAlign="center">No data</Box>}
             />
           </Container>
-          
+
           <Container header={<Header variant="h3">HMRC Risk Assessment</Header>}>
             <SpaceBetween size="m">
               <Box>
                 <Box variant="awsui-key-label">High Risk</Box>
                 <ProgressBar
                   value={analytics.highRisk.count}
-                  additionalInfo={`${analytics.highRisk.count} invoices • ${formatCurrency(analytics.highRisk.amount, 'GBP')}`}
+                  additionalInfo={`${analytics.highRisk.count} invoices • ${formatCurrency(
+                    analytics.highRisk.amount,
+                    'GBP',
+                  )}`}
                   status="error"
                 />
               </Box>
@@ -458,7 +478,10 @@ const InvoiceAnalysisDashboard = () => {
                 <Box variant="awsui-key-label">Medium Risk</Box>
                 <ProgressBar
                   value={analytics.mediumRisk.count}
-                  additionalInfo={`${analytics.mediumRisk.count} invoices • ${formatCurrency(analytics.mediumRisk.amount, 'GBP')}`}
+                  additionalInfo={`${analytics.mediumRisk.count} invoices • ${formatCurrency(
+                    analytics.mediumRisk.amount,
+                    'GBP',
+                  )}`}
                   status="in-progress"
                 />
               </Box>
@@ -466,14 +489,17 @@ const InvoiceAnalysisDashboard = () => {
                 <Box variant="awsui-key-label">Low Risk</Box>
                 <ProgressBar
                   value={analytics.lowRisk.count}
-                  additionalInfo={`${analytics.lowRisk.count} invoices • ${formatCurrency(analytics.lowRisk.amount, 'GBP')}`}
+                  additionalInfo={`${analytics.lowRisk.count} invoices • ${formatCurrency(
+                    analytics.lowRisk.amount,
+                    'GBP',
+                  )}`}
                   status="success"
                 />
               </Box>
             </SpaceBetween>
           </Container>
         </ColumnLayout>
-        
+
         {/* Action Summary */}
         <Container header={<Header variant="h3">Actions Required</Header>}>
           <ColumnLayout columns={4} variant="text-grid">
@@ -503,7 +529,7 @@ const InvoiceAnalysisDashboard = () => {
             </div>
           </ColumnLayout>
         </Container>
-        
+
         {/* Quality Summary */}
         <Container header={<Header variant="h3">Extraction Quality</Header>}>
           <ColumnLayout columns={4} variant="text-grid">
@@ -512,7 +538,9 @@ const InvoiceAnalysisDashboard = () => {
               <Box fontSize="heading-xl" fontWeight="bold">
                 {analytics.excellentQuality}
               </Box>
-              <Box variant="small" color="text-status-success">High confidence</Box>
+              <Box variant="small" color="text-status-success">
+                High confidence
+              </Box>
             </div>
             <div>
               <Box variant="awsui-key-label">Good</Box>
@@ -531,18 +559,20 @@ const InvoiceAnalysisDashboard = () => {
               <Box fontSize="heading-xl" fontWeight="bold" color="text-status-warning">
                 {analytics.hitlRequired}
               </Box>
-              <Box variant="small" color="text-status-warning">Human review required</Box>
+              <Box variant="small" color="text-status-warning">
+                Human review required
+              </Box>
             </div>
           </ColumnLayout>
         </Container>
       </SpaceBetween>
     );
   };
-  
+
   // ============================================================================
   // TAB: ACTION QUEUE
   // ============================================================================
-  
+
   const renderActionQueueTab = () => {
     const riskOptions = [
       { label: 'All Risks', value: null },
@@ -550,14 +580,14 @@ const InvoiceAnalysisDashboard = () => {
       { label: 'Medium Risk', value: 'MEDIUM' },
       { label: 'Low Risk', value: 'LOW' },
     ];
-    
+
     const statusOptions = [
       { label: 'All Statuses', value: null },
       { label: 'Not Deductible', value: 'NOT_DEDUCTIBLE' },
       { label: 'Requires Review', value: 'REQUIRES_REVIEW' },
       { label: 'Partially Deductible', value: 'PARTIALLY_DEDUCTIBLE' },
     ];
-    
+
     return (
       <SpaceBetween size="l">
         {actionItems.length === 0 ? (
@@ -569,7 +599,7 @@ const InvoiceAnalysisDashboard = () => {
             These invoices have been flagged for review, rejection, documentation, or have high HMRC risk.
           </Alert>
         )}
-        
+
         <Table
           columnDefinitions={[
             {
@@ -647,7 +677,7 @@ const InvoiceAnalysisDashboard = () => {
               cell: (item) => (
                 <Box variant="small" color="text-body-secondary">
                   {(item.rawData?.DeductibilityReasoning || item.rawData?.HMRCConcern || 'N/A').substring(0, 80)}
-                  {((item.rawData?.DeductibilityReasoning || item.rawData?.HMRCConcern || '').length > 80) ? '...' : ''}
+                  {(item.rawData?.DeductibilityReasoning || item.rawData?.HMRCConcern || '').length > 80 ? '...' : ''}
                 </Box>
               ),
               minWidth: 200,
@@ -720,11 +750,11 @@ const InvoiceAnalysisDashboard = () => {
       </SpaceBetween>
     );
   };
-  
+
   // ============================================================================
   // TAB: SUPPLIER ANALYSIS
   // ============================================================================
-  
+
   const renderSupplierTab = () => {
     return (
       <SpaceBetween size="l">
@@ -751,7 +781,7 @@ const InvoiceAnalysisDashboard = () => {
             </div>
           </ColumnLayout>
         </Container>
-        
+
         <Table
           columnDefinitions={[
             {
@@ -797,7 +827,7 @@ const InvoiceAnalysisDashboard = () => {
               id: 'deductiblePct',
               header: 'Deductible %',
               cell: (item) => {
-                const pct = item.amount > 0 ? (item.deductible / item.amount * 100) : 0;
+                const pct = item.amount > 0 ? (item.deductible / item.amount) * 100 : 0;
                 const color = pct >= 80 ? 'green' : pct >= 50 ? 'blue' : pct > 0 ? 'grey' : 'red';
                 return <Badge color={color}>{pct.toFixed(0)}%</Badge>;
               },
@@ -808,10 +838,7 @@ const InvoiceAnalysisDashboard = () => {
           sortingDisabled={false}
           variant="container"
           header={
-            <Header
-              counter={`(${topSuppliers.length})`}
-              description="Top suppliers by total spend"
-            >
+            <Header counter={`(${topSuppliers.length})`} description="Top suppliers by total spend">
               Supplier Breakdown
             </Header>
           }
@@ -824,23 +851,23 @@ const InvoiceAnalysisDashboard = () => {
       </SpaceBetween>
     );
   };
-  
+
   // ============================================================================
   // TAB: VAT ANALYSIS
   // ============================================================================
-  
+
   const renderVATTab = () => {
-    const vatPct = analytics.totalSpend > 0 
-      ? (analytics.totalVAT / analytics.totalSpend * 100).toFixed(1) 
-      : 0;
-    
+    const vatPct = analytics.totalSpend > 0 ? ((analytics.totalVAT / analytics.totalSpend) * 100).toFixed(1) : 0;
+
     return (
       <SpaceBetween size="l">
-        <Grid gridDefinition={[
-          { colspan: { default: 12, s: 4 } },
-          { colspan: { default: 12, s: 4 } },
-          { colspan: { default: 12, s: 4 } },
-        ]}>
+        <Grid
+          gridDefinition={[
+            { colspan: { default: 12, s: 4 } },
+            { colspan: { default: 12, s: 4 } },
+            { colspan: { default: 12, s: 4 } },
+          ]}
+        >
           <MetricCard
             title="Total VAT"
             value={formatCurrency(analytics.totalVAT, 'GBP')}
@@ -857,7 +884,7 @@ const InvoiceAnalysisDashboard = () => {
             description="Including VAT"
           />
         </Grid>
-        
+
         <Container header={<Header variant="h3">Invoice Type Breakdown</Header>}>
           <Table
             columnDefinitions={[
@@ -883,7 +910,7 @@ const InvoiceAnalysisDashboard = () => {
                 id: 'pct',
                 header: '% of Total',
                 cell: (item) => {
-                  const pct = analytics.totalSpend > 0 ? (item.amount / analytics.totalSpend * 100) : 0;
+                  const pct = analytics.totalSpend > 0 ? (item.amount / analytics.totalSpend) * 100 : 0;
                   return `${pct.toFixed(1)}%`;
                 },
                 width: 100,
@@ -903,11 +930,11 @@ const InvoiceAnalysisDashboard = () => {
       </SpaceBetween>
     );
   };
-  
+
   // ============================================================================
   // TAB: MONTHLY TRENDS
   // ============================================================================
-  
+
   const renderTrendsTab = () => {
     return (
       <SpaceBetween size="l">
@@ -918,16 +945,16 @@ const InvoiceAnalysisDashboard = () => {
                 {
                   title: 'Total Spend',
                   type: 'bar',
-                  data: monthlyChartData.map(d => ({ x: d.x, y: d.y })),
+                  data: monthlyChartData.map((d) => ({ x: d.x, y: d.y })),
                 },
                 {
                   title: 'Deductible',
                   type: 'bar',
-                  data: monthlyChartData.map(d => ({ x: d.x, y: d.deductible })),
+                  data: monthlyChartData.map((d) => ({ x: d.x, y: d.deductible })),
                 },
               ]}
-              xDomain={monthlyChartData.map(d => d.x)}
-              yDomain={[0, Math.max(...monthlyChartData.map(d => d.y)) * 1.1]}
+              xDomain={monthlyChartData.map((d) => d.x)}
+              yDomain={[0, Math.max(...monthlyChartData.map((d) => d.y)) * 1.1]}
               xTitle="Month"
               yTitle="Amount (£)"
               hideFilter
@@ -935,12 +962,10 @@ const InvoiceAnalysisDashboard = () => {
               empty={<Box textAlign="center">No trend data available</Box>}
             />
           ) : (
-            <Alert type="info">
-              Not enough data to display monthly trends. Process more invoices to see patterns.
-            </Alert>
+            <Alert type="info">Not enough data to display monthly trends. Process more invoices to see patterns.</Alert>
           )}
         </Container>
-        
+
         <Table
           columnDefinitions={[
             {
@@ -971,7 +996,7 @@ const InvoiceAnalysisDashboard = () => {
               id: 'deductPct',
               header: 'Deductible %',
               cell: (item) => {
-                const pct = item.y > 0 ? (item.deductible / item.y * 100) : 0;
+                const pct = item.y > 0 ? (item.deductible / item.y) * 100 : 0;
                 return `${pct.toFixed(1)}%`;
               },
               width: 120,
@@ -979,19 +1004,17 @@ const InvoiceAnalysisDashboard = () => {
           ]}
           items={monthlyChartData}
           variant="container"
-          header={
-            <Header variant="h3">Monthly Breakdown</Header>
-          }
+          header={<Header variant="h3">Monthly Breakdown</Header>}
           empty={<Box textAlign="center">No monthly data</Box>}
         />
       </SpaceBetween>
     );
   };
-  
+
   // ============================================================================
   // RENDER MAIN COMPONENT
   // ============================================================================
-  
+
   return (
     <>
       <GenAIIDPTopNavigation />
@@ -1006,7 +1029,7 @@ const InvoiceAnalysisDashboard = () => {
             ]}
             ariaLabel="Breadcrumbs"
           />
-          
+
           {error && (
             <Flashbar
               items={[
@@ -1019,15 +1042,13 @@ const InvoiceAnalysisDashboard = () => {
               ]}
             />
           )}
-          
+
           <Header
             variant="h1"
             description={`Tax compliance analysis for ${activeCompany.companyNumber}`}
             actions={
               <SpaceBetween direction="horizontal" size="s">
-                <Button onClick={() => history.push(INVOICE_INSIGHTS_PATH)}>
-                  View All Invoices
-                </Button>
+                <Button onClick={() => history.push(INVOICE_INSIGHTS_PATH)}>View All Invoices</Button>
                 <Button iconName="refresh" onClick={loadInvoices}>
                   Refresh Data
                 </Button>
@@ -1036,7 +1057,7 @@ const InvoiceAnalysisDashboard = () => {
           >
             Invoice Analysis: {activeCompany.companyName}
           </Header>
-          
+
           <Tabs
             activeTabId={activeTab}
             onChange={({ detail }) => setActiveTab(detail.activeTabId)}

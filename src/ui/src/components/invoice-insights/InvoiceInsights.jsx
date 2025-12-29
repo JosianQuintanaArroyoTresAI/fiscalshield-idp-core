@@ -328,15 +328,11 @@ const InvoiceInsights = () => {
           ariaLabel="Breadcrumbs"
         />
 
-        <Header 
-          variant="h1" 
+        <Header
+          variant="h1"
           description={`Company Number: ${activeCompany.companyNumber}`}
           actions={
-            <Button 
-              variant="primary" 
-              onClick={() => history.push(INVOICE_ANALYSIS_PATH)}
-              iconName="status-positive"
-            >
+            <Button variant="primary" onClick={() => history.push(INVOICE_ANALYSIS_PATH)} iconName="status-positive">
               Analysis Dashboard
             </Button>
           }
