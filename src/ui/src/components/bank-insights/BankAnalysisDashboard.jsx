@@ -29,7 +29,12 @@ import {
 import { useCompany } from '../../contexts/company';
 import { COMPANY_SELECT_PATH, BANK_INSIGHTS_PATH } from '../../routes/constants';
 import GenAIIDPTopNavigation from '../genai-idp-top-navigation';
-import { fetchExtractionResults, formatBankStatementData, DOCUMENT_TYPES, formatCurrency } from '../../services/extractionService';
+import {
+  fetchExtractionResults,
+  formatBankStatementData,
+  DOCUMENT_TYPES,
+  formatCurrency,
+} from '../../services/extractionService';
 
 import '@awsui/global-styles/index.css';
 
@@ -45,24 +50,24 @@ const calculateBankAnalytics = (transactions) => {
     totalCredits: 0,
     netCashFlow: 0,
     averageTransaction: 0,
-    
+
     // Categories
     categorySpend: {},
-    
+
     // Counterparties
     counterpartySpend: {},
     counterpartyCount: new Set(),
-    
+
     // Transaction types
     byType: {},
     byPaymentMethod: {},
-    
+
     // Actions & Compliance
     actionApprove: 0,
     actionReview: 0,
     actionInvestigate: 0,
     actionReject: 0,
-    
+
     // Risk analysis
     complianceRiskTiers: { LOW: 0, MEDIUM: 0, HIGH: 0 },
     riskFlags: {
@@ -72,36 +77,36 @@ const calculateBankAnalytics = (transactions) => {
       geographic: 0,
       vagueDescription: 0,
     },
-    
+
     // Direction
     inbound: { count: 0, amount: 0 },
     outbound: { count: 0, amount: 0 },
-    
+
     // Banks & Accounts
     banks: new Set(),
     accounts: new Set(),
-    
+
     // Monthly breakdown
     monthlyFlow: {},
-    
+
     // Quality
     excellentQuality: 0,
     goodQuality: 0,
     acceptableQuality: 0,
-    
+
     // HMRC concerns
     hmrcConcerns: [],
   };
-  
+
   // Filter out statement summaries (only process transactions)
-  const txnRecords = transactions.filter(t => t.rawData?.TransactionId || t.rawData?.TransactionAmount);
+  const txnRecords = transactions.filter((t) => t.rawData?.TransactionId || t.rawData?.TransactionAmount);
   analytics.totalTransactions = txnRecords.length;
-  
+
   txnRecords.forEach((txn) => {
     const rawData = txn.rawData || {};
     const amount = parseFloat(rawData.TransactionAmount) || 0;
     const absAmount = Math.abs(amount);
-    
+
     // Debits vs Credits
     if (amount < 0) {
       analytics.totalDebits += absAmount;
@@ -112,7 +117,7 @@ const calculateBankAnalytics = (transactions) => {
       analytics.inbound.count++;
       analytics.inbound.amount += amount;
     }
-    
+
     // Category breakdown
     const category = rawData.ExpenseCategory || 'Uncategorized';
     if (!analytics.categorySpend[category]) {
@@ -122,7 +127,7 @@ const calculateBankAnalytics = (transactions) => {
       analytics.categorySpend[category].amount += absAmount;
       analytics.categorySpend[category].count++;
     }
-    
+
     // Counterparty breakdown
     const counterparty = rawData.CounterpartyName || 'Unknown';
     if (!analytics.counterpartySpend[counterparty]) {
@@ -133,7 +138,7 @@ const calculateBankAnalytics = (transactions) => {
       analytics.counterpartySpend[counterparty].count++;
     }
     analytics.counterpartyCount.add(counterparty);
-    
+
     // Transaction type
     const txnType = rawData.TransactionType || 'OTHER';
     if (!analytics.byType[txnType]) {
@@ -141,7 +146,7 @@ const calculateBankAnalytics = (transactions) => {
     }
     analytics.byType[txnType].count++;
     analytics.byType[txnType].amount += absAmount;
-    
+
     // Payment method
     const paymentMethod = rawData.PaymentMethod || 'OTHER';
     if (!analytics.byPaymentMethod[paymentMethod]) {
@@ -149,29 +154,29 @@ const calculateBankAnalytics = (transactions) => {
     }
     analytics.byPaymentMethod[paymentMethod].count++;
     analytics.byPaymentMethod[paymentMethod].amount += absAmount;
-    
+
     // Recommended actions
     const action = rawData.RecommendedAction;
     if (action === 'APPROVE') analytics.actionApprove++;
     else if (action === 'REVIEW_DOCUMENTATION') analytics.actionReview++;
     else if (action === 'INVESTIGATE') analytics.actionInvestigate++;
     else if (action === 'REJECT') analytics.actionReject++;
-    
+
     // Compliance risk tiers
     const riskTier = rawData.ComplianceRiskTier || 'LOW';
     analytics.complianceRiskTiers[riskTier] = (analytics.complianceRiskTiers[riskTier] || 0) + 1;
-    
+
     // Risk flags
     if (rawData.CashRiskFlag && rawData.CashRiskFlag !== 'NONE') analytics.riskFlags.cash++;
     if (rawData.ThresholdFlag && rawData.ThresholdFlag !== 'NONE') analytics.riskFlags.threshold++;
     if (rawData.StructuringFlag && rawData.StructuringFlag !== 'NONE') analytics.riskFlags.structuring++;
     if (rawData.GeographicRiskFlag && rawData.GeographicRiskFlag !== 'NONE') analytics.riskFlags.geographic++;
     if (rawData.VagueDescriptionFlag && rawData.VagueDescriptionFlag !== 'NONE') analytics.riskFlags.vagueDescription++;
-    
+
     // Banks & accounts
     if (rawData.BankName) analytics.banks.add(rawData.BankName);
     if (rawData.AccountNumber) analytics.accounts.add(rawData.AccountNumber);
-    
+
     // Monthly breakdown
     const txnDate = rawData.TransactionDate;
     if (txnDate) {
@@ -186,13 +191,13 @@ const calculateBankAnalytics = (transactions) => {
         analytics.monthlyFlow[month].credits += amount;
       }
     }
-    
+
     // Quality
     const quality = rawData.QualityTier;
     if (quality === 'EXCELLENT') analytics.excellentQuality++;
     else if (quality === 'GOOD') analytics.goodQuality++;
     else if (quality === 'ACCEPTABLE') analytics.acceptableQuality++;
-    
+
     // HMRC concerns
     if (rawData.HMRCConcern && rawData.HMRCConcern !== 'false' && rawData.HMRCConcern !== false) {
       analytics.hmrcConcerns.push({
@@ -204,15 +209,15 @@ const calculateBankAnalytics = (transactions) => {
       });
     }
   });
-  
+
   // Net cash flow
   analytics.netCashFlow = analytics.totalCredits - analytics.totalDebits;
-  
+
   // Average
   if (analytics.totalTransactions > 0) {
     analytics.averageTransaction = (analytics.totalDebits + analytics.totalCredits) / analytics.totalTransactions;
   }
-  
+
   return analytics;
 };
 
@@ -223,14 +228,19 @@ const calculateBankAnalytics = (transactions) => {
 const MetricCard = ({ title, value, description, variant = 'default' }) => {
   const getVariantColor = () => {
     switch (variant) {
-      case 'success': return 'text-status-success';
-      case 'warning': return 'text-status-warning';
-      case 'error': return 'text-status-error';
-      case 'info': return 'text-status-info';
-      default: return 'text-body-secondary';
+      case 'success':
+        return 'text-status-success';
+      case 'warning':
+        return 'text-status-warning';
+      case 'error':
+        return 'text-status-error';
+      case 'info':
+        return 'text-status-info';
+      default:
+        return 'text-body-secondary';
     }
   };
-  
+
   return (
     <Container>
       <SpaceBetween size="xxs">
@@ -257,38 +267,38 @@ const MetricCard = ({ title, value, description, variant = 'default' }) => {
 const BankAnalysisDashboard = () => {
   const history = useHistory();
   const { activeCompany, isCompanySelected } = useCompany();
-  
+
   const [loading, setLoading] = useState(true);
   const [transactions, setTransactions] = useState([]);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
-  
+
   // Table state
   const [filterText, setFilterText] = useState('');
   const [selectedActionFilter, setSelectedActionFilter] = useState(null);
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 20;
-  
+
   useEffect(() => {
     if (!isCompanySelected) {
       history.push(COMPANY_SELECT_PATH);
       return;
     }
-    
+
     loadTransactions();
   }, [isCompanySelected, activeCompany]);
-  
+
   const loadTransactions = async () => {
     if (!activeCompany?.companyNumber) return;
-    
+
     setLoading(true);
     setError(null);
-    
+
     try {
       console.log('[BANK ANALYSIS] Loading transactions for:', activeCompany.companyNumber);
       const result = await fetchExtractionResults(activeCompany.companyNumber, DOCUMENT_TYPES.BANK_STATEMENT, 500);
-      
+
       const formattedTransactions = result.items.map(formatBankStatementData);
       console.log('[BANK ANALYSIS] Loaded transactions:', formattedTransactions.length);
       setTransactions(formattedTransactions);
@@ -299,19 +309,19 @@ const BankAnalysisDashboard = () => {
       setLoading(false);
     }
   };
-  
+
   // Calculate analytics
   const analytics = useMemo(() => calculateBankAnalytics(transactions), [transactions]);
-  
+
   // Filter transactions for review queue
   const reviewItems = useMemo(() => {
-    return transactions.filter(txn => {
+    return transactions.filter((txn) => {
       const rawData = txn.rawData || {};
       // Only include actual transactions, not summaries
       if (!rawData.TransactionId) return false;
-      
+
       const action = rawData.RecommendedAction;
-      
+
       // Apply filters
       if (selectedActionFilter && action !== selectedActionFilter.value) return false;
       if (selectedCategoryFilter && rawData.ExpenseCategory !== selectedCategoryFilter.value) return false;
@@ -321,17 +331,17 @@ const BankAnalysisDashboard = () => {
         const desc = (rawData.TransactionDescription || '').toLowerCase();
         if (!counterparty.includes(searchLower) && !desc.includes(searchLower)) return false;
       }
-      
+
       return action === 'REVIEW_DOCUMENTATION' || action === 'INVESTIGATE' || action === 'REJECT';
     });
   }, [transactions, filterText, selectedActionFilter, selectedCategoryFilter]);
-  
+
   // Paginated review items
   const paginatedReviewItems = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
     return reviewItems.slice(start, start + pageSize);
   }, [reviewItems, currentPage, pageSize]);
-  
+
   // Top categories sorted by spend
   const topCategories = useMemo(() => {
     return Object.entries(analytics.categorySpend)
@@ -339,7 +349,7 @@ const BankAnalysisDashboard = () => {
       .sort((a, b) => b.amount - a.amount)
       .slice(0, 15);
   }, [analytics]);
-  
+
   // Top counterparties sorted by spend
   const topCounterparties = useMemo(() => {
     return Object.entries(analytics.counterpartySpend)
@@ -347,7 +357,7 @@ const BankAnalysisDashboard = () => {
       .sort((a, b) => b.amount - a.amount)
       .slice(0, 15);
   }, [analytics]);
-  
+
   // Monthly data for chart
   const monthlyChartData = useMemo(() => {
     return Object.entries(analytics.monthlyFlow)
@@ -359,16 +369,13 @@ const BankAnalysisDashboard = () => {
         net: data.credits - data.debits,
       }));
   }, [analytics]);
-  
+
   // Category options for filter
   const categoryOptions = useMemo(() => {
     const cats = Object.keys(analytics.categorySpend);
-    return [
-      { label: 'All Categories', value: null },
-      ...cats.map(c => ({ label: c, value: c }))
-    ];
+    return [{ label: 'All Categories', value: null }, ...cats.map((c) => ({ label: c, value: c }))];
   }, [analytics]);
-  
+
   if (loading) {
     return (
       <>
@@ -382,27 +389,29 @@ const BankAnalysisDashboard = () => {
       </>
     );
   }
-  
+
   if (!activeCompany) {
     return null;
   }
-  
+
   // ============================================================================
   // TAB: EXECUTIVE OVERVIEW
   // ============================================================================
-  
+
   const renderOverviewTab = () => {
     const totalRiskFlags = Object.values(analytics.riskFlags).reduce((a, b) => a + b, 0);
-    
+
     return (
       <SpaceBetween size="l">
         {/* Key Metrics Row */}
-        <Grid gridDefinition={[
-          { colspan: { default: 12, xs: 6, s: 3 } },
-          { colspan: { default: 12, xs: 6, s: 3 } },
-          { colspan: { default: 12, xs: 6, s: 3 } },
-          { colspan: { default: 12, xs: 6, s: 3 } },
-        ]}>
+        <Grid
+          gridDefinition={[
+            { colspan: { default: 12, xs: 6, s: 3 } },
+            { colspan: { default: 12, xs: 6, s: 3 } },
+            { colspan: { default: 12, xs: 6, s: 3 } },
+            { colspan: { default: 12, xs: 6, s: 3 } },
+          ]}
+        >
           <MetricCard
             title="Total Outflow"
             value={formatCurrency(analytics.totalDebits, 'GBP')}
@@ -427,7 +436,7 @@ const BankAnalysisDashboard = () => {
             description={`${analytics.counterpartyCount.size} unique counterparties`}
           />
         </Grid>
-        
+
         {/* Bank Account Info */}
         <Container header={<Header variant="h3">Account Overview</Header>}>
           <ColumnLayout columns={4} variant="text-grid">
@@ -458,7 +467,7 @@ const BankAnalysisDashboard = () => {
             </div>
           </ColumnLayout>
         </Container>
-        
+
         {/* Spending by Category & Actions */}
         <ColumnLayout columns={2} variant="text-grid">
           <Container header={<Header variant="h3">Spending by Category</Header>}>
@@ -471,7 +480,9 @@ const BankAnalysisDashboard = () => {
                 { key: 'Amount', value: formatCurrency(datum.value, 'GBP') },
                 { key: 'Percentage', value: `${((datum.value / sum) * 100).toFixed(1)}%` },
               ]}
-              segmentDescription={(datum, sum) => `${formatCurrency(datum.value, 'GBP')} (${((datum.value / sum) * 100).toFixed(0)}%)`}
+              segmentDescription={(datum, sum) =>
+                `${formatCurrency(datum.value, 'GBP')} (${((datum.value / sum) * 100).toFixed(0)}%)`
+              }
               size="medium"
               hideFilter
               hideLegend={false}
@@ -479,7 +490,7 @@ const BankAnalysisDashboard = () => {
               empty={<Box textAlign="center">No data</Box>}
             />
           </Container>
-          
+
           <Container header={<Header variant="h3">Review Actions Required</Header>}>
             <SpaceBetween size="m">
               <Box>
@@ -517,37 +528,57 @@ const BankAnalysisDashboard = () => {
             </SpaceBetween>
           </Container>
         </ColumnLayout>
-        
+
         {/* Risk Flags Summary */}
         <Container header={<Header variant="h3">Compliance & Risk Flags</Header>}>
           <ColumnLayout columns={5} variant="text-grid">
             <div>
               <Box variant="awsui-key-label">💵 Cash Risk</Box>
-              <Box fontSize="heading-xl" fontWeight="bold" color={analytics.riskFlags.cash > 0 ? 'text-status-error' : 'text-status-success'}>
+              <Box
+                fontSize="heading-xl"
+                fontWeight="bold"
+                color={analytics.riskFlags.cash > 0 ? 'text-status-error' : 'text-status-success'}
+              >
                 {analytics.riskFlags.cash}
               </Box>
             </div>
             <div>
               <Box variant="awsui-key-label">📊 Threshold</Box>
-              <Box fontSize="heading-xl" fontWeight="bold" color={analytics.riskFlags.threshold > 0 ? 'text-status-error' : 'text-status-success'}>
+              <Box
+                fontSize="heading-xl"
+                fontWeight="bold"
+                color={analytics.riskFlags.threshold > 0 ? 'text-status-error' : 'text-status-success'}
+              >
                 {analytics.riskFlags.threshold}
               </Box>
             </div>
             <div>
               <Box variant="awsui-key-label">🔄 Structuring</Box>
-              <Box fontSize="heading-xl" fontWeight="bold" color={analytics.riskFlags.structuring > 0 ? 'text-status-error' : 'text-status-success'}>
+              <Box
+                fontSize="heading-xl"
+                fontWeight="bold"
+                color={analytics.riskFlags.structuring > 0 ? 'text-status-error' : 'text-status-success'}
+              >
                 {analytics.riskFlags.structuring}
               </Box>
             </div>
             <div>
               <Box variant="awsui-key-label">🌍 Geographic</Box>
-              <Box fontSize="heading-xl" fontWeight="bold" color={analytics.riskFlags.geographic > 0 ? 'text-status-error' : 'text-status-success'}>
+              <Box
+                fontSize="heading-xl"
+                fontWeight="bold"
+                color={analytics.riskFlags.geographic > 0 ? 'text-status-error' : 'text-status-success'}
+              >
                 {analytics.riskFlags.geographic}
               </Box>
             </div>
             <div>
               <Box variant="awsui-key-label">❓ Vague Description</Box>
-              <Box fontSize="heading-xl" fontWeight="bold" color={analytics.riskFlags.vagueDescription > 0 ? 'text-status-warning' : 'text-status-success'}>
+              <Box
+                fontSize="heading-xl"
+                fontWeight="bold"
+                color={analytics.riskFlags.vagueDescription > 0 ? 'text-status-warning' : 'text-status-success'}
+              >
                 {analytics.riskFlags.vagueDescription}
               </Box>
             </div>
@@ -558,7 +589,7 @@ const BankAnalysisDashboard = () => {
             </Box>
           )}
         </Container>
-        
+
         {/* Extraction Quality */}
         <Container header={<Header variant="h3">Extraction Quality</Header>}>
           <ColumnLayout columns={3} variant="text-grid">
@@ -567,7 +598,9 @@ const BankAnalysisDashboard = () => {
               <Box fontSize="heading-xl" fontWeight="bold">
                 {analytics.excellentQuality}
               </Box>
-              <Box variant="small" color="text-status-success">High confidence</Box>
+              <Box variant="small" color="text-status-success">
+                High confidence
+              </Box>
             </div>
             <div>
               <Box variant="awsui-key-label">Good</Box>
@@ -586,11 +619,11 @@ const BankAnalysisDashboard = () => {
       </SpaceBetween>
     );
   };
-  
+
   // ============================================================================
   // TAB: REVIEW QUEUE
   // ============================================================================
-  
+
   const renderReviewQueueTab = () => {
     const actionOptions = [
       { label: 'All Actions', value: null },
@@ -598,7 +631,7 @@ const BankAnalysisDashboard = () => {
       { label: 'Investigate', value: 'INVESTIGATE' },
       { label: 'Reject', value: 'REJECT' },
     ];
-    
+
     return (
       <SpaceBetween size="l">
         {reviewItems.length === 0 ? (
@@ -610,7 +643,7 @@ const BankAnalysisDashboard = () => {
             These transactions have been flagged for documentation review, investigation, or rejection.
           </Alert>
         )}
-        
+
         <Table
           columnDefinitions={[
             {
@@ -641,9 +674,7 @@ const BankAnalysisDashboard = () => {
             {
               id: 'category',
               header: 'Category',
-              cell: (item) => (
-                <Badge>{item.rawData?.ExpenseCategory || 'Uncategorized'}</Badge>
-              ),
+              cell: (item) => <Badge>{item.rawData?.ExpenseCategory || 'Uncategorized'}</Badge>,
               width: 180,
             },
             {
@@ -751,11 +782,11 @@ const BankAnalysisDashboard = () => {
       </SpaceBetween>
     );
   };
-  
+
   // ============================================================================
   // TAB: CATEGORY ANALYSIS
   // ============================================================================
-  
+
   const renderCategoryTab = () => {
     return (
       <SpaceBetween size="l">
@@ -782,7 +813,7 @@ const BankAnalysisDashboard = () => {
             </div>
           </ColumnLayout>
         </Container>
-        
+
         <Table
           columnDefinitions={[
             {
@@ -822,7 +853,7 @@ const BankAnalysisDashboard = () => {
               id: 'pctOfTotal',
               header: '% of Total',
               cell: (item) => {
-                const pct = analytics.totalDebits > 0 ? (item.amount / analytics.totalDebits * 100) : 0;
+                const pct = analytics.totalDebits > 0 ? (item.amount / analytics.totalDebits) * 100 : 0;
                 return `${pct.toFixed(1)}%`;
               },
               width: 100,
@@ -832,10 +863,7 @@ const BankAnalysisDashboard = () => {
           sortingDisabled={false}
           variant="container"
           header={
-            <Header
-              counter={`(${topCategories.length})`}
-              description="Spending breakdown by expense category"
-            >
+            <Header counter={`(${topCategories.length})`} description="Spending breakdown by expense category">
               Category Breakdown
             </Header>
           }
@@ -848,11 +876,11 @@ const BankAnalysisDashboard = () => {
       </SpaceBetween>
     );
   };
-  
+
   // ============================================================================
   // TAB: COUNTERPARTY ANALYSIS
   // ============================================================================
-  
+
   const renderCounterpartyTab = () => {
     return (
       <SpaceBetween size="l">
@@ -879,7 +907,7 @@ const BankAnalysisDashboard = () => {
             </div>
           </ColumnLayout>
         </Container>
-        
+
         <Table
           columnDefinitions={[
             {
@@ -926,10 +954,7 @@ const BankAnalysisDashboard = () => {
           sortingDisabled={false}
           variant="container"
           header={
-            <Header
-              counter={`(${topCounterparties.length})`}
-              description="Top counterparties by total spend"
-            >
+            <Header counter={`(${topCounterparties.length})`} description="Top counterparties by total spend">
               Counterparty Breakdown
             </Header>
           }
@@ -942,11 +967,11 @@ const BankAnalysisDashboard = () => {
       </SpaceBetween>
     );
   };
-  
+
   // ============================================================================
   // TAB: CASH FLOW TRENDS
   // ============================================================================
-  
+
   const renderTrendsTab = () => {
     return (
       <SpaceBetween size="l">
@@ -957,18 +982,18 @@ const BankAnalysisDashboard = () => {
                 {
                   title: 'Outflow (Debits)',
                   type: 'bar',
-                  data: monthlyChartData.map(d => ({ x: d.x, y: d.debits })),
+                  data: monthlyChartData.map((d) => ({ x: d.x, y: d.debits })),
                   color: '#d91515',
                 },
                 {
                   title: 'Inflow (Credits)',
                   type: 'bar',
-                  data: monthlyChartData.map(d => ({ x: d.x, y: d.credits })),
+                  data: monthlyChartData.map((d) => ({ x: d.x, y: d.credits })),
                   color: '#1d8102',
                 },
               ]}
-              xDomain={monthlyChartData.map(d => d.x)}
-              yDomain={[0, Math.max(...monthlyChartData.map(d => Math.max(d.debits, d.credits))) * 1.1]}
+              xDomain={monthlyChartData.map((d) => d.x)}
+              yDomain={[0, Math.max(...monthlyChartData.map((d) => Math.max(d.debits, d.credits))) * 1.1]}
               xTitle="Month"
               yTitle="Amount (£)"
               hideFilter
@@ -981,7 +1006,7 @@ const BankAnalysisDashboard = () => {
             </Alert>
           )}
         </Container>
-        
+
         <Table
           columnDefinitions={[
             {
@@ -1020,12 +1045,10 @@ const BankAnalysisDashboard = () => {
           ]}
           items={monthlyChartData}
           variant="container"
-          header={
-            <Header variant="h3">Monthly Breakdown</Header>
-          }
+          header={<Header variant="h3">Monthly Breakdown</Header>}
           empty={<Box textAlign="center">No monthly data</Box>}
         />
-        
+
         {/* Payment Methods */}
         <Container header={<Header variant="h3">Payment Methods</Header>}>
           <Table
@@ -1052,7 +1075,7 @@ const BankAnalysisDashboard = () => {
                 id: 'pct',
                 header: '% of Transactions',
                 cell: (item) => {
-                  const pct = analytics.totalTransactions > 0 ? (item.count / analytics.totalTransactions * 100) : 0;
+                  const pct = analytics.totalTransactions > 0 ? (item.count / analytics.totalTransactions) * 100 : 0;
                   return `${pct.toFixed(1)}%`;
                 },
                 width: 140,
@@ -1066,11 +1089,11 @@ const BankAnalysisDashboard = () => {
       </SpaceBetween>
     );
   };
-  
+
   // ============================================================================
   // RENDER MAIN COMPONENT
   // ============================================================================
-  
+
   return (
     <>
       <GenAIIDPTopNavigation />
@@ -1085,7 +1108,7 @@ const BankAnalysisDashboard = () => {
             ]}
             ariaLabel="Breadcrumbs"
           />
-          
+
           {error && (
             <Flashbar
               items={[
@@ -1098,15 +1121,13 @@ const BankAnalysisDashboard = () => {
               ]}
             />
           )}
-          
+
           <Header
             variant="h1"
             description={`Transaction analysis for ${activeCompany.companyNumber}`}
             actions={
               <SpaceBetween direction="horizontal" size="s">
-                <Button onClick={() => history.push(BANK_INSIGHTS_PATH)}>
-                  View All Transactions
-                </Button>
+                <Button onClick={() => history.push(BANK_INSIGHTS_PATH)}>View All Transactions</Button>
                 <Button iconName="refresh" onClick={loadTransactions}>
                   Refresh Data
                 </Button>
@@ -1115,7 +1136,7 @@ const BankAnalysisDashboard = () => {
           >
             Bank Statement Analysis: {activeCompany.companyName}
           </Header>
-          
+
           <Tabs
             activeTabId={activeTab}
             onChange={({ detail }) => setActiveTab(detail.activeTabId)}
