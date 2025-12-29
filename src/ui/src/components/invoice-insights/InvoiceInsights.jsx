@@ -20,7 +20,7 @@ import {
 import { API, graphqlOperation } from 'aws-amplify';
 
 import { useCompany } from '../../contexts/company';
-import { COMPANY_SELECT_PATH } from '../../routes/constants';
+import { COMPANY_SELECT_PATH, INVOICE_ANALYSIS_PATH } from '../../routes/constants';
 import GenAIIDPTopNavigation from '../genai-idp-top-navigation';
 import { fetchExtractionResults, formatInvoiceData, DOCUMENT_TYPES } from '../../services/extractionService';
 import { TRIGGER_INVOICE_ANALYSIS } from '../../graphql/mutations/triggerInvoiceAnalysis';
@@ -328,7 +328,19 @@ const InvoiceInsights = () => {
           ariaLabel="Breadcrumbs"
         />
 
-        <Header variant="h1" description={`Company Number: ${activeCompany.companyNumber}`}>
+        <Header 
+          variant="h1" 
+          description={`Company Number: ${activeCompany.companyNumber}`}
+          actions={
+            <Button 
+              variant="primary" 
+              onClick={() => history.push(INVOICE_ANALYSIS_PATH)}
+              iconName="status-positive"
+            >
+              Analysis Dashboard
+            </Button>
+          }
+        >
           Invoice Insights: {activeCompany.companyName}
         </Header>
 
