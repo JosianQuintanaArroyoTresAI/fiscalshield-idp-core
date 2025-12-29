@@ -268,7 +268,8 @@ const BankAnalysisDashboard = () => {
   const history = useHistory();
   const { activeCompany, isCompanySelected } = useCompany();
 
-  const [loading, setLoading] = useState(true);
+  const [pageLoading, setPageLoading] = useState(true);
+  const [dataLoading, setDataLoading] = useState(false);
   const [transactions, setTransactions] = useState([]);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
@@ -286,13 +287,15 @@ const BankAnalysisDashboard = () => {
       return;
     }
 
+    // Page is ready to render
+    setPageLoading(false);
     loadTransactions();
   }, [isCompanySelected, activeCompany]);
 
   const loadTransactions = async () => {
     if (!activeCompany?.companyNumber) return;
 
-    setLoading(true);
+    setDataLoading(true);
     setError(null);
 
     try {
@@ -306,7 +309,7 @@ const BankAnalysisDashboard = () => {
       console.error('[BANK ANALYSIS] Error loading transactions:', err);
       setError(err.message || 'Failed to load transactions');
     } finally {
-      setLoading(false);
+      setDataLoading(false);
     }
   };
 
@@ -376,7 +379,7 @@ const BankAnalysisDashboard = () => {
     return [{ label: 'All Categories', value: null }, ...cats.map((c) => ({ label: c, value: c }))];
   }, [analytics]);
 
-  if (loading) {
+  if (pageLoading) {
     return (
       <>
         <GenAIIDPTopNavigation />
@@ -1128,7 +1131,7 @@ const BankAnalysisDashboard = () => {
             actions={
               <SpaceBetween direction="horizontal" size="s">
                 <Button onClick={() => history.push(BANK_INSIGHTS_PATH)}>View All Transactions</Button>
-                <Button iconName="refresh" onClick={loadTransactions}>
+                <Button iconName="refresh" onClick={loadTransactions} loading={dataLoading}>
                   Refresh Data
                 </Button>
               </SpaceBetween>
@@ -1137,37 +1140,46 @@ const BankAnalysisDashboard = () => {
             Bank Statement Analysis: {activeCompany.companyName}
           </Header>
 
-          <Tabs
-            activeTabId={activeTab}
-            onChange={({ detail }) => setActiveTab(detail.activeTabId)}
-            tabs={[
-              {
-                id: 'overview',
-                label: 'Executive Summary',
-                content: renderOverviewTab(),
-              },
-              {
-                id: 'review',
-                label: `Review Queue ${reviewItems.length > 0 ? `(${reviewItems.length})` : ''}`,
-                content: renderReviewQueueTab(),
-              },
-              {
-                id: 'categories',
-                label: 'Categories',
-                content: renderCategoryTab(),
-              },
-              {
-                id: 'counterparties',
-                label: 'Counterparties',
-                content: renderCounterpartyTab(),
-              },
-              {
-                id: 'trends',
-                label: 'Cash Flow',
-                content: renderTrendsTab(),
-              },
-            ]}
-          />
+          {dataLoading ? (
+            <Box textAlign="center" padding="xxl">
+              <Spinner size="large" />
+              <Box variant="p" color="text-body-secondary">
+                Loading transaction data...
+              </Box>
+            </Box>
+          ) : (
+            <Tabs
+              activeTabId={activeTab}
+              onChange={({ detail }) => setActiveTab(detail.activeTabId)}
+              tabs={[
+                {
+                  id: 'overview',
+                  label: 'Executive Summary',
+                  content: renderOverviewTab(),
+                },
+                {
+                  id: 'review',
+                  label: `Review Queue ${reviewItems.length > 0 ? `(${reviewItems.length})` : ''}`,
+                  content: renderReviewQueueTab(),
+                },
+                {
+                  id: 'categories',
+                  label: 'Categories',
+                  content: renderCategoryTab(),
+                },
+                {
+                  id: 'counterparties',
+                  label: 'Counterparties',
+                  content: renderCounterpartyTab(),
+                },
+                {
+                  id: 'trends',
+                  label: 'Cash Flow',
+                  content: renderTrendsTab(),
+                },
+              ]}
+            />
+          )}
         </SpaceBetween>
       </Box>
     </>

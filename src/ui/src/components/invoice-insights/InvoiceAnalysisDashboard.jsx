@@ -254,7 +254,8 @@ const InvoiceAnalysisDashboard = () => {
   const history = useHistory();
   const { activeCompany, isCompanySelected } = useCompany();
 
-  const [loading, setLoading] = useState(true);
+  const [pageLoading, setPageLoading] = useState(true);
+  const [dataLoading, setDataLoading] = useState(false);
   const [invoices, setInvoices] = useState([]);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
@@ -272,13 +273,15 @@ const InvoiceAnalysisDashboard = () => {
       return;
     }
 
+    // Page is ready to render
+    setPageLoading(false);
     loadInvoices();
   }, [isCompanySelected, activeCompany]);
 
   const loadInvoices = async () => {
     if (!activeCompany?.companyNumber) return;
 
-    setLoading(true);
+    setDataLoading(true);
     setError(null);
 
     try {
@@ -292,7 +295,7 @@ const InvoiceAnalysisDashboard = () => {
       console.error('[INVOICE ANALYSIS] Error loading invoices:', err);
       setError(err.message || 'Failed to load invoices');
     } finally {
-      setLoading(false);
+      setDataLoading(false);
     }
   };
 
@@ -352,7 +355,7 @@ const InvoiceAnalysisDashboard = () => {
       }));
   }, [analytics]);
 
-  if (loading) {
+  if (pageLoading) {
     return (
       <>
         <GenAIIDPTopNavigation />
@@ -1049,7 +1052,7 @@ const InvoiceAnalysisDashboard = () => {
             actions={
               <SpaceBetween direction="horizontal" size="s">
                 <Button onClick={() => history.push(INVOICE_INSIGHTS_PATH)}>View All Invoices</Button>
-                <Button iconName="refresh" onClick={loadInvoices}>
+                <Button iconName="refresh" onClick={loadInvoices} loading={dataLoading}>
                   Refresh Data
                 </Button>
               </SpaceBetween>
@@ -1058,37 +1061,46 @@ const InvoiceAnalysisDashboard = () => {
             Invoice Analysis: {activeCompany.companyName}
           </Header>
 
-          <Tabs
-            activeTabId={activeTab}
-            onChange={({ detail }) => setActiveTab(detail.activeTabId)}
-            tabs={[
-              {
-                id: 'overview',
-                label: 'Executive Summary',
-                content: renderOverviewTab(),
-              },
-              {
-                id: 'actions',
-                label: `Action Queue ${actionItems.length > 0 ? `(${actionItems.length})` : ''}`,
-                content: renderActionQueueTab(),
-              },
-              {
-                id: 'suppliers',
-                label: 'Suppliers',
-                content: renderSupplierTab(),
-              },
-              {
-                id: 'vat',
-                label: 'VAT & Types',
-                content: renderVATTab(),
-              },
-              {
-                id: 'trends',
-                label: 'Trends',
-                content: renderTrendsTab(),
-              },
-            ]}
-          />
+          {dataLoading ? (
+            <Box textAlign="center" padding="xxl">
+              <Spinner size="large" />
+              <Box variant="p" color="text-body-secondary">
+                Loading invoice data...
+              </Box>
+            </Box>
+          ) : (
+            <Tabs
+              activeTabId={activeTab}
+              onChange={({ detail }) => setActiveTab(detail.activeTabId)}
+              tabs={[
+                {
+                  id: 'overview',
+                  label: 'Executive Summary',
+                  content: renderOverviewTab(),
+                },
+                {
+                  id: 'actions',
+                  label: `Action Queue ${actionItems.length > 0 ? `(${actionItems.length})` : ''}`,
+                  content: renderActionQueueTab(),
+                },
+                {
+                  id: 'suppliers',
+                  label: 'Suppliers',
+                  content: renderSupplierTab(),
+                },
+                {
+                  id: 'vat',
+                  label: 'VAT & Types',
+                  content: renderVATTab(),
+                },
+                {
+                  id: 'trends',
+                  label: 'Trends',
+                  content: renderTrendsTab(),
+                },
+              ]}
+            />
+          )}
         </SpaceBetween>
       </Box>
     </>
