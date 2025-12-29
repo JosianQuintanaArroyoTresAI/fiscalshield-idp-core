@@ -19,4 +19,5 @@ export const CLIENT_TAKEON_PATH = '/client-takeon';
 export const INVOICE_INSIGHTS_PATH = '/invoice-insights';
 export const INVOICE_ANALYSIS_PATH = '/invoice-analysis';
 export const BANK_INSIGHTS_PATH = '/bank-insights';
+export const BANK_ANALYSIS_PATH = '/bank-analysis';
 export const ADMIN_VALIDATION_METRICS_PATH = '/admin/validation-metrics';

@@ -23,7 +23,7 @@ import {
 } from '@awsui/components-react';
 
 import { useCompany } from '../../contexts/company';
-import { COMPANY_SELECT_PATH } from '../../routes/constants';
+import { COMPANY_SELECT_PATH, BANK_ANALYSIS_PATH } from '../../routes/constants';
 import GenAIIDPTopNavigation from '../genai-idp-top-navigation';
 import { fetchExtractionResults, formatBankStatementData, DOCUMENT_TYPES } from '../../services/extractionService';
 import TransactionDetailDrawer from './TransactionDetailDrawer';
@@ -572,7 +572,19 @@ const BankStatementInsights = () => {
           ariaLabel="Breadcrumbs"
         />
 
-        <Header variant="h1" description={`Company Number: ${activeCompany.companyNumber}`}>
+        <Header 
+          variant="h1" 
+          description={`Company Number: ${activeCompany.companyNumber}`}
+          actions={
+            <Button 
+              variant="primary" 
+              onClick={() => history.push(BANK_ANALYSIS_PATH)}
+              iconName="status-positive"
+            >
+              Analysis Dashboard
+            </Button>
+          }
+        >
           Bank Statement Insights: {activeCompany.companyName}
         </Header>
 

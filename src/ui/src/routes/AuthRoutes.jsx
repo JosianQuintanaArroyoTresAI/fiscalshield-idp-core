@@ -20,7 +20,7 @@ import { CompanyAnalysis } from '../components/company-intelligence';
 import { OverviewDashboard } from '../components/overview';
 import { ClientTakeOnAnalysis } from '../components/client-takeon';
 import { InvoiceInsights, InvoiceAnalysisDashboard } from '../components/invoice-insights';
-import { BankStatementInsights } from '../components/bank-insights';
+import { BankStatementInsights, BankAnalysisDashboard } from '../components/bank-insights';
 import { CompanyHub } from '../components/company-hub';
 import ValidationMetricsDashboard from '../components/admin/ValidationMetricsDashboard';
 import RequireCompany from '../components/RequireCompany';
@@ -41,6 +41,7 @@ import {
   INVOICE_INSIGHTS_PATH,
   INVOICE_ANALYSIS_PATH,
   BANK_INSIGHTS_PATH,
+  BANK_ANALYSIS_PATH,
   ADMIN_VALIDATION_METRICS_PATH,
 } from './constants';
 
@@ -91,6 +92,11 @@ const AuthRoutes = ({ redirectParam }) => {
         <Route exact path={BANK_INSIGHTS_PATH}>
           <RequireCompany>
             <BankStatementInsights />
+          </RequireCompany>
+        </Route>
+        <Route exact path={BANK_ANALYSIS_PATH}>
+          <RequireCompany>
+            <BankAnalysisDashboard />
           </RequireCompany>
         </Route>
         <Route exact path={ADMIN_VALIDATION_METRICS_PATH}>
