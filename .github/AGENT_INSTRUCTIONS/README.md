@@ -1,73 +1,59 @@
-# Agent Instructions - READ FIRST
+# 🤖 AI Agent Instructions
 
-This directory contains critical deployment and development documentation that should be referenced BEFORE attempting common tasks.
+This directory contains critical instructions for AI agents working on this codebase.
 
-## Priority Documents
+## Quick Start
 
-### 🔴 CRITICAL - Read Before Deploying
+### Pattern 2 Deployment (MOST IMPORTANT!)
 
-1. **[DOCKER_LAMBDA_DEPLOYMENT.md](./DOCKER_LAMBDA_DEPLOYMENT.md)** ⭐
-   - **Read this if:** Pattern 2 Lambda code changes aren't deploying
-   - **Covers:** Docker Lambda deployment flow, common mistakes, correct workflow
-   - **TL;DR:** Always run `publish.py` with `--clean-build` before deploying
-   - **Time saved:** Hours of debugging
+**📖 [DOCKER_LAMBDA_DEPLOYMENT.md](../../docs/DOCKER_LAMBDA_DEPLOYMENT.md)**
 
-## Quick Reference Commands
+Before making Pattern 2 code changes, READ THIS! Contains:
+- Why code changes don't deploy automatically
+- The correct deployment workflow
+- Common mistakes that waste hours
+- Real examples from production debugging
 
-### Pattern 2 Deployment (Classification, OCR, Extraction)
+**TL;DR for Pattern 2 code changes:**
 ```bash
 source activate-env.sh
 python publish.py fiscalshield-templates fiscalshield/dev eu-central-1 --clean-build --lint off
 ./deploy-pattern2-dev.sh
 ```
 
-### Check if code is deployed
-```bash
-# Get current Lambda image version
-aws lambda get-function \
-  --function-name fiscalshield-idp-dev-PATTER-ClassificationFunction-ou0tVZHvC4hP \
-  --region eu-central-1 \
-  --query 'Code.ImageUri'
+### Development Guidelines
 
-# Check CloudWatch logs
-aws logs tail "/fiscalshield-idp-dev-PATTERN2STACK-12AZHXIRN6HYB/lambda/ClassificationFunction" \
-  --since 5m --region eu-central-1
-```
+**📖 [AMAZON_Q.md](AMAZON_Q.md)**
 
-## Common Gotchas
+Essential Python and testing best practices:
+- Python formatting and linting with Ruff
+- Pytest organization (unit vs integration tests)
+- Test annotations and markers
+- Code quality standards
 
-| Problem | Solution | Reference |
-|---------|----------|-----------|
-| Lambda not reflecting code changes | Run `publish.py --clean-build` then full deploy | [DOCKER_LAMBDA_DEPLOYMENT.md](./DOCKER_LAMBDA_DEPLOYMENT.md) |
-| "Git push didn't deploy" | CI/CD only runs on `main` branch, manual deploy needed on `dev` | [DOCKER_LAMBDA_DEPLOYMENT.md](./DOCKER_LAMBDA_DEPLOYMENT.md#mistake-1) |
-| CodeBuild uses old code | Must run `publish.py` first to upload new S3 source | [DOCKER_LAMBDA_DEPLOYMENT.md](./DOCKER_LAMBDA_DEPLOYMENT.md#mistake-2) |
-| Wrong bucket errors | Use `fiscalshield-templates` not `fiscalshield-dev` | [DOCKER_LAMBDA_DEPLOYMENT.md](./DOCKER_LAMBDA_DEPLOYMENT.md#bucket-configuration-reference) |
+## Additional Resources
 
-## Document Organization
+### Technical Documentation
+- [Main README](../../README.md) - Project overview
+- [Development Workflow](../../docs/development-workflow.md) - Day-to-day development
+- [Testing Best Practices](../../docs/testing-best-practices.md) - Comprehensive test guide
 
-```
-.github/AGENT_INSTRUCTIONS/
-├── README.md                        # This file
-└── DOCKER_LAMBDA_DEPLOYMENT.md      # Symlink to docs/DOCKER_LAMBDA_DEPLOYMENT.md
+### Quick References
+- [Quick Reference Guides](../../docs/quick-reference/) - Common commands and workflows
+- [CI/CD Quick Ref](../../docs/quick-reference/cicd.md) - Build and deploy commands
 
-docs/
-├── DOCKER_LAMBDA_DEPLOYMENT.md      # Master copy
-├── cicd-quick-reference.md          # CI/CD pipeline reference
-├── deployment.md                    # General deployment docs
-└── ...other docs...
-```
+### Architecture
+- [Architecture Docs](../../docs/architecture.md) - System design
+- [Pattern 2 Documentation](../../docs/pattern-2.md) - Pattern 2 specifics
 
-## When to Add Documents Here
+## Note for AI Agents
 
-Add documents to this directory when:
-1. The information would save >1 hour of debugging time
-2. The mistake is commonly repeated
-3. The workflow is non-obvious or counterintuitive
-4. Future AI agents need this context to work effectively
+These instructions are specifically curated to help AI assistants avoid common pitfalls and follow project conventions. Always check these before:
+- Making deployment changes
+- Running tests
+- Modifying CI/CD workflows
+- Implementing new features
 
-## Maintenance
+---
 
-- Keep documents updated with real examples from production issues
-- Include actual commands that worked, not theoretical ones
-- Document WHY things work the way they do, not just HOW
-- Add timestamps to examples to show they're tested and current
+*Last Updated: December 29, 2025*

@@ -18,6 +18,10 @@ SPDX-License-Identifier: MIT-0
   - [Processing Patterns](#processing-patterns)
   - [Python Development](#python-development)
   - [Planning & Operations](#planning--operations)
+  - [Quick Reference Guides](#quick-reference-guides)
+  - [Business & Planning](#business--planning)
+  - [Historical Documentation](#historical-documentation)
+  - [AI Agent Instructions](#ai-agent-instructions)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -187,6 +191,34 @@ For detailed deployment and testing instructions, see the [Deployment Guide](./d
 - [Well-Architected Framework Assessment](./docs/well-architected.md) - Analysis based on AWS Well-Architected Framework
 - [AWS Services & IAM Roles](./docs/aws-services-and-roles.md) - AWS services used and IAM role requirements
 - [Cost Calculator](./docs/cost-calculator.md) - Framework for estimating solution costs
+
+### Quick Reference Guides
+
+For fast access to common commands and workflows:
+- [Quick Reference Index](./docs/quick-reference/) - All quick reference guides
+- [Invoice Extraction Quick Ref](./docs/quick-reference/invoice-extraction.md) - Invoice processing commands
+- [CI/CD Quick Ref](./docs/quick-reference/cicd.md) - Build and deployment workflows
+- [Data Collection CI/CD](./docs/quick-reference/data-collection-cicd.md) - Data collection operations
+
+### Business & Planning
+
+- [Business Documentation](./docs/business/) - Investor materials and financial analysis
+- [TaxRadar Investor Pitch](./docs/business/taxradar-investor-pitch.md) - Market opportunity and platform overview
+- [Unit Economics](./docs/business/unit-economics.md) - Cost analysis and pricing models
+
+### Historical Documentation
+
+- [Archive](./docs/archive/) - Completed implementation guides and historical analysis
+  - Invoice extraction refactor journey and architecture decisions
+  - Completed feature implementations (user scoping, boundary detection)
+  - Development environment fixes and optimizations
+
+### AI Agent Instructions
+
+For AI assistants and automation tools:
+- [AI Agent Instructions](./.github/AGENT_INSTRUCTIONS/) - Guidelines for AI-assisted development
+- [Amazon Q Guidelines](./.github/AGENT_INSTRUCTIONS/AMAZON_Q.md) - Python best practices and testing standards
+- [Docker Lambda Deployment](./.github/AGENT_INSTRUCTIONS/../../docs/DOCKER_LAMBDA_DEPLOYMENT.md) - Pattern 2 deployment workflow
 
 ## Contributing
 

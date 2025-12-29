@@ -173,5 +173,26 @@ src_old/utils/industryUtils.js
 DEPLOY_TO_PROD_NOW.md
 PR_SUMMARY.md
 PRODUCTION_DEPLOYMENT_CHECKLIST.md
-Invoices 101 page7.pdf
-cloudwatch_classification.md
+
+# Personal files (do not commit)
+jos_CV
+*_CV
+*.cv
+cv.*
+CV.*
+
+# Test artifacts and temporary files
+response.json
+test-payload.json
+test-*.json
+test_*.py
+test-*.sh
+
+# Sample/test PDFs in root
+/*.pdf
+
+# Raw log dumps
+cloudwatch_*.md
+
+# AI agent memory (temporary working files)
+memory-bank/activeContext.md
