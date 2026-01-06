@@ -174,7 +174,7 @@ jobs:
                          ParameterKey=DocumentKnowledgeBase,UsePreviousValue=true \
                          ParameterKey=TransactionCategorizationStateMachineArn,ParameterValue="$ANALYSIS_STATE_MACHINE_ARN" \
                          ParameterKey=InvoiceAnalysisStateMachineArn,ParameterValue="$INVOICE_ANALYSIS_STATE_MACHINE_ARN" \
-                         ParameterKey=AllowedSignUpEmailDomain,ParameterValue="gmail.com\,outlook.com\,yahoo.com\,hotmail.com\,icloud.com\,protonmail.com\,duck.com\,bright-accounting.co.uk"
+                         ParameterKey=AllowedSignUpEmailDomain,ParameterValue="gmail.com\,outlook.com\,yahoo.com\,hotmail.com\,icloud.com\,protonmail.com\,duck.com\,tresai.ai\,bright-accounting.co.uk"
         else
           echo "🆕 Creating new stack..."
           aws cloudformation create-stack \
