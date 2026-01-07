@@ -1747,8 +1747,16 @@ REQUIRED FIELDS FOR EACH INVOICE:
 - invoice_type: SUPPLIER_INVOICE or EXPENSE_CLAIM (MUST classify correctly)
 - supplier_name: Company/vendor/merchant name (ALWAYS required, never empty)
 - total_amount: Final total (look for "Total", "Amount Due", "Balance Due", "TOTAL GBP")
-- invoice_date: Date of invoice/claim (DD/MM/YYYY or YYYY-MM-DD format)
+- invoice_date: Date of invoice/claim (MUST use YYYY-MM-DD format, e.g., 2024-06-30)
+- due_date: Due date if present (MUST use YYYY-MM-DD format, e.g., 2024-07-15)
 - source_page: Page number where this invoice/claim appears
+
+DATE FORMAT REQUIREMENTS:
+- ALWAYS output dates in YYYY-MM-DD format (ISO 8601)
+- If you see "15/03/2020" → convert to "2020-03-15"
+- If you see "March 15, 2020" → convert to "2020-03-15"
+- If you see "15-Mar-2020" → convert to "2020-03-15"
+- UK date format (DD/MM/YYYY) should be converted to YYYY-MM-DD
 
 CONDITIONAL FIELDS (depend on invoice_type):
 
@@ -2118,6 +2126,51 @@ def safe_decimal_convert(value: Any) -> Decimal:
         return Decimal('0')
 
 
+def normalize_date_to_iso(date_str: str) -> str:
+    """
+    Normalize date strings to YYYY-MM-DD format (ISO 8601)
+    
+    Handles common UK and international date formats:
+    - DD/MM/YYYY (UK format) → YYYY-MM-DD
+    - DD-MM-YYYY → YYYY-MM-DD
+    - YYYY-MM-DD → unchanged (already ISO)
+    - Empty/invalid → current date as fallback
+    
+    Assumes UK date format (DD/MM/YYYY) for ambiguous cases since system is UK-focused.
+    """
+    if not date_str or not date_str.strip():
+        return datetime.now().strftime('%Y-%m-%d')
+    
+    date_str = date_str.strip()
+    
+    # Already in ISO format (YYYY-MM-DD or YYYY/MM/DD)
+    if re.match(r'^\d{4}[-/]\d{1,2}[-/]\d{1,2}$', date_str):
+        # Normalize separators to hyphens
+        return date_str.replace('/', '-')
+    
+    # UK format: DD/MM/YYYY or DD-MM-YYYY
+    uk_match = re.match(r'^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$', date_str)
+    if uk_match:
+        day, month, year = uk_match.groups()
+        try:
+            # Validate the date is real
+            datetime(int(year), int(month), int(day))
+            return f"{year}-{month.zfill(2)}-{day.zfill(2)}"
+        except ValueError:
+            # Invalid date, try swapping day/month (in case it was MM/DD/YYYY)
+            try:
+                datetime(int(year), int(day), int(month))
+                log_with_timestamp(f"⚠️ Swapped day/month for ambiguous date: {date_str} → {year}-{day.zfill(2)}-{month.zfill(2)}")
+                return f"{year}-{day.zfill(2)}-{month.zfill(2)}"
+            except ValueError:
+                log_with_timestamp(f"❌ Invalid date detected: {date_str}, using current date")
+                return datetime.now().strftime('%Y-%m-%d')
+    
+    # Fallback: return as-is and log warning
+    log_with_timestamp(f"⚠️ Unrecognized date format: {date_str}, using as-is")
+    return date_str
+
+
 def parse_invoices_from_xml(xml_content: str) -> List[Dict[str, Any]]:
     """
     Parse invoices from XML response (HARDCODED logic - not editable from frontend)
@@ -2167,8 +2220,8 @@ def parse_invoices_from_xml(xml_content: str) -> List[Dict[str, Any]]:
             'invoice_number': row_data.get('invoice_number', ''),
             'vat_number': row_data.get('vat_number', ''),  # VAT registration number (supplier invoices only)
             'reference_number': row_data.get('reference_number', ''),
-            'invoice_date': row_data.get('invoice_date', datetime.now().strftime('%Y-%m-%d')),
-            'due_date': row_data.get('due_date', ''),
+            'invoice_date': normalize_date_to_iso(row_data.get('invoice_date', '')),
+            'due_date': normalize_date_to_iso(row_data.get('due_date', '')) if row_data.get('due_date', '').strip() else '',
             'supplier_name': supplier_name,
             'vendor_name': supplier_name,  # Duplicate for compatibility
             'supplier_address': row_data.get('supplier_address', ''),

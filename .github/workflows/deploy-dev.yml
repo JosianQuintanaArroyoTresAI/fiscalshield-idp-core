@@ -159,6 +159,31 @@ jobs:
       run: |
         echo "🚀 Deploying CloudFormation stack..."
         
+        # Wait for any in-progress updates to complete
+        echo "🔍 Checking stack status..."
+        STACK_STATUS=$(aws cloudformation describe-stacks \
+          --stack-name fiscalshield-idp-dev \
+          --region eu-central-1 \
+          --query 'Stacks[0].StackStatus' \
+          --output text 2>/dev/null || echo "NOT_FOUND")
+        
+        echo "   Current status: $STACK_STATUS"
+        
+        if [[ "$STACK_STATUS" == *"IN_PROGRESS"* ]]; then
+          echo "⏳ Stack is currently updating. Waiting for completion..."
+          echo "   This may take 15-20 minutes..."
+          
+          # Wait for current update to complete
+          aws cloudformation wait stack-update-complete \
+            --stack-name fiscalshield-idp-dev \
+            --region eu-central-1 2>/dev/null || \
+          aws cloudformation wait stack-create-complete \
+            --stack-name fiscalshield-idp-dev \
+            --region eu-central-1 2>/dev/null || true
+          
+          echo "✅ Previous update completed. Proceeding with new deployment..."
+        fi
+        
         # Fetch Analysis Stack state machine ARNs from SSM (if they exist)
         TRANSACTION_ARN=$(aws ssm get-parameter \
           --name /fiscalshield/analysis/dev/transaction-categorization-state-machine-arn \
@@ -337,6 +362,21 @@ jobs:
         if [ "$ITEM_COUNT" -eq "0" ]; then
           echo "⚠️  WARNING: DynamoDB table is empty after reload!"
           exit 1
+        fi
+      env:
+        AWS_DEFAULT_REGION: eu-central-1
+    
+    - name: Sync prompts from Lambda code to DynamoDB
+      run: |
+        echo "🔄 Syncing extraction prompts to DynamoDB..."
+        python3 scripts/sync_prompts_to_dynamodb.py \
+          --stack-name fiscalshield-idp-dev \
+          --region eu-central-1
+        
+        if [ $? -ne 0 ]; then
+          echo "⚠️  Warning: Prompt sync failed (non-critical)"
+        else
+          echo "✅ Prompts synced successfully"
         fi
       env:
         AWS_DEFAULT_REGION: eu-central-1

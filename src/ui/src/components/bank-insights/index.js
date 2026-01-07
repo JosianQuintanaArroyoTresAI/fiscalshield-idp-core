@@ -2,3 +2,4 @@
 // SPDX-License-Identifier: Apache-2.0
 export { default as BankStatementInsights } from './BankStatementInsights';
 export { default as TransactionDetailDrawer } from './TransactionDetailDrawer';
+export { default as BankAnalysisDashboard } from './BankAnalysisDashboard';

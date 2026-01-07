@@ -41,10 +41,17 @@ MULTIPLE INVOICE HANDLING:
 REQUIRED FIELDS FOR EACH INVOICE:
 - supplier_name: Company/vendor name
 - total_amount: Final total (look for "Total", "Amount Due", "Total GBP")
-- invoice_date: Date of invoice
+- invoice_date: Date of invoice (MUST use YYYY-MM-DD format, e.g., 2024-06-30)
 - invoice_number: Tax Invoice Number or unique identifier
 - reference_number: Billing Number or Invoice Reference (different from Tax Invoice Number)
 - source_page: Page number where this invoice appears
+
+DATE FORMAT REQUIREMENTS:
+- ALWAYS output dates in YYYY-MM-DD format (ISO 8601)
+- If you see "15/03/2020" → convert to "2020-03-15"
+- If you see "March 15, 2020" → convert to "2020-03-15"
+- If you see "15-Mar-2020" → convert to "2020-03-15"
+- UK date format (DD/MM/YYYY) should be converted to YYYY-MM-DD
 
 CRITICAL: Extract EVERY invoice in the text. Do not stop after finding the first one.
 
