@@ -341,6 +341,21 @@ jobs:
       env:
         AWS_DEFAULT_REGION: eu-central-1
     
+    - name: Sync prompts from Lambda code to DynamoDB
+      run: |
+        echo "🔄 Syncing extraction prompts to DynamoDB..."
+        python3 scripts/sync_prompts_to_dynamodb.py \
+          --stack-name fiscalshield-idp-dev \
+          --region eu-central-1
+        
+        if [ $? -ne 0 ]; then
+          echo "⚠️  Warning: Prompt sync failed (non-critical)"
+        else
+          echo "✅ Prompts synced successfully"
+        fi
+      env:
+        AWS_DEFAULT_REGION: eu-central-1
+    
     - name: Force update Lambda functions (bypass CloudFormation caching)
       run: |
         echo "🔄 Force updating non-Pattern2 Lambda functions with latest code..."
