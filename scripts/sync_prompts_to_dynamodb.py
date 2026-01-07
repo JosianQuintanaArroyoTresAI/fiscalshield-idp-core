@@ -26,7 +26,7 @@ import os
 
 def load_prompt_from_lambda(handler_path: str, function_name: str) -> Optional[str]:
     """
-    Dynamically import Lambda handler and extract the default prompt.
+    Extract prompt from Lambda handler file by parsing the source code.
     
     Args:
         handler_path: Path to Lambda handler file (e.g., patterns/pattern-2/lambdas/.../handler.py)
@@ -36,18 +36,39 @@ def load_prompt_from_lambda(handler_path: str, function_name: str) -> Optional[s
         Prompt string from Lambda code
     """
     try:
-        # Load the module dynamically
-        spec = importlib.util.spec_from_file_location("lambda_module", handler_path)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
+        # Read the file and extract the prompt
+        with open(handler_path, 'r') as f:
+            content = f.read()
         
-        # Get the function
-        prompt_func = getattr(module, function_name)
+        # Find the function definition first (handle type hints like -> str:)
+        import re
+        func_pattern = rf'def {re.escape(function_name)}\([^)]*\)(?:\s*->\s*\w+)?:'
+        func_match = re.search(func_pattern, content)
         
-        # Execute and return prompt
-        return prompt_func()
+        if not func_match:
+            print(f"   ❌ Function {function_name} not found in file")
+            return None
+        
+        # Get content starting from the function
+        func_start = func_match.start()
+        content_from_func = content[func_start:]
+        
+        # Extract the triple-quoted string after return statement
+        prompt_pattern = r'return\s+"""(.*?)"""'
+        prompt_match = re.search(prompt_pattern, content_from_func, re.DOTALL)
+        
+        if prompt_match:
+            prompt = prompt_match.group(1)
+            print(f"   ✅ Extracted prompt ({len(prompt)} characters)")
+            return prompt
+        else:
+            print(f"   ❌ Could not find prompt return statement in {function_name}")
+            return None
     except Exception as e:
-        print(f"❌ Error loading prompt from {handler_path}: {e}")
+        print(f"   ❌ Error loading prompt from {handler_path}: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
         return None
 
 
@@ -62,7 +83,16 @@ def get_configuration_table_name(stack_name: str, region: str) -> str:
         # Look for ConfigurationTable in outputs
         for output in stack.get('Outputs', []):
             if 'ConfigurationTable' in output['OutputKey']:
-                return output['OutputValue']
+                table_ref = output['OutputValue']
+                # Extract table name from URL or ARN if needed
+                if 'table=' in table_ref:
+                    # It's a console URL, extract table name
+                    import re
+                    match = re.search(r'table=([a-zA-Z0-9_.-]+)', table_ref)
+                    if match:
+                        return match.group(1)
+                # Otherwise assume it's the table name directly
+                return table_ref
         
         raise ValueError(f"ConfigurationTable not found in stack {stack_name}")
     except Exception as e:
